@@ -190,6 +190,7 @@ Content-Type: application/json
 ```
 
 * `workpiece` 也兼容 `workpiece_code` / `workpiece_id`；`tested_at` 兼容 `timestamp` / `ts`；
+* 工件第一次上报时会确定产品型号，之后该工件即为该产品；后续上报的 `product` 若与工件产品不一致，直接返回 `400`，避免跨产品串数据；
 * 同一 `(工件码, 设备, 测试项)` 重复上报只记一次，重复请求返回 `"duplicate": true`，不会重复计数；
 * 如果重复上报的判定结果与已记录结果**不一致**（例如先 PASS 后又报 FAIL），返回 `409` 并说明冲突，不会静默改数据；现场复测请使用新的测试项名称；
 * 离线补传更早的历史结果时（`tested_at` 早于该工件已有的最新测试时间），只入库保留记录，**不改变工件状态、不锁定**，返回 `"stale": true`；工件状态按测试时间最新的一条结果推进；
@@ -213,6 +214,8 @@ GET /api/interlock?workpiece=WP-0001&device_id=TEST-02
 判定顺序：设备程序可信 → 工件未锁定 → 工件非 FAIL → 人工放行 → 前道关键设备均有可信 PASS。
 
 `device_id` 建议必传；省略时按工件最近一次所在设备判定（便于人工排查 FAIL 工件），若工件还没有任何设备记录则返回 `"allowed": false` 并提示缺少 `device_id`。
+
+产品隔离：工件已记录产品时，前道 PASS 必须是**同产品**的记录；请求的 `product` 与工件产品不一致时直接拒绝并说明原因。同一设备绑定多个产品时，各产品的测试记录互不满足前道条件。
 
 ### 6.5 开放变量
 
@@ -312,7 +315,7 @@ uv run python examples/device_client.py --device TEST-01 --product P-1001 demo
 uv run pytest
 ```
 
-当前结果：**43 passed**，包括：
+当前结果：**44 passed**，包括：
 
 * 7 条验收标准的自动化用例；
 * 接口边界（404/400/422、多产品歧义、静态文件下载、类型校验、变量前缀筛选）；
