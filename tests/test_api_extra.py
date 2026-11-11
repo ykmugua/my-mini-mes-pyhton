@@ -214,6 +214,90 @@ def test_unlock_then_new_test_item_fail_relocks(client, bench):
     assert denied["allowed"] is False
 
 
+def test_workpiece_product_isolation(client, bench):
+    """同一工件的 PASS 不能跨产品被当作前道记录复用。"""
+    bindings = list(bench["bindings"]) + [
+        {
+            "device_id": "D2",
+            "product": "P2",
+            "program_version": "v2",
+            "download_url": "http://testserver/programs/D2_p2.bin",
+            "sha256": SHA_B,
+        },
+        {
+            "device_id": "D3",
+            "product": "P2",
+            "program_version": "v2",
+            "download_url": "http://testserver/programs/D3_p2.bin",
+            "sha256": SHA_B,
+        },
+    ]
+    services.replace_bindings(bindings)
+    services.report_program_status("D2", "P2", "v2", SHA_B, True)
+    services.report_program_status("D3", "P2", "v2", SHA_B, True)
+
+    push_result(client, "W-X", "D1")  # 工件属于 P1，D1 PASS
+
+    # 工件已属于 P1：D2 以 P2 上报必须拒绝
+    response = client.post(
+        "/api/test-result",
+        json={
+            "workpiece": "W-X",
+            "device_id": "D2",
+            "product": "P2",
+            "program_version": "v2",
+            "program_sha256": SHA_B,
+            "test_item": "P2项",
+            "result": "PASS",
+        },
+    )
+    assert response.status_code == 400
+    assert "产品" in response.json()["detail"]
+
+    # 即便库里存在 D2/P2 的 PASS，也不能满足 D3/P1 的前道检查
+    now = db.utc_now_iso()
+    with services._tx() as conn:  # noqa: SLF001 - 直接构造跨产品数据验证隔离
+        conn.execute(
+            """
+            INSERT INTO test_results
+                (workpiece, device_id, product, test_item, result,
+                 tested_at, reported_at, trusted)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 1)
+            """,
+            ("W-X", "D2", "P2", "P2项", "PASS", now, now),
+        )
+    body = client.get(
+        "/api/interlock",
+        params={"workpiece": "W-X", "device_id": "D3", "product": "P1"},
+    ).json()
+    assert body["allowed"] is False
+    assert "D2" in body["reason"]
+
+    # 用 P2 查询 P1 工件，直接按产品不一致拒绝
+    mismatch = client.get(
+        "/api/interlock",
+        params={"workpiece": "W-X", "device_id": "D3", "product": "P2"},
+    ).json()
+    assert mismatch["allowed"] is False
+    assert "产品" in mismatch["reason"]
+
+    # 反向场景：先以 P2 建立工件，再以 P1 上报同样拒绝
+    push_result(client, "W-Y", "D2", product="P2", test_item="P2项", program_version="v2", sha256=SHA_B)
+    conflict = client.post(
+        "/api/test-result",
+        json={
+            "workpiece": "W-Y",
+            "device_id": "D1",
+            "product": "P1",
+            "program_version": "v1",
+            "program_sha256": SHA_A,
+            "test_item": "P1项",
+            "result": "PASS",
+        },
+    )
+    assert conflict.status_code == 400
+
+
 def test_variable_prefix_filter(bench):
     services.add_variable("line_a", "str", "x")
     services.add_variable("line_b", "str", "y")

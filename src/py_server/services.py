@@ -815,7 +815,9 @@ def interlock_check(
                 "manual_release": True,
             }
         missing = [
-            upstream for upstream in upstreams if not _has_trusted_pass(conn, workpiece, upstream)
+            upstream
+            for upstream in upstreams
+            if not _has_trusted_pass(conn, workpiece, upstream, resolved_product)
         ]
         if missing:
             return deny(
