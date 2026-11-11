@@ -1,0 +1,34 @@
+[project]
+name = "py-server"
+version = "0.1.0"
+description = "旁路式小型 MES：程序下发、工序锁、测试数据看板、开放性变量"
+readme = "README.md"
+authors = [
+    { name = "yikomugua", email = "2556722862@qq.com" }
+]
+requires-python = ">=3.14"
+dependencies = [
+    "fastapi>=0.162.4",
+    "httpx>=0.28.1",
+    "pytest>=9.2.0",
+    "streamlit>=1.67.0",
+    "uvicorn[standard]>=0.54.0",
+]
+
+[project.scripts]
+py-server = "py_server:main"
+
+[[tool.uv.index]]
+url = "https://pypi.tuna.tsinghua.edu.cn/simple"
+default = true
+
+[build-system]
+requires = ["uv_build>=0.13.1,<0.14.0"]
+build-backend = "uv_build"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+filterwarnings = [
+    "ignore::DeprecationWarning",
+]

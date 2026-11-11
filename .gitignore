@@ -1,0 +1,22 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# 运行期数据（SQLite 数据库、上传的程序文件、设备补传缓存）
+data/
+.device-cache/
+
+# 工具缓存
+.uv-cache/
+.pytest_cache/
+.streamlit/
+*.db
+*.db-wal
+*.db-shm
