@@ -1,0 +1,263 @@
+"""程序下发页面的 session-state 占位数据与展示辅助函数。"""
+
+from __future__ import annotations
+
+from copy import deepcopy
+from typing import Any
+
+import streamlit as st
+
+STATE_SCHEMA_VERSION = 4
+
+
+def initial_program_state() -> dict[str, list[dict[str, Any]]]:
+    """返回一份新的占位数据，避免模块级可变状态在用户间共享。"""
+    return {
+        "line_steps": [
+            {"step_no": 1, "step_name": "上电测试", "device_id": "TEST-01"},
+            {"step_no": 2, "step_name": "功能测试", "device_id": "TEST-02"},
+            {"step_no": 3, "step_name": "终检", "device_id": "TEST-03"},
+        ],
+        "programs": [
+            {
+                "program_id": 1,
+                "program_name": "TEST_MAIN",
+                "program_version": "v1.2.0",
+                "version_description": "增加压力检测与启动保护",
+                "sha256": "6f3b8e0c1d2a9f7e4b5c6d8a1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f",
+                "download_url": "http://192.168.1.50:8000/programs/fw_TEST-01_v1.2.0.zip",
+                "step_no": 1,
+            },
+            {
+                "program_id": 2,
+                "program_name": "FUNC_TEST",
+                "program_version": "v2.0.1",
+                "version_description": "修复型号切换后的参数缓存",
+                "sha256": "a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90",
+                "download_url": "http://192.168.1.50:8000/programs/fw_FUNC-TEST_v2.0.1.7z",
+                "step_no": 2,
+            },
+            {
+                "program_id": 3,
+                "program_name": "FINAL_CHECK",
+                "program_version": "v1.0.0",
+                "version_description": "正式终检参数模板",
+                "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+                "download_url": "http://192.168.1.50:8000/programs/fw_FINAL-CHECK_v1.0.0.zip",
+                "step_no": 3,
+            },
+        ],
+        "program_versions": [
+            {
+                "program_id": 1,
+                "program_version": "v1.0.0",
+                "version_description": "首版上电测试程序",
+            },
+            {
+                "program_id": 1,
+                "program_version": "v1.1.0",
+                "version_description": "修复上电计时偏差",
+            },
+            {
+                "program_id": 1,
+                "program_version": "v1.2.0",
+                "version_description": "增加压力检测与启动保护",
+            },
+            {
+                "program_id": 2,
+                "program_version": "v1.9.0",
+                "version_description": "首版多型号功能测试程序",
+            },
+            {
+                "program_id": 2,
+                "program_version": "v2.0.0",
+                "version_description": "优化整包比对流程",
+            },
+            {
+                "program_id": 2,
+                "program_version": "v2.0.1",
+                "version_description": "修复型号切换后的参数缓存",
+            },
+            {
+                "program_id": 3,
+                "program_version": "v0.9.0",
+                "version_description": "终检程序试运行版本",
+            },
+            {
+                "program_id": 3,
+                "program_version": "v1.0.0",
+                "version_description": "正式终检参数模板",
+            },
+        ],
+        "program_components": [
+            {"program_id": 1, "component_no": "P-1001"},
+            {"program_id": 2, "component_no": "P-1001"},
+            {"program_id": 2, "component_no": "P-1002"},
+        ],
+    }
+
+
+def initialize_program_state() -> None:
+    """首次初始化，并把旧版 session-state 数据结构迁移到新版。"""
+    defaults = initial_program_state()
+    version = st.session_state.get("program_data_version")
+
+    if version == STATE_SCHEMA_VERSION:
+        for key, value in defaults.items():
+            if key not in st.session_state:
+                st.session_state[key] = deepcopy(value)
+        return
+
+    if "programs" not in st.session_state:
+        for key, value in defaults.items():
+            st.session_state[key] = deepcopy(value)
+    else:
+        st.session_state["line_steps"] = deepcopy(defaults["line_steps"])
+        if "program_components" not in st.session_state:
+            st.session_state["program_components"] = []
+        if "program_versions" not in st.session_state:
+            st.session_state["program_versions"] = deepcopy(
+                defaults["program_versions"]
+            )
+
+        steps = [int(step["step_no"]) for step in defaults["line_steps"]]
+        default_descriptions = {
+            (str(item["program_id"]), str(item["program_version"])): str(
+                item["version_description"]
+            )
+            for item in defaults["program_versions"]
+        }
+        for index, program in enumerate(st.session_state["programs"]):
+            program.pop("program_mode", None)
+            if "step_no" not in program:
+                program["step_no"] = steps[index % len(steps)]
+            if not any(
+                str(item["program_id"]) == str(program["program_id"])
+                and item["program_version"] == program["program_version"]
+                for item in st.session_state["program_versions"]
+            ):
+                st.session_state["program_versions"].append(
+                    {
+                        "program_id": program["program_id"],
+                        "program_version": program["program_version"],
+                        "version_description": "",
+                    }
+                )
+            for item in st.session_state["program_versions"]:
+                if (
+                    str(item["program_id"]) == str(program["program_id"])
+                    and item["program_version"] == program["program_version"]
+                ):
+                    item.setdefault(
+                        "version_description",
+                        default_descriptions.get(
+                            (
+                                str(program["program_id"]),
+                                str(program["program_version"]),
+                            ),
+                            "",
+                        ),
+                    )
+            program.setdefault(
+                "version_description",
+                default_descriptions.get(
+                    (str(program["program_id"]), str(program["program_version"])),
+                    "",
+                ),
+            )
+
+    st.session_state.pop("program_bindings", None)
+    st.session_state["program_data_version"] = STATE_SCHEMA_VERSION
+
+
+def step_by_no(
+    line_steps: list[dict[str, Any]], step_no: int | str | None
+) -> dict[str, Any] | None:
+    for step in line_steps:
+        if str(step["step_no"]) == str(step_no):
+            return step
+    return None
+
+
+def step_label(
+    line_steps: list[dict[str, Any]],
+    step_no: int | str | None,
+    *,
+    include_device: bool = False,
+) -> str:
+    step = step_by_no(line_steps, step_no)
+    if step is None:
+        return "未配置工序"
+    label = f"{step['step_no']} - {step['step_name']}"
+    if include_device:
+        label += f"（{step['device_id']}）"
+    return label
+
+
+def program_select_label(
+    program: dict[str, Any], line_steps: list[dict[str, Any]]
+) -> str:
+    step = step_by_no(line_steps, program.get("step_no"))
+    step_name = str(step["step_name"]) if step else "未配置工序"
+    return (
+        f"{program['program_name']} ({program['program_version']}) - {step_name}"
+    )
+
+
+def program_component_count(
+    program_id: int | str, program_components: list[dict[str, Any]]
+) -> int:
+    return sum(
+        1
+        for item in program_components
+        if str(item["program_id"]) == str(program_id)
+    )
+
+
+def program_type(component_count: int) -> str:
+    if component_count == 0:
+        return "未关联"
+    if component_count == 1:
+        return "单型号"
+    return "多型号"
+
+
+def available_program_versions(
+    programs: list[dict[str, Any]],
+    program_versions: list[dict[str, Any]],
+) -> list[str]:
+    versions: list[str] = []
+    for item in program_versions:
+        version = str(item["program_version"])
+        if version not in versions:
+            versions.append(version)
+    for program in programs:
+        version = str(program["program_version"])
+        if version not in versions:
+            versions.append(version)
+    return versions
+
+
+def program_version_description(
+    programs: list[dict[str, Any]],
+    program_versions: list[dict[str, Any]],
+    program_id: int | str,
+    version: str,
+) -> str:
+    for item in program_versions:
+        if (
+            str(item["program_id"]) == str(program_id)
+            and item["program_version"] == version
+        ):
+            return str(item.get("version_description", ""))
+    for program in programs:
+        if (
+            str(program["program_id"]) == str(program_id)
+            and program["program_version"] == version
+        ):
+            return str(program.get("version_description", ""))
+    return ""
+
+
+def next_program_id(programs: list[dict[str, Any]]) -> int:
+    return max((int(program["program_id"]) for program in programs), default=0) + 1

@@ -8,13 +8,13 @@
 
 ## 1. 功能一览
 
-| 模块 | 能力 |
-| --- | --- |
-| 程序下发 | 设备-产品-程序版本绑定；可编辑表格新增/修改/删除；设备拉取记录；版本漂移告警；上传程序文件自动计算 SHA256 |
-| 工序锁 | 前道关键设备无 PASS 拒绝启动；FAIL 工件后续拦截；程序版本/校验和不一致时结果不可信且禁止放行；人工解锁留痕；前道设备列表可配置 |
-| 测试数据看板 | 今日总数/PASS/FAIL/合格率；按设备合格率柱状图；FAIL 按测试项/设备分布；设备筛选；10 秒自动刷新；不可信数据排除出合格率 |
-| 开放性变量 | 变量定义与当前值查看、前缀筛选；新增变量；30 秒自动刷新；设备读写接口 |
-| 设备接口 | 程序拉取、程序状态上报、测试结果上报、放行查询、变量读写；测试结果幂等 |
+| 模块         | 能力                                                                                                                           |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------ |
+| 程序下发     | 设备-产品-程序版本绑定；可编辑表格新增/修改/删除；设备拉取记录；版本漂移告警；上传程序文件自动计算 SHA256                      |
+| 工序锁       | 前道关键设备无 PASS 拒绝启动；FAIL 工件后续拦截；程序版本/校验和不一致时结果不可信且禁止放行；人工解锁留痕；前道设备列表可配置 |
+| 测试数据看板 | 今日总数/PASS/FAIL/合格率；按设备合格率柱状图；FAIL 按测试项/设备分布；设备筛选；10 秒自动刷新；不可信数据排除出合格率         |
+| 开放性变量   | 变量定义与当前值查看、前缀筛选；新增变量；30 秒自动刷新；设备读写接口                                                          |
+| 设备接口     | 程序拉取、程序状态上报、测试结果上报、放行查询、变量读写；测试结果幂等                                                         |
 
 技术栈：**Streamlit 1.67 + FastAPI + SQLite**。页面与接口是两个独立进程，共用同一个 SQLite 数据库。
 
@@ -56,9 +56,9 @@ uv run python -m py_server.seed --reset --demo
 
 打开：
 
-* 页面：<http://127.0.0.1:8501>
-* 接口文档（Swagger）：<http://127.0.0.1:8000/docs>
-* 健康检查：<http://127.0.0.1:8000/health>
+* 页面：[http://127.0.0.1:8501](http://127.0.0.1:8501)
+* 接口文档（Swagger）：[http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
+* 健康检查：[http://127.0.0.1:8000/health](http://127.0.0.1:8000/health)
 
 演示数据包含：5 条程序绑定（TEST-01/02/03、AOI-01、TEST-04）、3 条前道规则、4 个开放变量；TEST-03 故意上报了旧版本，用于展示**版本漂移告警**。
 
@@ -92,17 +92,17 @@ py-server/
 
 全部通过环境变量覆盖，未设置时使用默认值。
 
-| 环境变量 | 默认值 | 说明 |
-| --- | --- | --- |
-| `MES_DATA_DIR` | `<项目>/data` | 运行期数据目录 |
-| `MES_DB_PATH` | `$MES_DATA_DIR/mes.db` | SQLite 文件路径 |
-| `MES_PROGRAM_DIR` | `$MES_DATA_DIR/programs` | 程序文件静态目录，挂在 `/programs` |
-| `MES_TZ` | `Asia/Shanghai` | “今日”统计与页面展示使用的业务时区 |
-| `MES_API_PORT` | `8000` | 接口服务端口（用于拼默认下载地址） |
-| `MES_API_PUBLIC_BASE` | `http://<本机内网IP>:8000` | **设备可访问的接口地址**；部署到内网时建议显式设置 |
-| `MES_API_HOST` | `0.0.0.0` | `python -m py_server.api` 时的监听地址 |
-| `MES_MAX_FUTURE_SKEW_SECONDS` | `300` | 设备 `tested_at` 允许超前服务器时间的秒数，超出会钳制到服务器当前时间 |
-| `MES_STALE_TOLERANCE_SECONDS` | `300` | 判断历史补传时的时钟偏差容差，避免轻微偏慢的时钟把新 FAIL 当旧数据处理 |
+| 环境变量                        | 默认值                       | 说明                                                                    |
+| ------------------------------- | ---------------------------- | ----------------------------------------------------------------------- |
+| `MES_DATA_DIR`                | `<项目>/data`              | 运行期数据目录                                                          |
+| `MES_DB_PATH`                 | `$MES_DATA_DIR/mes.db`     | SQLite 文件路径                                                         |
+| `MES_PROGRAM_DIR`             | `$MES_DATA_DIR/programs`   | 程序文件静态目录，挂在 `/programs`                                    |
+| `MES_TZ`                      | `Asia/Shanghai`            | “今日”统计与页面展示使用的业务时区                                    |
+| `MES_API_PORT`                | `8000`                     | 接口服务端口（用于拼默认下载地址）                                      |
+| `MES_API_PUBLIC_BASE`         | `http://<本机内网IP>:8000` | **设备可访问的接口地址**；部署到内网时建议显式设置                |
+| `MES_API_HOST`                | `0.0.0.0`                  | `python -m py_server.api` 时的监听地址                                |
+| `MES_MAX_FUTURE_SKEW_SECONDS` | `300`                      | 设备 `tested_at` 允许超前服务器时间的秒数，超出会钳制到服务器当前时间 |
+| `MES_STALE_TOLERANCE_SECONDS` | `300`                      | 判断历史补传时的时钟偏差容差，避免轻微偏慢的时钟把新 FAIL 当旧数据处理  |
 
 数据库时间统一存 UTC ISO 字符串，页面展示时转换为业务时区。
 
@@ -110,17 +110,17 @@ py-server/
 
 ## 5. 数据模型
 
-| 表 | 用途 |
-| --- | --- |
-| `program_bindings` | 设备-产品-程序绑定；含下载 URL、SHA256、最后拉取时间、设备上报版本/校验和、可生产状态 |
-| `program_pull_logs` | 设备拉取记录 |
-| `program_status_logs` | 设备程序状态上报记录（含不可信原因） |
-| `workpieces` | 工件当前状态：PASS/FAIL/待测、当前设备、锁定原因/时间、解锁人/原因/人工放行时间 |
-| `test_results` | 测试结果；`UNIQUE(workpiece, device_id, test_item)` 保证幂等；`trusted` 标记数据是否可信 |
-| `unlock_logs` | 解锁留痕（工件、解锁人、原因、锁定原因、时间） |
-| `variables` | 开放变量：名称、类型（int/str/bool）、当前值、最后写入设备、更新时间 |
-| `upstream_devices` | 前道关键设备配置；产品留空表示对所有产品生效 |
-| `settings` | 预留的键值配置表 |
+| 表                      | 用途                                                                                         |
+| ----------------------- | -------------------------------------------------------------------------------------------- |
+| `program_bindings`    | 设备-产品-程序绑定；含下载 URL、SHA256、最后拉取时间、设备上报版本/校验和、可生产状态        |
+| `program_pull_logs`   | 设备拉取记录                                                                                 |
+| `program_status_logs` | 设备程序状态上报记录（含不可信原因）                                                         |
+| `workpieces`          | 工件当前状态：PASS/FAIL/待测、当前设备、锁定原因/时间、解锁人/原因/人工放行时间              |
+| `test_results`        | 测试结果；`UNIQUE(workpiece, device_id, test_item)` 保证幂等；`trusted` 标记数据是否可信 |
+| `unlock_logs`         | 解锁留痕（工件、解锁人、原因、锁定原因、时间）                                               |
+| `variables`           | 开放变量：名称、类型（int/str/bool）、当前值、最后写入设备、更新时间                         |
+| `upstream_devices`    | 前道关键设备配置；产品留空表示对所有产品生效                                                 |
+| `settings`            | 预留的键值配置表                                                                             |
 
 ---
 
@@ -128,16 +128,16 @@ py-server/
 
 所有接口返回 JSON。Swagger 文档见 `/docs`。
 
-| 方法 | 路径 | 用途 |
-| --- | --- | --- |
-| GET | `/api/program?device_id=&product=` | 拉取程序元数据（同时写拉取记录） |
-| POST | `/api/program/status` | 上报已加载版本与校验结果 |
-| POST | `/api/test-result` | 上报测试结果（幂等） |
-| GET | `/api/interlock?workpiece=&device_id=` | 查询工件能否在本设备操作（`device_id` 建议必传） |
-| GET | `/api/variable/{name}` | 读取开放变量 |
-| POST | `/api/variable/{name}` | 写入开放变量 |
-| GET | `/health` | 健康检查 |
-| GET | `/programs/{filename}` | 程序文件下载（静态目录） |
+| 方法 | 路径                                     | 用途                                               |
+| ---- | ---------------------------------------- | -------------------------------------------------- |
+| GET  | `/api/program?device_id=&product=`     | 拉取程序元数据（同时写拉取记录）                   |
+| POST | `/api/program/status`                  | 上报已加载版本与校验结果                           |
+| POST | `/api/test-result`                     | 上报测试结果（幂等）                               |
+| GET  | `/api/interlock?workpiece=&device_id=` | 查询工件能否在本设备操作（`device_id` 建议必传） |
+| GET  | `/api/variable/{name}`                 | 读取开放变量                                       |
+| POST | `/api/variable/{name}`                 | 写入开放变量                                       |
+| GET  | `/health`                              | 健康检查                                           |
+| GET  | `/programs/{filename}`                 | 程序文件下载（静态目录）                           |
 
 ### 6.1 拉取程序
 
@@ -263,12 +263,12 @@ POST /api/variable/line_mode
 
 ## 8. 页面说明
 
-| 页面 | 说明 |
-| --- | --- |
-| 📦 程序下发 | 顶部漂移告警；绑定关系可编辑表格（新增/修改/删除行后保存）；上传程序文件自动算 SHA256；拉取记录、状态上报记录；接口调用示例 |
-| 🔒 工序锁 | 当前锁定工件列表；人工解锁表单（原因必填 + 勾选确认）；解锁留痕；前道关键设备配置；放行状态自检 |
+| 页面            | 说明                                                                                                                                                                                                            |
+| --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 📦 程序下发     | 顶部漂移告警；绑定关系可编辑表格（新增/修改/删除行后保存）；上传程序文件自动算 SHA256；拉取记录、状态上报记录；接口调用示例                                                                                     |
+| 🔒 工序锁       | 当前锁定工件列表；人工解锁表单（原因必填 + 勾选确认）；解锁留痕；前道关键设备配置；放行状态自检                                                                                                                 |
 | 📊 测试数据看板 | 今日总数/PASS/FAIL（按设备测试时间统计，含全部上报）/合格率（仅可信数据）；按设备合格率柱状图；FAIL 按测试项/设备分布（含不可信数据）；设备筛选在侧边栏；`st.fragment(run_every=10)` 自动刷新；不可信数据提示 |
-| 🔧 开放性变量 | 前缀筛选；变量表；新增变量表单；30 秒自动刷新；接口示例 |
+| 🔧 开放性变量   | 前缀筛选；变量表；新增变量表单；30 秒自动刷新；接口示例                                                                                                                                                         |
 
 页面与接口共用 `services.py`，因此页面里的“放行状态自检”、看板统计与设备接口结果完全一致。
 
@@ -278,15 +278,15 @@ POST /api/variable/line_mode
 
 以下场景均可通过自动化测试复现（`pytest tests/test_acceptance.py`）：
 
-| # | 验收标准 | 实现 / 验证 |
-| --- | --- | --- |
-| 1 | 修改绑定后 `GET /api/program` 返回新版本、URL、SHA256 | `test_acceptance_1_program_pull_returns_updated_binding` |
-| 2 | 设备上报版本不一致时程序页面顶部告警 | `program_drift()` + 页面顶部 `st.error`；`test_acceptance_2_version_drift_alert`、`test_main_app_renders_with_drift_alert` |
-| 3 | 前道无 PASS 拒绝；FAIL 工件后续设备拒绝 | `test_acceptance_3_interlock_rules` |
-| 4 | 解锁必须原因 + 勾选确认，解锁后放行恢复、记录可查 | `test_acceptance_4_unlock_requires_reason_and_confirm`、`test_interlock_unlock_from_page` |
-| 5 | 看板 10 秒内更新，校验和不匹配不计入合格率 | `st.fragment(run_every=10)`；`test_acceptance_5_dashboard_excludes_untrusted` |
-| 6 | 新增变量后设备读到初始值，设备写入后页面显示新值 | `test_acceptance_6_variables_roundtrip`、`test_variables_add_from_page` |
-| 7 | 重复上报幂等 | `UNIQUE(workpiece, device_id, test_item)`；`test_acceptance_7_duplicate_report_is_idempotent` |
+| # | 验收标准                                                | 实现 / 验证                                                                                                                        |
+| - | ------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| 1 | 修改绑定后 `GET /api/program` 返回新版本、URL、SHA256 | `test_acceptance_1_program_pull_returns_updated_binding`                                                                         |
+| 2 | 设备上报版本不一致时程序页面顶部告警                    | `program_drift()` + 页面顶部 `st.error`；`test_acceptance_2_version_drift_alert`、`test_main_app_renders_with_drift_alert` |
+| 3 | 前道无 PASS 拒绝；FAIL 工件后续设备拒绝                 | `test_acceptance_3_interlock_rules`                                                                                              |
+| 4 | 解锁必须原因 + 勾选确认，解锁后放行恢复、记录可查       | `test_acceptance_4_unlock_requires_reason_and_confirm`、`test_interlock_unlock_from_page`                                      |
+| 5 | 看板 10 秒内更新，校验和不匹配不计入合格率              | `st.fragment(run_every=10)`；`test_acceptance_5_dashboard_excludes_untrusted`                                                  |
+| 6 | 新增变量后设备读到初始值，设备写入后页面显示新值        | `test_acceptance_6_variables_roundtrip`、`test_variables_add_from_page`                                                        |
+| 7 | 重复上报幂等                                            | `UNIQUE(workpiece, device_id, test_item)`；`test_acceptance_7_duplicate_report_is_idempotent`                                  |
 
 手动验证示例（服务启动后）：
 
