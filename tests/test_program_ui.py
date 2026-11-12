@@ -30,6 +30,11 @@ def test_program_ui_renders_three_sections_and_derived_columns() -> None:
         "程序运行列表",
         "型号关联",
     ]
+    assert [item.label for item in at.expander] == [
+        "上传程序文件",
+        "设备拉取记录（最近 30 条）",
+        "设备状态上报记录（最近 30 条）",
+    ]
     assert len(at.data_editor) == 2
     assert at.radio(key="role").value == "工程师"
 
@@ -64,6 +69,41 @@ def test_program_ui_renders_three_sections_and_derived_columns() -> None:
         if not config.get("disabled") and column not in {"program_id", "_index"}
     }
     assert editable_columns == {"版本"}
+
+
+def test_device_logs_render_latest_30_records() -> None:
+    at = _run()
+
+    assert len(at.session_state["program_pulls"]) == 30
+    assert len(at.session_state["program_status_logs"]) == 30
+    assert len(at.dataframe) == 4
+
+    pull_frame = at.dataframe[2].value
+    assert list(pull_frame.columns) == [
+        "时间",
+        "设备",
+        "产品",
+        "程序版本",
+        "SHA256",
+    ]
+    assert len(pull_frame) == 30
+    assert pull_frame.iloc[0]["设备"] == "TEST-01"
+    assert pull_frame.iloc[0]["程序版本"] == "v1.2.0"
+    assert pull_frame.iloc[0]["SHA256"].endswith("…")
+
+    status_frame = at.dataframe[3].value
+    assert list(status_frame.columns) == [
+        "时间",
+        "设备",
+        "产品",
+        "上报版本",
+        "可信",
+        "原因",
+    ]
+    assert len(status_frame) == 30
+    assert status_frame.iloc[0]["可信"] == "是"
+    assert status_frame.iloc[2]["可信"] == "否"
+    assert status_frame.iloc[2]["原因"] == "程序版本与绑定不一致"
 
 
 def test_upload_program_requires_and_stores_step() -> None:
@@ -178,7 +218,7 @@ def test_readonly_role_disables_editing() -> None:
     assert not at.exception, [str(item.value) for item in at.exception]
     assert not at.data_editor
     assert not at.button
-    assert len(at.dataframe) == 2
+    assert len(at.dataframe) == 4
 
 
 def test_empty_program_tables_keep_columns() -> None:

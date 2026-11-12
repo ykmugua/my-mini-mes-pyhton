@@ -3,50 +3,110 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from datetime import datetime, timedelta
 from typing import Any
 
 import streamlit as st
 
-STATE_SCHEMA_VERSION = 4
+STATE_SCHEMA_VERSION = 5
+MOCK_LOG_TIME = datetime(2026, 11, 13, 9, 30, 0)
+
+
+def _mock_program_pulls(
+    programs: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """生成最近 30 条设备拉取记录，字段与正式页面保持一致。"""
+    records = []
+    for index in range(30):
+        program = programs[index % len(programs)]
+        step_no = int(program["step_no"])
+        records.append(
+            {
+                "device_id": f"TEST-{step_no:02d}",
+                "product": "P-1001" if step_no < 3 else "P-1002",
+                "program_version": program["program_version"],
+                "sha256": program["sha256"],
+                "pulled_at": (
+                    MOCK_LOG_TIME - timedelta(minutes=index * 11)
+                ).strftime("%Y-%m-%d %H:%M:%S"),
+            }
+        )
+    return records
+
+
+def _mock_program_status_logs(
+    programs: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """生成最近 30 条设备状态上报记录，包含可信与异常场景。"""
+    records = []
+    for index in range(30):
+        program = programs[index % len(programs)]
+        step_no = int(program["step_no"])
+        variant = index % 6
+        trusted = variant not in {2, 5}
+        reported_version = (
+            "v1.1.0" if variant == 2 else program["program_version"]
+        )
+        reason = ""
+        if variant == 2:
+            reason = "程序版本与绑定不一致"
+        elif variant == 5:
+            reason = "SHA256 校验不一致"
+        records.append(
+            {
+                "device_id": f"TEST-{step_no:02d}",
+                "product": "P-1001" if step_no < 3 else "P-1002",
+                "reported_version": reported_version,
+                "reported_sha256": program["sha256"],
+                "sha256_ok": variant != 5,
+                "trusted": trusted,
+                "reason": reason,
+                "reported_at": (
+                    MOCK_LOG_TIME - timedelta(minutes=index * 13 + 3)
+                ).strftime("%Y-%m-%d %H:%M:%S"),
+            }
+        )
+    return records
 
 
 def initial_program_state() -> dict[str, list[dict[str, Any]]]:
     """返回一份新的占位数据，避免模块级可变状态在用户间共享。"""
+    programs = [
+        {
+            "program_id": 1,
+            "program_name": "TEST_MAIN",
+            "program_version": "v1.2.0",
+            "version_description": "增加压力检测与启动保护",
+            "sha256": "6f3b8e0c1d2a9f7e4b5c6d8a1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f",
+            "download_url": "http://192.168.1.50:8000/programs/fw_TEST-01_v1.2.0.zip",
+            "step_no": 1,
+        },
+        {
+            "program_id": 2,
+            "program_name": "FUNC_TEST",
+            "program_version": "v2.0.1",
+            "version_description": "修复型号切换后的参数缓存",
+            "sha256": "a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90",
+            "download_url": "http://192.168.1.50:8000/programs/fw_FUNC-TEST_v2.0.1.7z",
+            "step_no": 2,
+        },
+        {
+            "program_id": 3,
+            "program_name": "FINAL_CHECK",
+            "program_version": "v1.0.0",
+            "version_description": "正式终检参数模板",
+            "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            "download_url": "http://192.168.1.50:8000/programs/fw_FINAL-CHECK_v1.0.0.zip",
+            "step_no": 3,
+        },
+    ]
     return {
         "line_steps": [
             {"step_no": 1, "step_name": "上电测试", "device_id": "TEST-01"},
             {"step_no": 2, "step_name": "功能测试", "device_id": "TEST-02"},
             {"step_no": 3, "step_name": "终检", "device_id": "TEST-03"},
         ],
-        "programs": [
-            {
-                "program_id": 1,
-                "program_name": "TEST_MAIN",
-                "program_version": "v1.2.0",
-                "version_description": "增加压力检测与启动保护",
-                "sha256": "6f3b8e0c1d2a9f7e4b5c6d8a1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f",
-                "download_url": "http://192.168.1.50:8000/programs/fw_TEST-01_v1.2.0.zip",
-                "step_no": 1,
-            },
-            {
-                "program_id": 2,
-                "program_name": "FUNC_TEST",
-                "program_version": "v2.0.1",
-                "version_description": "修复型号切换后的参数缓存",
-                "sha256": "a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90",
-                "download_url": "http://192.168.1.50:8000/programs/fw_FUNC-TEST_v2.0.1.7z",
-                "step_no": 2,
-            },
-            {
-                "program_id": 3,
-                "program_name": "FINAL_CHECK",
-                "program_version": "v1.0.0",
-                "version_description": "正式终检参数模板",
-                "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-                "download_url": "http://192.168.1.50:8000/programs/fw_FINAL-CHECK_v1.0.0.zip",
-                "step_no": 3,
-            },
-        ],
+        "programs": programs,
         "program_versions": [
             {
                 "program_id": 1,
@@ -94,6 +154,8 @@ def initial_program_state() -> dict[str, list[dict[str, Any]]]:
             {"program_id": 2, "component_no": "P-1001"},
             {"program_id": 2, "component_no": "P-1002"},
         ],
+        "program_pulls": _mock_program_pulls(programs),
+        "program_status_logs": _mock_program_status_logs(programs),
     }
 
 
@@ -167,6 +229,10 @@ def initialize_program_state() -> None:
             )
 
     st.session_state.pop("program_bindings", None)
+
+    for key in ("program_pulls", "program_status_logs"):
+        if key not in st.session_state:
+            st.session_state[key] = deepcopy(defaults[key])
     st.session_state["program_data_version"] = STATE_SCHEMA_VERSION
 
 

@@ -31,6 +31,8 @@ PROGRAM_COLUMNS = [
     "关联型号数",
     "程序类型",
 ]
+PULL_LOG_COLUMNS = ["时间", "设备", "产品", "程序版本", "SHA256"]
+STATUS_LOG_COLUMNS = ["时间", "设备", "产品", "上报版本", "可信", "原因"]
 COMPONENT_WARNING_KEY = "program_components_warning"
 COLUMN_ORDER_LOCK_SCRIPT = """
 <script>
@@ -198,6 +200,38 @@ def _component_frame(component_nos: list[str]) -> pd.DataFrame:
     return pd.DataFrame({"component_no": pd.Series(component_nos, dtype="string")})
 
 
+def _pull_log_frame(records: list[dict[str, Any]]) -> pd.DataFrame:
+    rows = []
+    for item in records:
+        sha256 = _text(item.get("sha256"))
+        rows.append(
+            {
+                "时间": _text(item.get("pulled_at")),
+                "设备": _text(item.get("device_id")),
+                "产品": _text(item.get("product")),
+                "程序版本": _text(item.get("program_version")),
+                "SHA256": f"{sha256[:16]}…" if sha256 else "",
+            }
+        )
+    return pd.DataFrame(rows, columns=PULL_LOG_COLUMNS)
+
+
+def _status_log_frame(records: list[dict[str, Any]]) -> pd.DataFrame:
+    rows = []
+    for item in records:
+        rows.append(
+            {
+                "时间": _text(item.get("reported_at")),
+                "设备": _text(item.get("device_id")),
+                "产品": _text(item.get("product")),
+                "上报版本": _text(item.get("reported_version")),
+                "可信": "是" if item.get("trusted") else "否",
+                "原因": _text(item.get("reason")),
+            }
+        )
+    return pd.DataFrame(rows, columns=STATUS_LOG_COLUMNS)
+
+
 def _validate_program_rows(
     rows: list[dict[str, Any]],
     current: list[dict[str, Any]],
@@ -305,6 +339,8 @@ line_steps: list[dict[str, Any]] = st.session_state.line_steps
 programs: list[dict[str, Any]] = st.session_state.programs
 program_versions: list[dict[str, Any]] = st.session_state.program_versions
 program_components: list[dict[str, Any]] = st.session_state.program_components
+program_pulls: list[dict[str, Any]] = st.session_state.program_pulls[:30]
+program_status_logs: list[dict[str, Any]] = st.session_state.program_status_logs[:30]
 version_options = available_program_versions(programs, program_versions)
 
 st.title("📦 程序下发")
@@ -558,3 +594,33 @@ with st.container(border=True):
                     )
                 st.toast("型号关联已保存")
                 st.rerun()
+
+
+# -----------------------------------------------------------------------------
+# 区块 4：设备拉取记录
+# -----------------------------------------------------------------------------
+with st.expander("设备拉取记录（最近 30 条）", expanded=False):
+    if program_pulls:
+        st.dataframe(
+            _pull_log_frame(program_pulls),
+            hide_index=True,
+            width="stretch",
+            alt="设备拉取记录",
+        )
+    else:
+        st.caption("暂无拉取记录。")
+
+
+# -----------------------------------------------------------------------------
+# 区块 5：设备状态上报记录
+# -----------------------------------------------------------------------------
+with st.expander("设备状态上报记录（最近 30 条）", expanded=False):
+    if program_status_logs:
+        st.dataframe(
+            _status_log_frame(program_status_logs),
+            hide_index=True,
+            width="stretch",
+            alt="设备状态上报记录",
+        )
+    else:
+        st.caption("暂无上报记录。")
