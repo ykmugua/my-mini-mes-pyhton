@@ -1,0 +1,49 @@
+<mxfile host="Electron" agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) draw.io/29.6.1 Chrome/142.0.7444.265 Electron/39.8.0 Safari/537.36" version="29.6.1">
+  <diagram name="系统架构" id="KCpj-P_MgGSSbbg60kvu">
+    <mxGraphModel dx="1284" dy="752" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="JK-ph_j6TXLIpDAEaD9r-1" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e3f2fd;strokeColor=#1565c0;strokeWidth=2;fontSize=14;" value="测试机台" vertex="1">
+          <mxGeometry height="60" width="160" x="510" y="270" as="geometry" />
+        </mxCell>
+        <mxCell id="JK-ph_j6TXLIpDAEaD9r-2" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e3f2fd;strokeColor=#1565c0;strokeWidth=2;fontSize=14;" value="工位操作员&#xa;（浏览器）" vertex="1">
+          <mxGeometry height="60" width="160" x="180" y="110" as="geometry" />
+        </mxCell>
+        <mxCell id="JK-ph_j6TXLIpDAEaD9r-3" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff3e0;strokeColor=#ef6c00;strokeWidth=2;fontSize=14;" value="Streamlit 界面层&#xa;查询 / 展示 / 修改" vertex="1">
+          <mxGeometry height="100" width="200" x="160" y="230" as="geometry" />
+        </mxCell>
+        <mxCell id="JK-ph_j6TXLIpDAEaD9r-4" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e8f5e9;strokeColor=#2e7d32;strokeWidth=2;fontSize=13;align=left;spacingLeft=10;" value="&lt;b&gt;FastAPI 接入层&lt;/b&gt;&lt;br&gt;POST /api/upload&lt;br&gt;GET /api/records&lt;br&gt;GET /api/records/{id}/details&lt;br&gt;POST /api/records/{id}/update&lt;br&gt;&lt;i&gt;参数校验 · 错误处理 · 日志&lt;/i&gt;" vertex="1">
+          <mxGeometry height="180" width="300" x="280" y="400" as="geometry" />
+        </mxCell>
+        <mxCell id="JK-ph_j6TXLIpDAEaD9r-5" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f3e5f5;strokeColor=#6a1b9a;strokeWidth=2;fontSize=13;align=left;spacingLeft=10;" value="&lt;b&gt;Repository 数据访问层&lt;/b&gt;&lt;br&gt;insert_record / query_records&lt;br&gt;query_details / update_record&lt;br&gt;&lt;i&gt;事务边界 · 批量插入 · 动态条件&lt;/i&gt;" vertex="1">
+          <mxGeometry height="120" width="300" x="280" y="640" as="geometry" />
+        </mxCell>
+        <mxCell id="JK-ph_j6TXLIpDAEaD9r-6" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fce4ec;strokeColor=#ad1457;strokeWidth=2;fontSize=14;" value="SQLAlchemy Engine&#xa;连接池 · 方言适配 · 事务控制" vertex="1">
+          <mxGeometry height="70" width="260" x="300" y="820" as="geometry" />
+        </mxCell>
+        <mxCell id="JK-ph_j6TXLIpDAEaD9r-7" parent="1" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;fillColor=#eceff1;strokeColor=#37474f;strokeWidth=2;fontSize=14;" value="SQLite 单文件&#xa;（未来可换 PostgreSQL）" vertex="1">
+          <mxGeometry height="90" width="240" x="310" y="940" as="geometry" />
+        </mxCell>
+        <mxCell id="JK-ph_j6TXLIpDAEaD9r-8" edge="1" parent="1" source="JK-ph_j6TXLIpDAEaD9r-1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#1565c0;strokeWidth=2;fontSize=12;labelBackgroundColor=#ffffff;" target="JK-ph_j6TXLIpDAEaD9r-4" value="HTTP POST &lt;br&gt;查询/上传">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="JK-ph_j6TXLIpDAEaD9r-9" edge="1" parent="1" source="JK-ph_j6TXLIpDAEaD9r-2" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#1565c0;strokeWidth=2;fontSize=12;labelBackgroundColor=#ffffff;" target="JK-ph_j6TXLIpDAEaD9r-3" value="访问页面">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="JK-ph_j6TXLIpDAEaD9r-10" edge="1" parent="1" source="JK-ph_j6TXLIpDAEaD9r-3" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#ef6c00;strokeWidth=2;fontSize=12;labelBackgroundColor=#ffffff;" target="JK-ph_j6TXLIpDAEaD9r-4" value="HTTP GET/POST&#xa;查询 / 修改">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="JK-ph_j6TXLIpDAEaD9r-11" edge="1" parent="1" source="JK-ph_j6TXLIpDAEaD9r-4" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#2e7d32;strokeWidth=2;fontSize=12;labelBackgroundColor=#ffffff;" target="JK-ph_j6TXLIpDAEaD9r-5" value="函数调用（不写 SQL）">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="JK-ph_j6TXLIpDAEaD9r-12" edge="1" parent="1" source="JK-ph_j6TXLIpDAEaD9r-5" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#6a1b9a;strokeWidth=2;fontSize=12;labelBackgroundColor=#ffffff;" target="JK-ph_j6TXLIpDAEaD9r-6" value="SQLAlchemy Core">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="JK-ph_j6TXLIpDAEaD9r-13" edge="1" parent="1" source="JK-ph_j6TXLIpDAEaD9r-6" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#ad1457;strokeWidth=2;fontSize=12;labelBackgroundColor=#ffffff;" target="JK-ph_j6TXLIpDAEaD9r-7" value="执行 SQL">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
