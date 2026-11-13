@@ -77,3 +77,12 @@ delete 确认弹窗也会同时清理 products、product_routes、product_step_d
 因此：
 - 在 L1 保存后切到 L2 再保存，会覆盖 L1 的分配结果。
 - 若未来业务要求跨线体独立配置，必须先升级 product_step_devices 并修改删除键。
+
+## 11. Gotcha：SelectboxColumn 混用整数和字符串会导致整列只读
+
+在 Streamlit 1.67 的 `st.data_editor` 中，如果一列同时包含整数工序号和 `END`/`LOCK` 字符串，即使配置了 `SelectboxColumn`，前端也可能把该列标成 disabled，用户无法选择。
+
+处理方式：
+- 编辑器 DataFrame 中把下站值统一转换成字符串，`SelectboxColumn.options` 也使用字符串工序号。
+- 保存校验时通过整数转换恢复真实 step_no，终端标记仍保留为 END/LOCK。
+- 测试应检查列配置中的 disabled 为空，并实际确认下拉类型。

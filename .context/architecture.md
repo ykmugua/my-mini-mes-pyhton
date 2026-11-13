@@ -212,3 +212,18 @@
 - 流程工序在当前线体下无设备时显示 warning；不阻断保存。
 
 **边界**：如果未来要求型号×工序×线体独立设备范围，需要升级表结构，增加 line_id 并同步迁移。
+
+## 15. ADR-015：产品工序流程使用显式节点删除与并排设备筛选（2026-11-13）
+
+**状态**：已采用
+
+**决策**：
+- `product_routes` 移除 `required`（关键工序）字段；当前流程节点字段为 product_model、step_no、success_next_step、fail_next_step。
+- 成功下站和失败下站均使用 `SelectboxColumn`，都可选择启用工序；成功额外支持 END，失败额外支持 END/LOCK。
+- 编辑器中的下站值统一序列化为字符串；保存时再转回整数工序号或 END/LOCK 终端标记，避免混合类型列被自动禁用。
+- 流程表使用 `num_rows="add"`，保留新增行，不显示左侧整行删除/选择控件。
+- 删除列使用 `ButtonColumn`：点击只写入 pending_product_route_delete，rerun 后弹出 st.dialog；确认后仅删除对应 product_model + step_no 节点。
+- 设备分配的“选择线体”“选择工序”使用 `st.columns(2)` 并排显示；候选设备仍按产品、线体、工序、启用状态过滤。
+- state schema 提升为 10，旧会话中的 product_routes.required 自动移除。
+
+**边界**：删除流程节点不会级联删除 product_step_devices；只会在引用失效时由保存校验提示重新配置。

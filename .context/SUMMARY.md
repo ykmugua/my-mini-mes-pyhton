@@ -1,8 +1,1 @@
-# 项目上下文索引
-
-> 最后同步: 2026-11-12 17:30:28 | 设备: YIKOUMUGUA | Agent: unknown
-
-## 详细主题
-- [task_progress.md](./task_progress.md) — 26 lines
-- [gotchas.md](./gotchas.md) — 79 lines
-- [architecture.md](./architecture.md) — 214 lines
+旁路式小型 MES：产品管理页已完成工序流程调整（移除关键工序与行选择、保留下站工序选择、新增行、删除确认）、线体/工序并排布局；完整测试 100 passed，上下文记录已更新。

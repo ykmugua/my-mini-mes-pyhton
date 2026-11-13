@@ -15,15 +15,23 @@
 - [X] 实现“产品管理”页面
   - 产品、工序流程、设备分配均已实现
   - 设备分配已改为“选产品 → 选线体 → 选工序 → 选设备”
+  - 线体和工序筛选并排显示
   - 线体只作为候选筛选条件，不写入 product_step_devices
   - 保存会覆盖该 product_model + step_no 的全部分配
-  - 区块底部说明跨线体保存覆盖规则
+- [X] 调整产品工序流程
+  - 去掉关键工序字段与左侧整行删除/选择控件
+  - 成功下站、失败下站均可选择启用工序
+  - 新增行保持可用，使用 num_rows="add"
+  - 增加逐行删除 ButtonColumn + 确认弹窗
+  - 确认删除只移除对应流程节点
 - [X] 记录 gotchas / architecture
 - [X] 完成首次 /sync-save 与 /sync-load 验证
 
 ## 验证结果
 
-- 产品管理测试：18 passed
-- 完整测试套件：98 passed
-- Agent API：L2 + 功能测试过滤出 TEST-02、TEST-02B，默认回显 TEST-02
+- 产品管理测试：20 passed
+- 完整测试套件：100 passed
+- Agent API：产品页 ready；流程编辑器为 add-only；线体/工序位于同一双列布局
+- 浏览器：流程删除按钮可弹出确认框，确认后流程行由 3 行变为 2 行
+- 服务端控制台无新增警告或异常
 - 仅有 starlette.testclient 的 httpx 弃用警告，不影响当前功能
