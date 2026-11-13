@@ -1,1 +1,1 @@
-旁路式小型 MES：产品管理页已完成工序流程调整（移除关键工序与行选择、保留下站工序选择、新增行、删除确认）、线体/工序并排布局；完整测试 100 passed，上下文记录已更新。
+旁路式小型 MES：新增系统设计框架文档及分层架构约束（测试机台/Streamlit → FastAPI → Repository → SQLAlchemy Engine → SQLite/PostgreSQL）；产品管理页已完成并验证，完整测试 100 passed。

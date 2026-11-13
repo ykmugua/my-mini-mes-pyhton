@@ -227,3 +227,22 @@
 - state schema 提升为 10，旧会话中的 product_routes.required 自动移除。
 
 **边界**：删除流程节点不会级联删除 product_step_devices；只会在引用失效时由保存校验提示重新配置。
+
+## 16. ADR-016：采用分层系统设计框架文档（2026-11-13）
+
+**状态**：已采用（目标架构，当前 Streamlit 原型尚未接后端）
+
+**文档位置**：
+- [系统框架设计](../system_design_framework/manual.md)
+- [架构图 Draw.io](../system_design_framework/System_Architecture_Diagram.drawio)
+
+**目标调用链**：测试机台 → FastAPI；工位操作员 → Streamlit → FastAPI；FastAPI → Repository → SQLAlchemy Engine → SQLite（未来可换 PostgreSQL）。
+
+**核心原则**：
+- FastAPI 是所有机台和 Streamlit 数据访问的唯一入口，负责参数校验、错误处理和日志。
+- Repository 是唯一编写 SQL 的层，使用 SQLAlchemy Core 并提供事务边界。
+- Streamlit 只负责界面，通过 HTTP 调 FastAPI，不直接访问数据库或 Repository。
+- 测试机台保持只读；修改操作仅由操作员通过 Streamlit 触发。
+- 数据库更换只影响连接配置与 Repository 内部实现，上层接口保持稳定。
+
+**边界**：当前所有页面仍使用 `st.session_state` 占位数据；上述分层是后续 FastAPI/Repository/数据库接入的设计约束。

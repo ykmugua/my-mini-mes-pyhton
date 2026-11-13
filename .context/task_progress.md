@@ -24,8 +24,12 @@
   - 新增行保持可用，使用 num_rows="add"
   - 增加逐行删除 ButtonColumn + 确认弹窗
   - 确认删除只移除对应流程节点
+- [X] 新增系统设计框架文档
+  - `system_design_framework/manual.md`
+  - `system_design_framework/System_Architecture_Diagram.drawio`
+  - 目标分层：测试机台/Streamlit → FastAPI → Repository → SQLAlchemy Engine → SQLite/PostgreSQL
 - [X] 记录 gotchas / architecture
-- [X] 完成首次 /sync-save 与 /sync-load 验证
+- [X] 完成 /sync-save 与 /sync-load 验证
 
 ## 验证结果
 
