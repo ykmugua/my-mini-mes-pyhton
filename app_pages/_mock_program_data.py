@@ -8,7 +8,7 @@ from typing import Any
 
 import streamlit as st
 
-STATE_SCHEMA_VERSION = 5
+STATE_SCHEMA_VERSION = 9
 MOCK_LOG_TIME = datetime(2026, 11, 13, 9, 30, 0)
 
 
@@ -101,10 +101,93 @@ def initial_program_state() -> dict[str, list[dict[str, Any]]]:
         },
     ]
     return {
-        "line_steps": [
-            {"step_no": 1, "step_name": "上电测试", "device_id": "TEST-01"},
-            {"step_no": 2, "step_name": "功能测试", "device_id": "TEST-02"},
-            {"step_no": 3, "step_name": "终检", "device_id": "TEST-03"},
+        "steps": [
+            {
+                "step_no": 1,
+                "step_name": "上电测试",
+                "enabled": True,
+                "remark": "首站上电与基础安全检查",
+            },
+            {
+                "step_no": 2,
+                "step_name": "功能测试",
+                "enabled": True,
+                "remark": "功能与参数校验",
+            },
+            {
+                "step_no": 3,
+                "step_name": "终检",
+                "enabled": True,
+                "remark": "出货前最终检查",
+            },
+            {
+                "step_no": 4,
+                "step_name": "包装",
+                "enabled": False,
+                "remark": "当前阶段暂未启用",
+            },
+        ],
+        "lines": [
+            {"line_id": "L1", "line_name": "一线"},
+            {"line_id": "L2", "line_name": "二线"},
+        ],
+        "devices": [
+            {
+                "device_id": "TEST-01",
+                "device_name": "上电测试机",
+                "line_id": "L1",
+                "step_no": 1,
+                "enabled": True,
+                "remark": "一线上电测试工位",
+            },
+            {
+                "device_id": "TEST-01B",
+                "device_name": "上电测试机B",
+                "line_id": "L1",
+                "step_no": 1,
+                "enabled": True,
+                "remark": "一线上电备用机",
+            },
+            {
+                "device_id": "TEST-02",
+                "device_name": "功能测试机",
+                "line_id": "L2",
+                "step_no": 2,
+                "enabled": True,
+                "remark": "一线功能测试工位",
+            },
+            {
+                "device_id": "TEST-02B",
+                "device_name": "功能测试机B",
+                "line_id": "L2",
+                "step_no": 2,
+                "enabled": True,
+                "remark": "二线功能测试工位",
+            },
+            {
+                "device_id": "TEST-03",
+                "device_name": "终检机",
+                "line_id": "L2",
+                "step_no": 3,
+                "enabled": True,
+                "remark": "一线终检工位",
+            },
+            {
+                "device_id": "TEST-03B",
+                "device_name": "终检机B",
+                "line_id": "L2",
+                "step_no": 3,
+                "enabled": True,
+                "remark": "二线终检工位",
+            },
+            {
+                "device_id": "TEST-04",
+                "device_name": "备用上电测试机",
+                "line_id": "L1",
+                "step_no": 1,
+                "enabled": False,
+                "remark": "备用设备，当前停用",
+            },
         ],
         "programs": programs,
         "program_versions": [
@@ -154,6 +237,67 @@ def initial_program_state() -> dict[str, list[dict[str, Any]]]:
             {"program_id": 2, "component_no": "P-1001"},
             {"program_id": 2, "component_no": "P-1002"},
         ],
+        "products": [
+            {
+                "product_model": "P-1001",
+                "product_name": "电源模块",
+                "test_program_name": "TEST_MAIN",
+                "test_program_path": "D:/test/P-1001/main.exe",
+                "remark": "",
+            },
+            {
+                "product_model": "P-1002",
+                "product_name": "控制板",
+                "test_program_name": "",
+                "test_program_path": "",
+                "remark": "待配置",
+            },
+        ],
+        "product_routes": [
+            {
+                "product_model": "P-1001",
+                "step_no": 1,
+                "success_next_step": 2,
+                "fail_next_step": "LOCK",
+                "required": True,
+            },
+            {
+                "product_model": "P-1001",
+                "step_no": 2,
+                "success_next_step": 3,
+                "fail_next_step": "LOCK",
+                "required": True,
+            },
+            {
+                "product_model": "P-1001",
+                "step_no": 3,
+                "success_next_step": "END",
+                "fail_next_step": "LOCK",
+                "required": True,
+            },
+        ],
+        "product_step_devices": [
+            {
+                "product_model": "P-1001",
+                "step_no": 1,
+                "device_id": "TEST-01",
+            },
+            {
+                "product_model": "P-1001",
+                "step_no": 1,
+                "device_id": "TEST-01B",
+            },
+            {
+                "product_model": "P-1001",
+                "step_no": 2,
+                "device_id": "TEST-02",
+            },
+            {
+                "product_model": "P-1001",
+                "step_no": 3,
+                "device_id": "TEST-03",
+            },
+        ],
         "program_pulls": _mock_program_pulls(programs),
         "program_status_logs": _mock_program_status_logs(programs),
     }
@@ -168,13 +312,30 @@ def initialize_program_state() -> None:
         for key, value in defaults.items():
             if key not in st.session_state:
                 st.session_state[key] = deepcopy(value)
+        for device in st.session_state.get("devices", []):
+            device.setdefault(
+                "line_id",
+                "L1" if int(device["step_no"]) == 1 else "L2",
+            )
         return
 
     if "programs" not in st.session_state:
         for key, value in defaults.items():
             st.session_state[key] = deepcopy(value)
     else:
-        st.session_state["line_steps"] = deepcopy(defaults["line_steps"])
+        old_steps = st.session_state.get("line_steps")
+        if isinstance(old_steps, list) and old_steps:
+            st.session_state["steps"] = [
+                {
+                    "step_no": int(step["step_no"]),
+                    "step_name": str(step["step_name"]),
+                    "enabled": True,
+                    "remark": "",
+                }
+                for step in old_steps
+            ]
+        else:
+            st.session_state.setdefault("steps", deepcopy(defaults["steps"]))
         if "program_components" not in st.session_state:
             st.session_state["program_components"] = []
         if "program_versions" not in st.session_state:
@@ -182,7 +343,7 @@ def initialize_program_state() -> None:
                 defaults["program_versions"]
             )
 
-        steps = [int(step["step_no"]) for step in defaults["line_steps"]]
+        steps = [int(step["step_no"]) for step in st.session_state["steps"]]
         default_descriptions = {
             (str(item["program_id"]), str(item["program_version"])): str(
                 item["version_description"]
@@ -229,41 +390,66 @@ def initialize_program_state() -> None:
             )
 
     st.session_state.pop("program_bindings", None)
+    st.session_state.pop("line_steps", None)
 
-    for key in ("program_pulls", "program_status_logs"):
+    if "lines" not in st.session_state:
+        st.session_state["lines"] = deepcopy(defaults["lines"])
+
+    if "devices" not in st.session_state:
+        st.session_state["devices"] = deepcopy(defaults["devices"])
+    else:
+        existing_device_ids = {
+            str(device["device_id"]) for device in st.session_state["devices"]
+        }
+        for device in defaults["devices"]:
+            if str(device["device_id"]) not in existing_device_ids:
+                st.session_state["devices"].append(deepcopy(device))
+    for device in st.session_state["devices"]:
+        device.setdefault(
+            "line_id",
+            "L1" if int(device["step_no"]) == 1 else "L2",
+        )
+
+    for key in (
+        "program_pulls",
+        "program_status_logs",
+        "products",
+        "product_routes",
+        "product_step_devices",
+    ):
         if key not in st.session_state:
             st.session_state[key] = deepcopy(defaults[key])
+    st.session_state.pop("product_step_configs", None)
     st.session_state["program_data_version"] = STATE_SCHEMA_VERSION
 
 
 def step_by_no(
-    line_steps: list[dict[str, Any]], step_no: int | str | None
+    steps: list[dict[str, Any]], step_no: int | str | None
 ) -> dict[str, Any] | None:
-    for step in line_steps:
+    for step in steps:
         if str(step["step_no"]) == str(step_no):
             return step
     return None
 
 
 def step_label(
-    line_steps: list[dict[str, Any]],
+    steps: list[dict[str, Any]],
     step_no: int | str | None,
-    *,
-    include_device: bool = False,
 ) -> str:
-    step = step_by_no(line_steps, step_no)
+    step = step_by_no(steps, step_no)
     if step is None:
         return "未配置工序"
-    label = f"{step['step_no']} - {step['step_name']}"
-    if include_device:
-        label += f"（{step['device_id']}）"
-    return label
+    return f"{step['step_no']} - {step['step_name']}"
+
+
+def enabled_steps(steps: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [step for step in steps if bool(step.get("enabled"))]
 
 
 def program_select_label(
-    program: dict[str, Any], line_steps: list[dict[str, Any]]
+    program: dict[str, Any], steps: list[dict[str, Any]]
 ) -> str:
-    step = step_by_no(line_steps, program.get("step_no"))
+    step = step_by_no(steps, program.get("step_no"))
     step_name = str(step["step_name"]) if step else "未配置工序"
     return (
         f"{program['program_name']} ({program['program_version']}) - {step_name}"

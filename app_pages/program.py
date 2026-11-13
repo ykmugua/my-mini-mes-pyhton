@@ -11,6 +11,7 @@ import streamlit as st
 
 from app_pages._mock_program_data import (
     available_program_versions,
+    enabled_steps,
     next_program_id,
     program_component_count,
     program_select_label,
@@ -151,15 +152,15 @@ def _program_frame(
 
 
 def _program_config(
-    line_steps: list[dict[str, Any]], version_options: list[str]
+    steps: list[dict[str, Any]], version_options: list[str]
 ) -> dict[str, Any]:
     return {
         "program_id": None,
         "程序名": st.column_config.TextColumn("程序名", required=True, width="medium"),
         "所属工序": st.column_config.SelectboxColumn(
             "所属工序",
-            options=[int(step["step_no"]) for step in line_steps],
-            format_func=lambda step_no: step_label(line_steps, step_no),
+            options=[int(step["step_no"]) for step in steps],
+            format_func=lambda step_no: step_label(steps, step_no),
             required=True,
             width="medium",
         ),
@@ -235,7 +236,7 @@ def _status_log_frame(records: list[dict[str, Any]]) -> pd.DataFrame:
 def _validate_program_rows(
     rows: list[dict[str, Any]],
     current: list[dict[str, Any]],
-    line_steps: list[dict[str, Any]],
+    steps: list[dict[str, Any]],
     version_options: list[str],
     program_versions: list[dict[str, Any]],
 ) -> tuple[
@@ -244,7 +245,7 @@ def _validate_program_rows(
     str | None,
 ]:
     current_by_id = {int(item["program_id"]): item for item in current}
-    valid_steps = {int(item["step_no"]) for item in line_steps}
+    valid_steps = {int(item["step_no"]) for item in steps}
     updated: list[dict[str, Any]] = []
     updated_versions = [{**item} for item in program_versions]
     used_names: set[str] = set()
@@ -335,7 +336,8 @@ def _read_components(edited: pd.DataFrame) -> list[str]:
 
 
 read_only = st.session_state.get("role", "工程师") == "只读"
-line_steps: list[dict[str, Any]] = st.session_state.line_steps
+steps: list[dict[str, Any]] = st.session_state.steps
+active_steps = enabled_steps(steps)
 programs: list[dict[str, Any]] = st.session_state.programs
 program_versions: list[dict[str, Any]] = st.session_state.program_versions
 program_components: list[dict[str, Any]] = st.session_state.program_components
@@ -361,89 +363,96 @@ with st.container(border=True):
             st.info("只读角色不可上传程序。")
     else:
         with st.expander("上传程序文件", expanded=False):
-            with st.form("program_upload_form", clear_on_submit=False):
-                name_col, version_col, step_col = st.columns([2, 1, 2])
-                program_name = name_col.text_input(
-                    "程序名",
-                    key="upload_program_name",
-                    placeholder="例如 TEST_MAIN",
-                )
-                program_version = version_col.text_input(
-                    "程序版本",
-                    key="upload_program_version",
-                    placeholder="例如 v1.2.0",
-                )
-                step_no = step_col.selectbox(
-                    "所属工序",
-                    options=[int(step["step_no"]) for step in line_steps],
-                    format_func=lambda value: step_label(
-                        line_steps, value, include_device=True
-                    ),
-                    key="upload_step_no",
-                )
-                uploaded_file = st.file_uploader(
-                    "程序文件",
-                    type=["zip", "7z"],
-                    accept_multiple_files=False,
-                    key="upload_program_file",
-                )
-                version_description = st.text_input(
-                    "版本说明",
-                    key="upload_version_description",
-                    placeholder="例如：修复型号切换后的参数缓存",
-                )
-                submitted = st.form_submit_button("上传并保存")
+            if not active_steps:
+                st.warning("暂无启用工序，请先在工序注册页启用工序")
+            else:
+                with st.form("program_upload_form", clear_on_submit=False):
+                    name_col, version_col, step_col = st.columns([2, 1, 2])
+                    program_name = name_col.text_input(
+                        "程序名",
+                        key="upload_program_name",
+                        placeholder="例如 TEST_MAIN",
+                    )
+                    program_version = version_col.text_input(
+                        "程序版本",
+                        key="upload_program_version",
+                        placeholder="例如 v1.2.0",
+                    )
+                    step_no = step_col.selectbox(
+                        "所属工序",
+                        options=[
+                            int(step["step_no"]) for step in active_steps
+                        ],
+                        format_func=lambda value: step_label(active_steps, value),
+                        key="upload_step_no",
+                    )
+                    uploaded_file = st.file_uploader(
+                        "程序文件",
+                        type=["zip", "7z"],
+                        accept_multiple_files=False,
+                        key="upload_program_file",
+                    )
+                    version_description = st.text_input(
+                        "版本说明",
+                        key="upload_version_description",
+                        placeholder="例如：修复型号切换后的参数缓存",
+                    )
+                    submitted = st.form_submit_button("上传并保存")
 
-            if submitted:
-                clean_name = program_name.strip()
-                clean_version = program_version.strip()
-                if not clean_name or not clean_version:
-                    st.error("程序名和程序版本不能为空")
-                elif step_by_no(line_steps, step_no) is None:
-                    st.error("请选择有效的所属工序")
-                elif uploaded_file is None:
-                    st.error("请选择要上传的程序文件")
-                else:
-                    suffix = Path(uploaded_file.name).suffix.lower()
-                    if suffix not in {".zip", ".7z"}:
-                        st.error("仅支持 .zip 或 .7z 文件")
-                    elif any(
-                        item["program_name"].casefold() == clean_name.casefold()
-                        for item in programs
-                    ):
-                        st.error("程序名已存在，请使用唯一的程序名")
+                if submitted:
+                    clean_name = program_name.strip()
+                    clean_version = program_version.strip()
+                    if not clean_name or not clean_version:
+                        st.error("程序名和程序版本不能为空")
+                    elif step_by_no(active_steps, step_no) is None:
+                        st.error("请选择有效的所属工序")
+                    elif uploaded_file is None:
+                        st.error("请选择要上传的程序文件")
                     else:
-                        digest = hashlib.sha256(uploaded_file.getvalue()).hexdigest()
-                        program_id = next_program_id(programs)
-                        programs.append(
-                            {
-                                "program_id": program_id,
-                                "program_name": clean_name,
-                                "program_version": clean_version,
-                                "version_description": version_description.strip(),
-                                "sha256": digest,
-                                "download_url": (
-                                    "http://192.168.1.50:8000/programs/"
-                                    f"{clean_name}_{clean_version}{suffix}"
-                                ),
-                                "step_no": int(step_no),
-                            }
-                        )
-                        st.session_state.programs = programs
-                        _upsert_version_description(
-                            program_versions,
-                            program_id,
-                            clean_version,
-                            version_description.strip(),
-                        )
-                        st.session_state.program_versions = program_versions
-                        st.toast(
-                            "程序已上传（模拟），请前往型号关联区块添加型号"
-                        )
-                        st.rerun()
+                        suffix = Path(uploaded_file.name).suffix.lower()
+                        if suffix not in {".zip", ".7z"}:
+                            st.error("仅支持 .zip 或 .7z 文件")
+                        elif any(
+                            item["program_name"].casefold() == clean_name.casefold()
+                            for item in programs
+                        ):
+                            st.error("程序名已存在，请使用唯一的程序名")
+                        else:
+                            digest = hashlib.sha256(
+                                uploaded_file.getvalue()
+                            ).hexdigest()
+                            program_id = next_program_id(programs)
+                            programs.append(
+                                {
+                                    "program_id": program_id,
+                                    "program_name": clean_name,
+                                    "program_version": clean_version,
+                                    "version_description": (
+                                        version_description.strip()
+                                    ),
+                                    "sha256": digest,
+                                    "download_url": (
+                                        "http://192.168.1.50:8000/programs/"
+                                        f"{clean_name}_{clean_version}{suffix}"
+                                    ),
+                                    "step_no": int(step_no),
+                                }
+                            )
+                            st.session_state.programs = programs
+                            _upsert_version_description(
+                                program_versions,
+                                program_id,
+                                clean_version,
+                                version_description.strip(),
+                            )
+                            st.session_state.program_versions = program_versions
+                            st.toast(
+                                "程序已上传（模拟），请前往型号关联区块添加型号"
+                            )
+                            st.rerun()
 
     st.caption(
-        "仅支持 `.zip` 或 `.7z` 压缩包。工序选项来自线体工序配置。"
+        "仅支持 `.zip` 或 `.7z` 压缩包。工序选项来自工序注册中已启用的工序。"
         "上传后系统会计算 SHA256 并自动生成下载地址。"
     )
 
@@ -468,7 +477,7 @@ with st.container(border=True, key="program_list_panel"):
     if read_only:
         st.dataframe(
             program_frame,
-            column_config=_program_config(line_steps, version_options),
+            column_config=_program_config(steps, version_options),
             column_order=PROGRAM_COLUMNS[1:],
             hide_index=True,
             width="stretch",
@@ -477,7 +486,7 @@ with st.container(border=True, key="program_list_panel"):
     else:
         edited_programs = st.data_editor(
             program_frame,
-            column_config=_program_config(line_steps, version_options),
+            column_config=_program_config(steps, version_options),
             column_order=PROGRAM_COLUMNS[1:],
             disabled=[
                 column for column in PROGRAM_COLUMNS[1:] if column != "版本"
@@ -499,7 +508,7 @@ with st.container(border=True, key="program_list_panel"):
     if save_program_clicked and edited_programs is not None:
         rows = edited_programs.to_dict("records")
         updated_programs, updated_versions, error = _validate_program_rows(
-            rows, programs, line_steps, version_options, program_versions
+            rows, programs, steps, version_options, program_versions
         )
         if error:
             st.error(error)
@@ -527,7 +536,7 @@ with st.container(border=True):
                     for program in programs
                     if int(program["program_id"]) == int(item)
                 ),
-                line_steps,
+                steps,
             ),
             key="component_program_id",
         )

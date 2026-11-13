@@ -110,6 +110,12 @@ def test_upload_program_requires_and_stores_step() -> None:
     at = _run()
     content = b"demo-program"
 
+    assert at.selectbox(key="upload_step_no").options == [
+        "1 - 上电测试",
+        "2 - 功能测试",
+        "3 - 终检",
+    ]
+
     at.text_input(key="upload_program_name").input("UPLOAD_TEST")
     at.text_input(key="upload_program_version").input("v9.0.0")
     at.text_input(key="upload_version_description").input("新增型号参数支持")
@@ -142,17 +148,17 @@ def test_upload_program_requires_and_stores_step() -> None:
     assert updated_frame.iloc[-1]["程序类型"] == "未关联"
 
 
-def test_program_editor_saves_version_and_step() -> None:
+def test_program_editor_saves_selected_version() -> None:
     at = _run()
     at.session_state["program_editor"] = {
-        "edited_rows": {0: {"版本": "v1.0.0", "所属工序": 3}}
+        "edited_rows": {0: {"版本": "v1.0.0"}}
     }
     at.run()
     at.button(key="save_program_edits").click().run()
 
     assert not at.exception, [str(item.value) for item in at.exception]
     assert at.session_state["programs"][0]["program_version"] == "v1.0.0"
-    assert at.session_state["programs"][0]["step_no"] == 3
+    assert at.session_state["programs"][0]["step_no"] == 1
     assert (
         at.session_state["programs"][0]["version_description"]
         == "首版上电测试程序"
@@ -161,23 +167,6 @@ def test_program_editor_saves_version_and_step() -> None:
         "program_id": 1,
         "program_version": "v1.0.0",
         "version_description": "首版上电测试程序",
-    } in at.session_state["program_versions"]
-
-
-def test_program_editor_saves_version_description() -> None:
-    at = _run()
-    at.session_state["program_editor"] = {
-        "edited_rows": {0: {"版本说明": "现场验证后的说明"}}
-    }
-    at.run()
-    at.button(key="save_program_edits").click().run()
-
-    assert not at.exception, [str(item.value) for item in at.exception]
-    assert at.session_state["programs"][0]["version_description"] == "现场验证后的说明"
-    assert {
-        "program_id": 1,
-        "program_version": "v1.2.0",
-        "version_description": "现场验证后的说明",
     } in at.session_state["program_versions"]
 
 
