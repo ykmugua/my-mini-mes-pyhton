@@ -49,6 +49,10 @@ def test_product_page_renders_four_sections() -> None:
         "line_id" not in item
         for item in at.session_state["product_step_devices"]
     )
+    assert all(
+        "required" not in route
+        for route in at.session_state["product_routes"]
+    )
 
     product_config = json.loads(at.data_editor[0].proto.columns)
     assert product_config["产品型号"]["disabled"] is True
@@ -66,7 +70,14 @@ def test_product_page_renders_four_sections() -> None:
     assert route_config["当前工序"]["type_config"]["type"] == "selectbox"
     assert route_config["成功下站"]["type_config"]["type"] == "selectbox"
     assert route_config["失败下站"]["type_config"]["type"] == "selectbox"
-    assert route_config["关键工序"]["type_config"]["type"] == "checkbox"
+    assert route_config["删除"]["type_config"]["type"] == "button"
+    assert list(at.data_editor[1].value.columns) == [
+        "当前工序",
+        "成功下站",
+        "失败下站",
+        "删除",
+    ]
+    assert at.data_editor[1].proto.editing_mode == 3
     assert len(at.data_editor[1].value) == 3
 
 
@@ -167,7 +178,6 @@ def test_route_duplicate_step_is_rejected() -> None:
             "step_no": 1,
             "success_next_step": "END",
             "fail_next_step": "LOCK",
-            "required": False,
         }
     )
     at = _open_page(at)
@@ -189,10 +199,15 @@ def test_route_next_step_must_exist_in_product_flow() -> None:
     )
 
 
-def test_route_editor_saves_success_target() -> None:
+def test_route_editor_saves_success_and_fail_targets() -> None:
     at = _open_page(_run())
     at.session_state["route_editor_P-1001"] = {
-        "edited_rows": {0: {"成功下站": 3}}
+        "edited_rows": {
+            0: {
+                "成功下站": "3",
+                "失败下站": "3",
+            }
+        }
     }
     at.run()
     at.button(key="save_product_routes").click().run()
@@ -204,6 +219,40 @@ def test_route_editor_saves_success_target() -> None:
         if route["product_model"] == "P-1001" and route["step_no"] == 1
     )
     assert route["success_next_step"] == 3
+    assert route["fail_next_step"] == 3
+
+
+def test_delete_route_confirmation_removes_only_selected_step() -> None:
+    at = _open_page(_run())
+    at.session_state["pending_product_route_delete"] = {
+        "product_model": "P-1001",
+        "step_no": 1,
+    }
+    at.run()
+
+    assert not at.exception, [str(item.value) for item in at.exception]
+    assert any("确定从产品" in item.value for item in at.markdown)
+    at.button(key="confirm_delete_route").click().run()
+
+    assert not at.exception, [str(item.value) for item in at.exception]
+    assert {
+        route["step_no"] for route in at.session_state["product_routes"]
+    } == {2, 3}
+
+
+def test_delete_route_cancel_keeps_route() -> None:
+    at = _open_page(_run())
+    at.session_state["pending_product_route_delete"] = {
+        "product_model": "P-1001",
+        "step_no": 1,
+    }
+    at.run()
+    at.button(key="cancel_delete_route").click().run()
+
+    assert not at.exception, [str(item.value) for item in at.exception]
+    assert {
+        route["step_no"] for route in at.session_state["product_routes"]
+    } == {1, 2, 3}
 
 
 def test_success_cycle_warns_but_saves() -> None:

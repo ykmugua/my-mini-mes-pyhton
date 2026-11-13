@@ -8,7 +8,7 @@ from typing import Any
 
 import streamlit as st
 
-STATE_SCHEMA_VERSION = 9
+STATE_SCHEMA_VERSION = 10
 MOCK_LOG_TIME = datetime(2026, 11, 13, 9, 30, 0)
 
 
@@ -259,21 +259,18 @@ def initial_program_state() -> dict[str, list[dict[str, Any]]]:
                 "step_no": 1,
                 "success_next_step": 2,
                 "fail_next_step": "LOCK",
-                "required": True,
             },
             {
                 "product_model": "P-1001",
                 "step_no": 2,
                 "success_next_step": 3,
                 "fail_next_step": "LOCK",
-                "required": True,
             },
             {
                 "product_model": "P-1001",
                 "step_no": 3,
                 "success_next_step": "END",
                 "fail_next_step": "LOCK",
-                "required": True,
             },
         ],
         "product_step_devices": [
@@ -419,6 +416,8 @@ def initialize_program_state() -> None:
     ):
         if key not in st.session_state:
             st.session_state[key] = deepcopy(defaults[key])
+    for route in st.session_state.get("product_routes", []):
+        route.pop("required", None)
     st.session_state.pop("product_step_configs", None)
     st.session_state["program_data_version"] = STATE_SCHEMA_VERSION
 

@@ -16,9 +16,11 @@ PRODUCT_COLUMNS = [
     "测试程序路径",
     "备注",
 ]
-ROUTE_COLUMNS = ["当前工序", "成功下站", "失败下站", "关键工序"]
+ROUTE_COLUMNS = ["当前工序", "成功下站", "失败下站"]
 PRODUCT_DELETE_CLICK_KEY = "product_delete_click"
 PENDING_PRODUCT_DELETE_KEY = "pending_product_delete"
+ROUTE_DELETE_CLICK_KEY = "product_route_delete_click"
+PENDING_ROUTE_DELETE_KEY = "pending_product_route_delete"
 ROUTE_WARNING_KEY = "product_route_warning"
 
 
@@ -182,17 +184,82 @@ def _confirm_delete_product(product: dict[str, Any]) -> None:
             st.rerun()
 
 
-def _route_frame(routes: list[dict[str, Any]]) -> pd.DataFrame:
+def _request_route_delete() -> None:
+    click = st.session_state.get(ROUTE_DELETE_CLICK_KEY)
+    if click is None:
+        return
+    selected_product = st.session_state.get("selected_product")
+    if selected_product is None:
+        return
+    current_routes = [
+        route
+        for route in st.session_state.get("product_routes", [])
+        if route["product_model"] == selected_product
+    ]
+    row_index = int(click["row"])
+    if 0 <= row_index < len(current_routes):
+        st.session_state[PENDING_ROUTE_DELETE_KEY] = {
+            "product_model": str(selected_product),
+            "step_no": int(current_routes[row_index]["step_no"]),
+        }
+
+
+def _clear_pending_route_delete() -> None:
+    st.session_state.pop(PENDING_ROUTE_DELETE_KEY, None)
+
+
+@st.dialog(
+    "确认删除工序节点",
+    icon=":material/delete_forever:",
+    on_dismiss=_clear_pending_route_delete,
+)
+def _confirm_delete_route(route: dict[str, Any]) -> None:
+    product_model = str(route["product_model"])
+    step_no = int(route["step_no"])
+    st.write(
+        f"确定从产品 **{product_model}** 的工序流程中删除 "
+        f"**{step_label(st.session_state.steps, step_no)}** 吗？"
+    )
+    st.caption("如有其他工序仍指向该工序，保存流程时需要重新配置下站。")
+    with st.container(horizontal=True, horizontal_alignment="right"):
+        if st.button("取消", key="cancel_delete_route"):
+            _clear_pending_route_delete()
+            st.rerun()
+        if st.button(
+            "确认删除",
+            type="primary",
+            key="confirm_delete_route",
+        ):
+            st.session_state.product_routes = [
+                item
+                for item in st.session_state.product_routes
+                if not (
+                    item["product_model"] == product_model
+                    and int(item["step_no"]) == step_no
+                )
+            ]
+            _clear_pending_route_delete()
+            st.toast("工序节点已删除")
+            st.rerun()
+
+
+def _route_frame(
+    routes: list[dict[str, Any]], *, include_delete: bool
+) -> pd.DataFrame:
     records = [
         {
             "当前工序": route["step_no"],
-            "成功下站": route["success_next_step"],
-            "失败下站": route["fail_next_step"],
-            "关键工序": bool(route["required"]),
+            "成功下站": str(route["success_next_step"]),
+            "失败下站": str(route["fail_next_step"]),
         }
         for route in routes
     ]
-    return pd.DataFrame(records, columns=ROUTE_COLUMNS)
+    columns = list(ROUTE_COLUMNS)
+    if include_delete:
+        for record in records:
+            record["删除"] = "删除"
+        columns.append("删除")
+    return pd.DataFrame(records, columns=columns)
 
 
 def _route_next_label(value: Any, steps: list[dict[str, Any]]) -> str:
@@ -203,9 +270,11 @@ def _route_next_label(value: Any, steps: list[dict[str, Any]]) -> str:
     return step_label(steps, value)
 
 
-def _route_config(steps: list[dict[str, Any]]) -> dict[str, Any]:
+def _route_config(
+    steps: list[dict[str, Any]], *, include_delete: bool
+) -> dict[str, Any]:
     step_nos = [int(step["step_no"]) for step in steps]
-    return {
+    config: dict[str, Any] = {
         "当前工序": st.column_config.SelectboxColumn(
             "当前工序",
             options=step_nos,
@@ -215,24 +284,32 @@ def _route_config(steps: list[dict[str, Any]]) -> dict[str, Any]:
         ),
         "成功下站": st.column_config.SelectboxColumn(
             "成功下站",
-            options=["END", *step_nos],
+            options=["END", *(str(step_no) for step_no in step_nos)],
             format_func=lambda value: _route_next_label(value, steps),
             required=True,
             width="medium",
         ),
         "失败下站": st.column_config.SelectboxColumn(
             "失败下站",
-            options=["END", "LOCK", *step_nos],
+            options=[
+                "END",
+                "LOCK",
+                *(str(step_no) for step_no in step_nos),
+            ],
             format_func=lambda value: _route_next_label(value, steps),
             required=True,
             width="medium",
         ),
-        "关键工序": st.column_config.CheckboxColumn(
-            "关键工序",
-            default=False,
-            width="small",
-        ),
     }
+    if include_delete:
+        config["删除"] = st.column_config.ButtonColumn(
+            "删除",
+            type="tertiary",
+            on_click=_request_route_delete,
+            key=ROUTE_DELETE_CLICK_KEY,
+            width="small",
+        )
+    return config
 
 
 def _validate_routes(
@@ -249,7 +326,6 @@ def _validate_routes(
         fail = _integer(row.get("失败下站"))
         success_raw = _text(row.get("成功下站"))
         fail_raw = _text(row.get("失败下站"))
-        required = bool(row.get("关键工序"))
 
         if current is None and not success_raw and not fail_raw:
             continue
@@ -276,7 +352,6 @@ def _validate_routes(
                     if fail_raw in {"END", "LOCK"}
                     else fail
                 ),
-                "required": required,
             }
         )
 
@@ -499,18 +574,22 @@ with st.container(border=True):
         edited_routes: pd.DataFrame | None = None
         if read_only:
             st.dataframe(
-                _route_frame(current_routes),
-                column_config=_route_config(active_steps),
+                _route_frame(current_routes, include_delete=False),
+                column_config=_route_config(
+                    active_steps, include_delete=False
+                ),
                 hide_index=True,
                 width="stretch",
                 alt="产品工序流程",
             )
         else:
             edited_routes = st.data_editor(
-                _route_frame(current_routes),
-                column_config=_route_config(active_steps),
+                _route_frame(current_routes, include_delete=True),
+                column_config=_route_config(
+                    active_steps, include_delete=True
+                ),
                 hide_index=True,
-                num_rows="dynamic",
+                num_rows="add",
                 width="stretch",
                 alt="产品工序流程编辑器",
                 key=f"route_editor_{selected_product}",
@@ -550,6 +629,24 @@ with st.container(border=True):
                 st.toast("工序流程已保存")
                 st.rerun()
 
+        pending_route = st.session_state.get(PENDING_ROUTE_DELETE_KEY)
+        if pending_route is not None:
+            route = next(
+                (
+                    item
+                    for item in st.session_state.product_routes
+                    if item["product_model"]
+                    == pending_route["product_model"]
+                    and int(item["step_no"])
+                    == int(pending_route["step_no"])
+                ),
+                None,
+            )
+            if route is None:
+                _clear_pending_route_delete()
+            else:
+                _confirm_delete_route(route)
+
 
 # -----------------------------------------------------------------------------
 # 区块 4：为型号分配设备
@@ -563,30 +660,38 @@ with st.container(border=True):
         if not lines:
             st.warning("请先在设备注册页的线体管理区块添加线体")
         else:
-            selected_line_id = st.selectbox(
-                "选择线体",
-                options=[str(line["line_id"]) for line in lines],
-                format_func=lambda line_id: next(
-                    (
-                        f"{line['line_id']} - {line['line_name']}"
-                        for line in lines
-                        if line["line_id"] == line_id
+            line_col, step_col = st.columns(2)
+            with line_col:
+                selected_line_id = st.selectbox(
+                    "选择线体",
+                    options=[str(line["line_id"]) for line in lines],
+                    format_func=lambda line_id: next(
+                        (
+                            f"{line['line_id']} - {line['line_name']}"
+                            for line in lines
+                            if line["line_id"] == line_id
+                        ),
+                        line_id,
                     ),
-                    line_id,
-                ),
-                key="assign_line",
-            )
-        if lines and not active_steps:
-            st.warning("请先在工序注册页添加并启用工序")
-        elif lines:
-            selected_step_no = st.selectbox(
-                "选择工序",
-                options=[int(step["step_no"]) for step in active_steps],
-                format_func=lambda step_no: step_label(
-                    active_steps, step_no
-                ),
-                key="assign_step",
-            )
+                    key="assign_line",
+                )
+            with step_col:
+                if not active_steps:
+                    st.warning("请先在工序注册页添加并启用工序")
+                    selected_step_no = None
+                else:
+                    selected_step_no = st.selectbox(
+                        "选择工序",
+                        options=[
+                            int(step["step_no"]) for step in active_steps
+                        ],
+                        format_func=lambda step_no: step_label(
+                            active_steps, step_no
+                        ),
+                        key="assign_step",
+                    )
+
+        if lines and selected_step_no is not None:
             current_routes = [
                 route
                 for route in product_routes
