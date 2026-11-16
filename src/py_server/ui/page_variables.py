@@ -5,8 +5,8 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
-from .. import services
-from ..services import ServiceError
+from . import client
+from .client import ApiError as ServiceError
 from . import common
 
 VARIABLE_TYPES = ["str", "int", "bool"]
@@ -58,7 +58,7 @@ def _render_add_form() -> None:
     if not submitted:
         return
     try:
-        created = services.add_variable(name, type_name, value)
+        created = client.add_variable(name, type_name, value)
     except ServiceError as exc:
         st.error(str(exc))
     else:
@@ -104,7 +104,9 @@ def render() -> None:
 
     @st.fragment(run_every=30)
     def live() -> None:
-        variables = services.list_variables(prefix)
+        variables, error = client.list_variables(prefix)
+        common.show_error(error)
+        variables = variables or []
         if variables:
             st.dataframe(_variable_frame(variables), hide_index=True, width="stretch")
         else:

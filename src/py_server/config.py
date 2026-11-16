@@ -73,3 +73,11 @@ def max_future_skew_seconds() -> int:
 def stale_tolerance_seconds() -> int:
     """判断“历史补传”时允许的时钟偏差容差（秒）。"""
     return int(os.environ.get("MES_STALE_TOLERANCE_SECONDS", "300"))
+
+
+def ui_api_base() -> str:
+    """Streamlit 进程访问 FastAPI 的基础地址（不含结尾斜杠）。"""
+    explicit = os.environ.get("MES_UI_API_BASE", "").strip()
+    if explicit:
+        return explicit.rstrip("/")
+    return api_public_base()

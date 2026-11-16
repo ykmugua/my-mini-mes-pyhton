@@ -1,0 +1,1 @@
+"""领域层单测（纯 Python，不依赖 FastAPI/Streamlit）。"""

@@ -5,7 +5,8 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
-from .. import config, services
+from .. import config
+from . import client
 from . import common
 
 ALL_DEVICES = "全部设备"
@@ -109,7 +110,11 @@ def _latest_table(snapshot: dict) -> None:
 
 
 def _render_live(device_filter: str | None) -> None:
-    snapshot = services.dashboard_snapshot(device_filter)
+    snapshot, error = client.dashboard_snapshot(device_filter)
+    common.show_error(error)
+    if snapshot is None:
+        st.warning("暂时无法获取看板数据。")
+        return
     st.caption(
         f"统计范围：{snapshot['date']}（{config.timezone().key}）· 按测试时间统计"
         + (f" · 设备 {device_filter}" if device_filter else "")
@@ -130,7 +135,9 @@ def render() -> None:
     common.render_flash()
     common.render_readonly_notice()
 
-    devices = services.list_devices()
+    devices, error = client.list_devices()
+    common.show_error(error)
+    devices = devices or []
     options = [ALL_DEVICES] + devices
     if st.session_state.get("dash_device") not in options:
         st.session_state["dash_device"] = ALL_DEVICES

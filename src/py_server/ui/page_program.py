@@ -5,8 +5,8 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
-from .. import services
-from ..services import ServiceError
+from . import client
+from .client import ApiError as ServiceError
 from . import common
 
 EDIT_MAP = {
@@ -77,7 +77,9 @@ def _display_frame(bindings: list[dict]) -> pd.DataFrame:
 
 
 def _render_drift_alerts() -> None:
-    drifts = services.program_drift()
+    drifts, error = client.program_drift()
+    common.show_error(error)
+    drifts = drifts or []
     if not drifts:
         return
     st.error(f"⚠️ 发现 {len(drifts)} 台设备程序版本漂移 / 校验异常，请确认设备当前程序：")
@@ -98,7 +100,9 @@ def _render_drift_alerts() -> None:
 
 
 def _render_editor() -> None:
-    bindings = services.list_bindings()
+    bindings, error = client.list_bindings()
+    common.show_error(error)
+    bindings = bindings or []
     frame = _display_frame(bindings)
     readonly_columns = [
         "设备上报版本",
@@ -142,7 +146,7 @@ def _render_editor() -> None:
                 continue
             rows.append(values)
         try:
-            count = services.replace_bindings(rows)
+            count = client.replace_bindings(rows)
         except ServiceError as exc:
             st.error(str(exc))
         else:
@@ -174,7 +178,7 @@ def _render_publish_form() -> None:
         st.error("请选择要上传的程序文件")
         return
     try:
-        result = services.publish_program_file(
+        result = client.publish_program_file(
             device_id=device,
             product=product,
             program_version=version,
@@ -193,7 +197,9 @@ def _render_publish_form() -> None:
 
 def _render_logs() -> None:
     with st.expander("设备拉取记录（最近 30 条）"):
-        pulls = services.list_program_pulls(30)
+        pulls, error = client.list_program_pulls(30)
+        common.show_error(error)
+        pulls = pulls or []
         if pulls:
             frame = pd.DataFrame(
                 [
@@ -212,7 +218,9 @@ def _render_logs() -> None:
             st.caption("暂无拉取记录。")
 
     with st.expander("设备状态上报记录（最近 30 条）"):
-        reports = services.list_program_status_logs(30)
+        reports, error = client.list_program_status_logs(30)
+        common.show_error(error)
+        reports = reports or []
         if reports:
             frame = pd.DataFrame(
                 [
@@ -255,8 +263,12 @@ def render() -> None:
     common.render_readonly_notice()
     _render_drift_alerts()
 
-    bindings = services.list_bindings()
-    drifts = services.program_drift()
+    bindings, error = client.list_bindings()
+    common.show_error(error)
+    bindings = bindings or []
+    drifts, error = client.program_drift()
+    common.show_error(error)
+    drifts = drifts or []
     col1, col2, col3 = st.columns(3)
     col1.metric("绑定关系", len(bindings))
     col2.metric("版本漂移告警", len(drifts))

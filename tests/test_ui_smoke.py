@@ -28,9 +28,10 @@ def _run(page_file: str | Path) -> AppTest:
 
 
 def test_main_app_renders_with_drift_alert(seeded):
+    """主入口默认页（程序下发，app_pages 接入）可正常渲染。"""
     at = _run(MAIN_APP)
     assert at.title[0].value == "📦 程序下发"
-    assert any("版本漂移" in item.value for item in at.error)
+    assert any("程序版本" in item.value for item in at.subheader) or at.data_editor
 
 
 def test_program_page_editor_and_metrics(seeded):

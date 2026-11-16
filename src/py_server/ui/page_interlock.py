@@ -5,8 +5,8 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
-from .. import services
-from ..services import ServiceError
+from . import client
+from .client import ApiError as ServiceError
 from . import common
 
 
@@ -74,7 +74,7 @@ def _render_unlock(locked: list[dict]) -> None:
     if not submitted:
         return
     try:
-        result = services.unlock_workpiece(
+        result = client.unlock_workpiece(
             workpiece=labels[choice],
             operator=unlocker,
             reason=reason,
@@ -89,7 +89,7 @@ def _render_unlock(locked: list[dict]) -> None:
 
 def _render_unlock_logs() -> None:
     with st.expander("解锁留痕（最近 50 条）"):
-        logs = services.list_unlock_logs(50)
+        logs = client.list_unlock_logs(50) or []
         if not logs:
             st.caption("暂无解锁记录。")
             return
@@ -124,7 +124,9 @@ def _render_upstream_rules() -> None:
         "“前道关键设备”不写死在代码里：在此维护设备的前道依赖，保存后立即生效。"
         "产品型号留空表示对所有产品生效。"
     )
-    rules = services.list_upstream_rules()
+    rules, error = client.list_upstream_rules()
+    common.show_error(error)
+    rules = rules or []
     frame = pd.DataFrame(
         [
             {
@@ -167,7 +169,7 @@ def _render_upstream_rules() -> None:
                 }
             )
         try:
-            count = services.replace_upstream_rules(rows)
+            count = client.replace_upstream_rules(rows)
         except ServiceError as exc:
             st.error(str(exc))
         else:
@@ -187,7 +189,7 @@ def _render_interlock_check() -> None:
     if not submitted:
         return
     try:
-        result = services.interlock_check(
+        result = client.interlock_check(
             workpiece=workpiece,
             device_id=device,
             product=product or None,
@@ -211,9 +213,13 @@ def render() -> None:
     common.render_flash()
     common.render_readonly_notice()
 
-    locked = services.list_locked_workpieces()
-    rules = services.list_upstream_rules()
-    logs = services.list_unlock_logs(1000)
+    locked, error = client.list_locked_workpieces()
+    common.show_error(error)
+    locked = locked or []
+    rules, error = client.list_upstream_rules()
+    common.show_error(error)
+    rules = rules or []
+    logs = client.list_unlock_logs(1000) or []
     col1, col2, col3 = st.columns(3)
     col1.metric("当前锁定工件", len(locked))
     col2.metric("前道规则", len(rules))

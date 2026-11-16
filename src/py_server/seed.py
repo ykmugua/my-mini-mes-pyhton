@@ -18,7 +18,8 @@ import sys
 from pathlib import Path
 from urllib.parse import quote
 
-from . import config, db, services
+from . import config, db, master_seed, services
+from .repositories import dashboard_repo
 
 VARIABLES = [
     ("line_mode", "str", "AUTO"),
@@ -52,19 +53,25 @@ REPORTED = {
 
 
 def _clear_all() -> None:
-    with services._tx() as conn:  # noqa: SLF001 - 演示脚本需要整体清库
+    """演示脚本清库：通过 repository 的 delete 语句完成，不直接写 SQL。"""
+    from sqlalchemy import delete
+
+    from . import engine
+    from .repositories.base import with_conn
+
+    with with_conn() as conn:
         for table in (
-            "program_bindings",
-            "program_pull_logs",
-            "program_status_logs",
-            "workpieces",
-            "unlock_logs",
-            "test_results",
-            "variables",
-            "upstream_devices",
-            "settings",
+            engine.program_bindings,
+            engine.program_pull_logs,
+            engine.program_status_logs,
+            engine.workpieces,
+            engine.unlock_logs,
+            engine.test_results,
+            engine.variables,
+            engine.upstream_devices,
+            engine.settings,
         ):
-            conn.execute(f"DELETE FROM {table}")
+            conn.execute(delete(table))
 
 
 def _write_program_file(device: str, product: str, version: str) -> tuple[str, str]:
@@ -84,14 +91,7 @@ def _write_program_file(device: str, product: str, version: str) -> tuple[str, s
 def seed(reset: bool = False, with_demo: bool = False) -> None:
     db.init_db()
     existing = 0
-    with services._read() as conn:  # noqa: SLF001
-        existing = conn.execute(
-            """
-            SELECT (SELECT COUNT(*) FROM program_bindings)
-                 + (SELECT COUNT(*) FROM variables)
-                 + (SELECT COUNT(*) FROM workpieces) AS n
-            """
-        ).fetchone()["n"]
+    existing = dashboard_repo.business_data_count()
     if existing and not reset:
         print(
             f"数据库已有 {existing} 条程序绑定，未做修改。\n"
@@ -141,6 +141,9 @@ def seed(reset: bool = False, with_demo: bool = False) -> None:
             for product, device, upstream in UPSTREAM
         ]
     )
+
+    # 主数据（app_pages 页面）：工序/线体/设备/程序/产品
+    master_seed.seed_master_data()
 
     if with_demo:
         _seed_demo_runs()

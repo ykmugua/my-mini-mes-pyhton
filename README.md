@@ -12,27 +12,43 @@
 
 | 模块         | 能力                                                                                                                           |
 | ------------ | ------------------------------------------------------------------------------------------------------------------------------ |
-| 程序下发     | 设备-产品-程序版本绑定；可编辑表格新增/修改/删除；设备拉取记录；版本漂移告警；上传程序文件自动计算 SHA256                      |
-| 工序锁       | 前道关键设备无 PASS 拒绝启动；FAIL 工件后续拦截；程序版本/校验和不一致时结果不可信且禁止放行；人工解锁留痕；前道设备列表可配置 |
+| 程序下发     | 程序主数据（程序名/版本/说明/SHA256/URL/所属工序）；型号关联；设备拉取记录；版本漂移告警                                      |
+| 工序注册     | 全厂工序主数据：工序号/名称/启用/备注；新增、编辑、删除                                                                       |
+| 设备注册     | 线体管理与设备主数据：设备编号/名称/线体/工序/启停/备注                                                                      |
+| 产品管理     | 产品主数据、工序流程（成功/失败下站）、产品-工序-设备分配范围                                                                |
 | 测试数据看板 | 今日总数/PASS/FAIL/合格率；按设备合格率柱状图；FAIL 按测试项/设备分布；设备筛选；10 秒自动刷新；不可信数据排除出合格率         |
 | 开放性变量   | 变量定义与当前值查看、前缀筛选；新增变量；30 秒自动刷新；设备读写接口                                                          |
 | 设备接口     | 程序拉取、程序状态上报、测试结果上报、放行查询、变量读写；测试结果幂等                                                         |
 
-技术栈：**Streamlit 1.67 + FastAPI + SQLite**。页面与接口是两个独立进程，共用同一个 SQLite 数据库。
+技术栈：**Streamlit 1.67 + FastAPI + SQLAlchemy Core + SQLite**。改造后为双进程：**FastAPI 独占数据库，Streamlit 只通过 HTTP 访问 FastAPI，不再直连数据库**。
 
 ```
                     ┌────────────────────────────┐
    浏览器 ─────────▶│ Streamlit :8501            │
-                    │  4 个页面（st.navigation）  │
+                    │  6 个页面（st.navigation）  │
+                    │  只 import ui/client.py    │
                     └─────────────┬──────────────┘
-                                  │ SQLite (WAL)
+                                  │ HTTP/JSON（MES_UI_API_BASE）
+   测试设备 ───────▶┌─────────────▼──────────────┐
+   (HTTP/JSON)      │ FastAPI :8000              │
+                    │  接口层 api/routers + ui/* │
+                    │  应用层 application/（3 用例）│
+                    │  领域层 domain/（纯 Python） │
+                    └─────────────┬──────────────┘
+                                  │ Repository（唯一写 SQL）
                     ┌─────────────▼──────────────┐
-   测试设备 ───────▶│ FastAPI :8000              │
-   (HTTP/JSON)      │  设备侧 /api/* + /programs │
+                    │ SQLAlchemy Engine (engine.py)│
+                    │ SQLite（可切 PostgreSQL）    │
                     └─────────────┬──────────────┘
-                                  │
+                                  ▼
                        data/mes.db + data/programs/
 ```
+
+### 三条取舍（本次改造明确保持）
+
+1. **FastAPI 独占数据库**：Streamlit 与机台一样只走 HTTP；UI 进程不出现 `sqlite3` / SQLAlchemy / Repository import。
+2. **薄应用层只有 3 个用例**：`report_test_result`、`unlock_workpiece`、`report_program_status` 持有事务边界；其余 CRUD 路由直接调 repo，不配空壳用例。
+3. **聚合不写库，事务由用例持有**：`domain/` 方法只做状态判定并返回领域结果（如 `UnlockOutcome`、`TrustVerdict`），日志与落盘由 application 用例在同一事务内完成。
 
 ---
 
@@ -75,13 +91,20 @@ uv run python -m py_server.seed --reset --demo
 ```
 py-server/
 ├─ src/py_server/
-│  ├─ config.py            # 环境变量配置（数据目录、时区、对外地址）
-│  ├─ db.py                # SQLite 连接、建表、时间工具
-│  ├─ services.py          # 业务规则：程序可信性、工序锁、幂等上报、看板统计、变量
-│  ├─ api.py               # FastAPI 设备侧接口
+│  ├─ config.py            # 环境变量配置（含 MES_UI_API_BASE）
+│  ├─ engine.py            # SQLAlchemy Engine + Table 定义 + init_schema()
+│  ├─ db.py                # 兼容层：时间工具 + 旧 init_db
+│  ├─ domain/              # 纯领域层（不 import 任何框架）
+│  │  ├─ trust/            # ProgramTrustPolicy / Binding / TrustVerdict
+│  │  ├─ workpiece/        # Workpiece 聚合 / UnlockOutcome / LockReason
+│  │  └─ interlock/        # InterlockPolicy 五步判定
+│  ├─ application/         # 薄应用层：仅 3 个用例，持有事务边界
+│  ├─ repositories/        # 唯一写 SQL 的层（含 master_data_repo 主数据）
+│  ├─ api/                 # FastAPI 实例 / schemas / deps / routers/
+│  ├─ services.py          # 兼容入口：输入校验 + 委托各层
+│  ├─ ui/                  # client.py（唯一 HTTP 客户端）+ pages/ + 公共组件
 │  ├─ seed.py              # 演示数据初始化
-│  ├─ streamlit_app.py     # Streamlit 入口（st.navigation）
-│  └─ ui/                  # 四个页面 + 公共侧边栏/权限
+│  └─ streamlit_app.py     # Streamlit 入口（st.navigation）
 ├─ examples/device_client.py  # 设备侧参考客户端（续传/补传/幂等示例）
 ├─ scripts/                # Windows 启动脚本
 ├─ tests/                  # 7 条验收标准 + 接口边界 + UI 冒烟测试
@@ -102,6 +125,7 @@ py-server/
 | `MES_TZ`              | `Asia/Shanghai`            | “今日”统计与页面展示使用的业务时区                     |
 | `MES_API_PORT`        | `8000`                     | 接口服务端口（用于拼默认下载地址）                       |
 | `MES_API_PUBLIC_BASE` | `http://<本机内网IP>:8000` | **设备可访问的接口地址**；部署到内网时建议显式设置 |
+| `MES_UI_API_BASE`     | `MES_API_PUBLIC_BASE` | **Streamlit 访问 FastAPI 的地址**；双机部署时必须显式设置 |
 | `MES_API_HOST`        | `0.0.0.0`                  | `python -m py_server.api` 时的监听地址                 |
 
 数据库时间统一存 UTC ISO 字符串，页面展示时转换为业务时区。
@@ -260,11 +284,10 @@ POST /api/variable/line_mode
 | 页面            | 说明                                                                                                                                                                                                            |
 | --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 📦 程序下发     | 顶部漂移告警；绑定关系可编辑表格（新增/修改/删除行后保存）；上传程序文件自动算 SHA256；拉取记录、状态上报记录；接口调用示例                                                                                     |
-| 🔒 工序锁       | 当前锁定工件列表；人工解锁表单（原因必填 + 勾选确认）；解锁留痕；前道关键设备配置；放行状态自检                                                                                                                 |
 | 📊 测试数据看板 | 今日总数/PASS/FAIL（按设备测试时间统计，含全部上报）/合格率（仅可信数据）；按设备合格率柱状图；FAIL 按测试项/设备分布（含不可信数据）；设备筛选在侧边栏；`st.fragment(run_every=10)` 自动刷新；不可信数据提示 |
 | 🔧 开放性变量   | 前缀筛选；变量表；新增变量表单；30 秒自动刷新；接口示例                                                                                                                                                         |
 
-页面与接口共用 `services.py`，因此页面里的“放行状态自检”、看板统计与设备接口结果完全一致。
+页面通过 `ui/client.py` 以 HTTP 访问 FastAPI 的 `/api/ui/*`，接口层再委托同一套 domain/application/repositories，因此页面里的“放行状态自检”、看板统计与设备接口结果完全一致。
 
 ---
 
@@ -323,7 +346,7 @@ uv run pytest
 1. **接口服务**绑定 `0.0.0.0:8000`，**页面**绑定 `0.0.0.0:8501`，设备与办公网通过 `http://<服务器内网IP>:端口` 访问；
 2. 设置 `MES_API_PUBLIC_BASE=http://<服务器内网IP>:8000`，保证上传程序文件后生成的下载地址设备可达；
 3. 放行 Windows 防火墙对应端口；
-4. SQLite 使用 WAL 模式，页面和接口可以同时读写；建议单机部署 + 定期备份 `data/`（停服复制，或 `sqlite3 mes.db "VACUUM INTO 'backup.db'"`）；
+4. SQLite 使用 WAL 模式；只有 FastAPI 进程直连数据库，Streamlit 通过 HTTP 访问。建议单机部署 + 定期备份 `data/`（停服复制，或 `sqlite3 mes.db "VACUUM INTO 'backup.db'"`）；
 5. 程序文件默认存本地静态目录；若改用对象存储，只需把 `download_url` 指向对象存储地址并填写 SHA256，数据库结构不变；
 6. 当前没有接口鉴权，仅适合内网使用；如需收紧，可在反向代理层加 IP 白名单或 Basic Auth。
 

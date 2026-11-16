@@ -16,6 +16,8 @@ def isolated(tmp_path, monkeypatch):
     monkeypatch.setenv("MES_PROGRAM_DIR", str(data_dir / "programs"))
     monkeypatch.setenv("MES_API_PUBLIC_BASE", "http://testserver")
     monkeypatch.setenv("MES_TZ", "Asia/Shanghai")
+    # Streamlit 页面通过 HTTP client 访问 FastAPI；AppTest 无独立服务时用进程内 TestClient 转发。
+    monkeypatch.setenv("MES_UI_INPROCESS", "1")
 
     from py_server import db
 
