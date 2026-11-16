@@ -279,3 +279,12 @@
 - product_step_devices → product_step_devices(product_model, step_no, device_id, PK)
 
 约束：不改已有 9 张表；新增 9 张主数据表；表定义仍用通用类型；repository 唯一写 SQL；页面只 import ui/client。保留看板/变量/现有验收测试不变。
+
+## 变量三层结构（2026-11-16）
+
+**决策**：开放性变量支持最多三层的 `组.子组.键` 点分路径（第一层组名任意），对应 JSON 树 `{组:{子组:{键:值}}}`。
+- 底层不变：仍存扁平 variables 表，完整点分路径即变量名；设备 API `/api/variable/{name}` 完全兼容（旧扁平变量照常）。
+- 新增 services.split_variable_name/variables_tree + `/api/ui/variables/tree` + client.variables_tree。
+- 页面：层级视图（st.json + 递归展开）+ 平铺列表；新增表单按三层输入（第一层必填，二三层可选）。
+- 超过三段的变量名：第三段及之后合并为第三段，保证最多三层。
+- 138 passed，真实 HTTP 往返验证通过。

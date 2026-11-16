@@ -109,3 +109,11 @@ SQLAlchemy 2.1.8 中 `Insert.on_conflict_do_update()` 不再接受 `constraint=`
 ## Gotcha：pytest 系统临时目录权限
 
 本机 `C:\Users\WL\AppData\Local\Temp\pytest-of-WL` 偶发 `PermissionError [WinError 5]`；用 `--basetemp=<项目内目录>` 可绕过。
+
+## 13. Gotcha：Streamlit 子模块改动不会热重载
+
+修改 `src/py_server/ui/pages/*.py` 这类被子模块 import 的文件后，运行中的 Streamlit 不会自动重载，页面仍是旧代码。必须重启 streamlit 进程。仅修改入口 `src/py_server/streamlit_app.py` 才会热重载。
+
+## Gotcha：SQLite CHECK 约束变更需重建表
+
+给 variables.type 的 CHECK 增加 float 时，SQLite 不支持 ALTER 修改约束，需建新表→INSERT SELECT→DROP→RENAME（真实 data/mes.db 已迁移，6 行数据保留）。

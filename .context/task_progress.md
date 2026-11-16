@@ -79,3 +79,24 @@
 - can_edit() 同步 role key（工程师/只读）给 app_pages 页面。
 - 真实双进程 agent API 验证 6 页全部 status=ready、无 exception；主数据 HTTP 保存往返通过，真实库已重新 seed。
 - 134 passed。注意 pytest 临时目录权限问题，需 --basetemp 指到项目内目录。
+
+### 2026-11-16 晚间续：变量增强 + 主数据 UI 多轮调整
+
+**变量模块增强**：
+- 三层变量树（组.子组.键点分路径），新增 `/api/ui/variables/tree` 返回嵌套 JSON；设备 API 完全兼容旧扁平变量。
+- 变量类型新增 `float`（services.coerce/typed + engine CHECK 约束迁移）。真实库 variables 表 CHECK 已重建为 int/float/str/bool。
+- 新增 `variable_logs` 表记录设备 READ/WRITE；设备 GET 用可选 `device_id` 查询参数记读取、POST 记写入；`/api/ui/variable-logs/read|write`。
+- 变量页：列表内直接编辑（变量名/类型/当前值）+「保存修改」；JSON树与接口示例合并在一个 tab 组；设备读写记录 tab。
+
+**程序下发增强**：
+- 程序历史管理：`/api/ui/program-history?name=`（按 program_id 倒序=新→老）、`DELETE /api/ui/program-version/{id}`（级联清理版本说明/型号关联）。页面选程序名→版本列表→删版本；新增型号用独立 expander 表单，列表 num_rows=fixed + 右侧删除 ButtonColumn。
+- 设备拉取/上报记录改为 tab 形式（与变量页一致）。
+
+**UI 统一调整**：
+- 所有保存按钮移到列表左下角（data_editor 之后）。
+- 工序/线体/设备列表支持直接修改（去掉 disabled）。
+- 设备新增与设备列表合并到同一容器。
+- 导航首页改为「测试数据看板」。
+- 型号关联的新增+列表用子容器包裹（与「选择程序」同级）。
+
+**Gotcha**：Streamlit 不热重载 `ui/pages/` 子模块改动，改完必须重启 UI 进程才能生效（改主入口 streamlit_app.py 会热重载）。
