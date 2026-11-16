@@ -86,3 +86,26 @@ delete 确认弹窗也会同时清理 products、product_routes、product_step_d
 - 编辑器 DataFrame 中把下站值统一转换成字符串，`SelectboxColumn.options` 也使用字符串工序号。
 - 保存校验时通过整数转换恢复真实 step_no，终端标记仍保留为 END/LOCK。
 - 测试应检查列配置中的 disabled 为空，并实际确认下拉类型。
+
+## Gotcha：uv run 在此环境锁定失败
+
+`uv run pytest` 报 `Could not acquire lock ... uv\cache\.lock 拒绝访问`；改用 `.venv\Scripts\python.exe -m pytest` 可正常运行（基线 100 passed）。
+
+## 11. Gotcha：SQLAlchemy 2.1 的 on_conflict_do_update 参数变化
+
+SQLAlchemy 2.1.8 中 `Insert.on_conflict_do_update()` 不再接受 `constraint=` 关键字；改用 `index_elements=["col1", "col2"]`，这样同时兼容 SQLite/PostgreSQL。
+
+## 12. Gotcha：SQLAlchemy 2.x text() 与 ? 占位符、executemany
+
+- 原生 SQL 字符串通过 `text()` 执行时必须用具名参数 `:p0`；老代码 `?` 占位符需要转换。
+- `conn.execute(insert_stmt, list_of_dicts)` 是 executemany，访问 `inserted_primary_key` 会抛 `InvalidRequestError`；需要捕获异常或改用 `inserted_primary_key_rows`。
+- `union_all(...).order_by(1)` 不被接受；用 `order_by(text('1'))`。
+- `String` 在 SQLite 中映射为 VARCHAR，且 primary key 默认 NOT NULL；要逐字对齐旧 schema（TEXT / PK 可空）需用 `Text` + `primary_key=True, nullable=True` + `sqlite_autoincrement=True` + `server_default`。
+
+## Gotcha：FastAPI 未标注类型的 body 参数被当成 query
+
+`@router.post` 中若写 `def f(payload):` 而不标注 Pydantic 类型，FastAPI 会把 `payload` 当作 required query 参数，JSON body 被忽略并返回 422。必须写 `payload: BindingsIn` 等具体模型类。
+
+## Gotcha：pytest 系统临时目录权限
+
+本机 `C:\Users\WL\AppData\Local\Temp\pytest-of-WL` 偶发 `PermissionError [WinError 5]`；用 `--basetemp=<项目内目录>` 可绕过。

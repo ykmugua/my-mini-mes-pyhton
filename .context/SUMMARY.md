@@ -1,1 +1,8 @@
-旁路式小型 MES：新增系统设计框架文档及分层架构约束（测试机台/Streamlit → FastAPI → Repository → SQLAlchemy Engine → SQLite/PostgreSQL）；产品管理页已完成并验证，完整测试 100 passed。
+# 项目上下文索引
+
+> 最后同步: 2026-11-13 07:54:18 | 设备: TEST | Agent: unknown
+
+## 详细主题
+- [task_progress.md](./task_progress.md) — 81 lines
+- [gotchas.md](./gotchas.md) — 111 lines
+- [architecture.md](./architecture.md) — 281 lines

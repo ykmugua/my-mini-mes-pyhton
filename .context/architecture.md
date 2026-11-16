@@ -246,3 +246,36 @@
 - 数据库更换只影响连接配置与 Repository 内部实现，上层接口保持稳定。
 
 **边界**：当前所有页面仍使用 `st.session_state` 占位数据；上述分层是后续 FastAPI/Repository/数据库接入的设计约束。
+
+## ADR-017：旁路 MES 分层改造（2026-11-16，进行中）
+
+**状态**：已采用，分阶段实施
+
+**目标架构**：FastAPI 独占数据库；Streamlit 只走 HTTP；domain/ 纯 Python；repositories/ 唯一写 SQL；application/ 仅 3 个用例（report_test_result / unlock_workpiece / report_program_status）持有事务边界。
+
+**关键决策**：
+- 保持 SQLite 表结构逐字不变（列名/类型/唯一约束/索引），SQLAlchemy Core Table 元数据与现有 SCHEMA 对齐；init_schema() 只用 metadata.create_all。
+- 兼容层：repositories/base.py 提供 with_conn()/with_read_conn()，conn 为轻量 adapter，支持 conn.execute(stmt, params) 接受 SQLAlchemy 语句；repo 函数接受外部 conn。
+- services.py 暂时保留为兼容层（测试/seed 仍直接调用），内部编排逐步委托 repository + domain + application；最终 UI 通过 HTTP client 访问。
+- 领域错误 DomainError 由 services.ServiceError 继承，保证 FastAPI 异常处理与既有测试无变化；reason 文案保持现有中文字符串以免破坏断言。
+- 指纹优先级：测试结果字段优先于 status 上报，两者无则 NO_REPORT。
+- 人工放行记录在 interlock 中先于前道检查、后于 FAIL 检查。
+
+## 17. ADR-018：接入 app_pages 主数据页面（2026-11-16，进行中）
+
+**状态**：已采用，执行中
+
+**需求**：用 app_pages 的 4 个页面（程序下发、工序注册、设备注册、产品管理）替换现有程序下发页，并新增 3 个主数据页；保留现有看板、变量页；移除工序锁页。数据全部走 HTTP。
+
+**数据模型映射**（state key → 表）：
+- steps → steps(step_no PK, step_name, enabled, remark)
+- lines → lines(line_id PK, line_name)
+- devices → devices(device_id PK, device_name, line_id, step_no, enabled, remark)
+- programs → programs(program_id PK, program_name, program_version, version_description, sha256, download_url, step_no)
+- program_versions → program_versions(program_id, program_version, version_description, PK(program_id,program_version))
+- program_components → program_components(program_id, component_no, PK)
+- products → products(product_model PK, product_name, test_program_name, test_program_path, remark)
+- product_routes → product_routes(product_model, step_no, success_next_step, fail_next_step, PK)
+- product_step_devices → product_step_devices(product_model, step_no, device_id, PK)
+
+约束：不改已有 9 张表；新增 9 张主数据表；表定义仍用通用类型；repository 唯一写 SQL；页面只 import ui/client。保留看板/变量/现有验收测试不变。

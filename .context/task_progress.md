@@ -39,3 +39,43 @@
 - 浏览器：流程删除按钮可弹出确认框，确认后流程行由 3 行变为 2 行
 - 服务端控制台无新增警告或异常
 - 仅有 starlette.testclient 的 httpx 弃用警告，不影响当前功能
+
+## 阶段进度（2026-11-16）
+
+- [x] Step 1: Schema 快照（tools/schema_baseline.json）+ SQL 清单（tools/_sql_inventory.py）
+- [x] Step 2: engine.py（SQLAlchemy Core，9 张表 DDL 与旧 schema 结构一致）+ repositories/（8 个 repo 文件、with_conn/with_read_conn 事务边界）；100 原测试仍绿
+- [x] Step 3: domain/trust（ProgramTrustPolicy + 6 TrustReason + 指纹优先级三 case）
+- [x] Step 4: domain/workpiece（Workpiece 聚合 + UnlockOutcome + 空原因/confirm 校验）
+- [x] Step 5: domain/interlock（InterlockPolicy 五步短路 + 缺 device_id 路径）
+- [x] Step 6: application/ 三用例（report_test_result / unlock_workpiece / report_program_status 持有事务）；services.py 已改为委托层（无运行时 SQL）
+- [x] 新增 25 条领域单测，全部 125 passed
+- [ ] Step 7a/7b/7c: Streamlit 改 HTTP（ui/client.py + MES_UI_API_BASE）
+- [ ] Step 8: 清理 services.py、README 更新
+
+## 阶段进度更新（2026-11-16 17:40）
+
+- [x] Step 7a/7b/7c: Streamlit 页面全部改走 `ui/client.py`（HTTP）；新增 `/api/ui/*` 路由；`MES_UI_API_BASE` 配置；3s 超时 + 失败降级；AppTest 用 MES_UI_INPROCESS=1 走进程内 TestClient
+- [x] Step 8（部分）: api 重构为包（api/app.py + api/schemas.py + api/deps.py + api/routers/*）；seed.py SQL 迁移到 repo；架构静态检查通过
+- [x] 新增架构守卫测试 + UI 客户端测试，全部 134 passed
+- [ ] README 更新架构图与三条取舍
+- [ ] 最终全量验收（health/docs/四页面）
+
+## 改造完成（2026-11-16）
+
+- 全部执行步骤完成：schema 基线 → engine/repositories → domain/trust → domain/workpiece → domain/interlock → application 三用例 → Streamlit HTTP（ui/client.py + MES_UI_API_BASE）→ 清理与 README。
+- 最终 `134 passed`（原 100 + 新增领域 25 + 架构/客户端 9）；schema `table_info` diff = 0。
+- 真实双进程验证：FastAPI `/health`、`/docs`、`/openapi.json`（19 paths）正常；Streamlit agent API 四个页面全部 `status=ready`、无 exception；真实 HTTP 下绑定拉取返回新版本/SHA、变量读写往返通过。
+- API 包结构：`api/app.py` + `api/schemas.py` + `api/deps.py` + `api/routers/{program,test_result,interlock,variable,dashboard}.py`；`api.py` 单文件已删除。
+- 注意：FastAPI UI POST 路由的 `payload` 必须显式标注 Pydantic 模型类型（如 `payload: BindingsIn`），否则 FastAPI 把它当 query 参数导致 422。
+- 验证脚本保留在 tools/：`_dump_schema.py`、`_check_schema.py`。
+
+## A2 完成（2026-11-16 18:05）
+
+- engine.py 新增 9 张主数据表（steps/lines/devices/programs/program_versions/program_components/products/product_routes/product_step_devices），共 18 张表，不改原有 9 张。
+- master_data_repo.py 实现全部读写；api/routers/master_data.py 暴露 /api/ui/master[/{key}]；ui/client.py 增加 master_snapshot/list/save。
+- master_data.json + master_seed.py 从 app_pages 原型迁移演示主数据，seed.py 自动写入。
+- app_pages 4 个页面复制到 ui/pages/ 并包装为 render_page()，通过 _common.ensure_master_data()/save_key() 走 HTTP；内嵌生成所有 state 写入后的后端保存。
+- 主入口改为 6 页：程序下发/工序注册/设备注册/产品管理/看板/变量；工序锁页已移除。
+- can_edit() 同步 role key（工程师/只读）给 app_pages 页面。
+- 真实双进程 agent API 验证 6 页全部 status=ready、无 exception；主数据 HTTP 保存往返通过，真实库已重新 seed。
+- 134 passed。注意 pytest 临时目录权限问题，需 --basetemp 指到项目内目录。
