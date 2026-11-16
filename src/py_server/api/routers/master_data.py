@@ -18,6 +18,24 @@ def get_master() -> dict:
     return master_data_repo.snapshot()
 
 
+@router.get("/api/ui/program-history")
+def get_program_history(name: str) -> list[dict]:
+    return master_data_repo.list_program_history(name)
+
+
+@router.delete("/api/ui/program-version/{program_id}")
+def delete_program_version(program_id: int) -> dict:
+    from ...repositories.base import with_conn
+
+    with with_conn() as conn:
+        deleted = master_data_repo.delete_program_version(conn, program_id)
+    if deleted is None:
+        from ...services import NotFoundError
+
+        raise NotFoundError(f"程序版本 {program_id} 不存在")
+    return {"deleted": deleted}
+
+
 @router.get("/api/ui/master/{key}")
 def get_master_key(key: str) -> list[dict]:
     getters = {

@@ -10,6 +10,7 @@ import pandas as pd
 import streamlit as st
 
 from . import _common as master
+from .. import client
 
 from ._mock_program_data import (
     available_program_versions,
@@ -199,8 +200,24 @@ def _program_config(
     }
 
 
-def _component_frame(component_nos: list[str]) -> pd.DataFrame:
-    return pd.DataFrame({"component_no": pd.Series(component_nos, dtype="string")})
+COMPONENT_DELETE_KEY = "component_delete_click"
+
+
+def _component_frame(component_nos: list[str], *, include_delete: bool = True) -> pd.DataFrame:
+    frame = pd.DataFrame({"component_no": pd.Series(component_nos, dtype="string")})
+    if include_delete:
+        frame["删除"] = "删除"
+    return frame
+
+
+def _request_component_delete() -> None:
+    click = st.session_state.get(COMPONENT_DELETE_KEY)
+    if click is None:
+        return
+    names = st.session_state.get("_component_names", [])
+    row = int(click["row"])
+    if 0 <= row < len(names):
+        st.session_state["pending_component_delete"] = names[row]
 
 
 def _pull_log_frame(records: list[dict[str, Any]]) -> pd.DataFrame:
@@ -339,6 +356,53 @@ def _read_components(edited: pd.DataFrame) -> list[str]:
 
 
 
+
+def _render_program_history(read_only: bool, programs: list[dict]) -> None:
+    """程序历史管理：选择程序名，列表按新→老展示版本，可删除指定版本。"""
+    st.subheader("程序历史管理")
+    names = sorted({p["program_name"] for p in programs})
+    if not names:
+        st.info("暂无程序，请先上传程序")
+        return
+    selected = st.selectbox("选择程序名", names, key="history_program_name")
+    history = client.program_history(selected)
+    if not history:
+        st.info("该程序暂无版本记录")
+        return
+    frame = pd.DataFrame([
+        {
+            "版本": item["program_version"],
+            "版本说明": item.get("version_description") or "",
+            "SHA256": (item.get("sha256") or "")[:16] + "…",
+            "所属工序": str(item.get("step_no") or ""),
+            "下载地址": item.get("download_url") or "",
+        }
+        for item in history
+    ])
+    st.dataframe(frame, hide_index=True, width="stretch", alt="程序历史版本列表")
+    if read_only:
+        return
+    ids = [item["program_id"] for item in history]
+    versions = [item["program_version"] for item in history]
+    choice = st.selectbox(
+        "选择要删除的版本",
+        options=ids,
+        format_func=lambda pid: next(
+            (f"{v}（ID {pid}）" for p, v in zip(ids, versions) if p == pid),
+            str(pid),
+        ),
+        key="history_delete_choice",
+    )
+    if st.button("删除该版本", type="secondary", icon=":material/delete:", key="history_delete_btn"):
+        try:
+            client.delete_program_version(choice)
+        except Exception as exc:
+            st.error(f"删除失败：{exc}")
+        else:
+            st.toast("已删除该版本程序")
+            st.rerun()
+
+
 def render_page() -> None:
     """页面渲染入口（app_pages 脚本包装）。"""
     master.ensure_master_data()
@@ -467,20 +531,17 @@ def render_page() -> None:
 
 
     # -----------------------------------------------------------------------------
-    # 区块 2：程序运行列表
+    # 区块 2：程序历史管理
+    # -----------------------------------------------------------------------------
+    with st.container(border=True):
+        _render_program_history(read_only, programs)
+
+
+    # -----------------------------------------------------------------------------
+    # 区块 3：程序运行列表
     # -----------------------------------------------------------------------------
     with st.container(border=True, key="program_list_panel"):
         st.subheader("程序运行列表")
-        save_program_clicked = False
-        if not read_only:
-            with st.container(horizontal=True, horizontal_alignment="right"):
-                save_program_clicked = st.button(
-                    "保存程序修改",
-                    icon=":material/save:",
-                    disabled=not programs,
-                    key="save_program_edits",
-                )
-
         edited_programs: pd.DataFrame | None = None
         program_frame = _program_frame(programs, program_components)
         if read_only:
@@ -508,6 +569,16 @@ def render_page() -> None:
             )
         if not programs:
             st.info("暂无记录")
+
+        save_program_clicked = False
+        if not read_only:
+            with st.container(horizontal=True, horizontal_alignment="left"):
+                save_program_clicked = st.button(
+                    "保存程序修改",
+                    icon=":material/save:",
+                    disabled=not programs,
+                    key="save_program_edits",
+                )
 
         st.html(
             COLUMN_ORDER_LOCK_SCRIPT,
@@ -557,91 +628,94 @@ def render_page() -> None:
                 if int(item["program_id"]) == int(selected_program_id)
             ]
 
-            component_editor_key = f"component_editor_{selected_program_id}"
-            edited_components: pd.DataFrame | None = None
-            if read_only:
-                st.dataframe(
-                    _component_frame(selected_components),
-                    column_config={"component_no": "型号 / 组件号"},
-                    hide_index=True,
-                    width="stretch",
-                    alt="当前程序的型号关联",
-                )
-            else:
-                edited_components = st.data_editor(
-                    _component_frame(selected_components),
-                    column_config={
-                        "component_no": st.column_config.TextColumn(
-                            "型号 / 组件号",
-                            required=True,
-                            width="medium",
-                        )
-                    },
-                    hide_index=True,
-                    num_rows="dynamic",
-                    width="stretch",
-                    alt="当前程序的型号关联编辑器",
-                    key=component_editor_key,
-                )
-            if not selected_components:
-                st.info("暂无记录")
+            with st.container(border=True):
+                # 新增型号（与列表分离，避免 data_editor 左侧增删行控件）
+                if not read_only:
+                    with st.expander("新增型号", expanded=False):
+                        with st.form("component_create_form", clear_on_submit=True):
+                            new_component = st.text_input(
+                                "型号 / 组件号", key="new_component_no",
+                                placeholder="例如 P-1003",
+                            )
+                            add_clicked = st.form_submit_button("添加型号")
+                        if add_clicked:
+                            clean = _text(new_component)
+                            if not clean:
+                                st.error("型号不能为空")
+                            elif clean in selected_components:
+                                st.error("该型号已关联")
+                            else:
+                                updated = list(program_components)
+                                updated.append({
+                                    "program_id": int(selected_program_id),
+                                    "component_no": clean,
+                                })
+                                st.session_state.program_components = updated
+                                master.save_key("program_components")
+                                st.toast("已添加型号")
+                                st.rerun()
 
-            if not read_only and st.button(
-                "保存型号关联",
-                icon=":material/save:",
-                key="save_component_links",
-            ):
-                new_components = _read_components(edited_components)
-                if len(new_components) != len(set(new_components)):
-                    st.error("同一程序下型号不能重复")
-                else:
-                    retained = [
-                        item
-                        for item in program_components
-                        if int(item["program_id"]) != int(selected_program_id)
-                    ]
-                    retained.extend(
-                        {
-                            "program_id": int(selected_program_id),
-                            "component_no": component_no,
-                        }
-                        for component_no in new_components
+                st.session_state["_component_names"] = list(selected_components)
+                component_editor_key = f"component_editor_{selected_program_id}"
+                edited_components: pd.DataFrame | None = None
+                if read_only:
+                    st.dataframe(
+                        _component_frame(selected_components, include_delete=False),
+                        column_config={"component_no": "型号 / 组件号"},
+                        hide_index=True,
+                        width="stretch",
+                        alt="当前程序的型号关联",
                     )
-                    st.session_state.program_components = retained
-                    master.save_key("program_components")
-                    if not new_components:
-                        st.session_state[COMPONENT_WARNING_KEY] = (
-                            "未关联型号的程序无法被产品工序使用"
+                else:
+                    edited_components = st.data_editor(
+                        _component_frame(selected_components),
+                        column_config={
+                            "component_no": st.column_config.TextColumn(
+                                "型号 / 组件号", required=True, width="medium"
+                            ),
+                            "删除": st.column_config.ButtonColumn(
+                                "删除", type="tertiary", on_click=_request_component_delete,
+                                key=COMPONENT_DELETE_KEY, width="small",
+                            ),
+                        },
+                        hide_index=True,
+                        num_rows="fixed",
+                        width="stretch",
+                        alt="当前程序的型号关联编辑器",
+                        key=component_editor_key,
+                    )
+                # 处理删除（立即从当前程序移除该型号，并保存）
+                pending_comp = st.session_state.get("pending_component_delete")
+                if pending_comp is not None:
+                    st.session_state.program_components = [
+                        item for item in program_components
+                        if not (
+                            int(item["program_id"]) == int(selected_program_id)
+                            and item["component_no"] == pending_comp
                         )
-                    st.toast("型号关联已保存")
+                    ]
+                    master.save_key("program_components")
+                    st.session_state.pop("pending_component_delete", None)
+                    st.toast("已删除该型号关联")
                     st.rerun()
+                if not selected_components:
+                    st.info("暂无记录")
 
-
-    # -----------------------------------------------------------------------------
-    # 区块 4：设备拉取记录
-    # -----------------------------------------------------------------------------
-    with st.expander("设备拉取记录（最近 30 条）", expanded=False):
-        if program_pulls:
-            st.dataframe(
-                _pull_log_frame(program_pulls),
-                hide_index=True,
-                width="stretch",
-                alt="设备拉取记录",
-            )
-        else:
-            st.caption("暂无拉取记录。")
 
 
     # -----------------------------------------------------------------------------
-    # 区块 5：设备状态上报记录
+    # 区块 4：设备读写记录（tab 形式，与变量页一致）
     # -----------------------------------------------------------------------------
-    with st.expander("设备状态上报记录（最近 30 条）", expanded=False):
-        if program_status_logs:
-            st.dataframe(
-                _status_log_frame(program_status_logs),
-                hide_index=True,
-                width="stretch",
-                alt="设备状态上报记录",
-            )
-        else:
-            st.caption("暂无上报记录。")
+    with st.container(border=True):
+        st.subheader("设备读写记录")
+        tab_pull, tab_report = st.tabs(["设备拉取（拉取程序）", "设备上报（状态记录）"])
+        with tab_pull:
+            if program_pulls:
+                st.dataframe(_pull_log_frame(program_pulls), hide_index=True, width="stretch", alt="设备拉取记录")
+            else:
+                st.caption("暂无拉取记录。")
+        with tab_report:
+            if program_status_logs:
+                st.dataframe(_status_log_frame(program_status_logs), hide_index=True, width="stretch", alt="设备状态上报记录")
+            else:
+                st.caption("暂无上报记录。")

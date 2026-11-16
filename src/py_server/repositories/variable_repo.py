@@ -44,3 +44,42 @@ def update_variable(conn: Conn, *, name: str, stored: str, device_id: str, now: 
         .where(v.c.name == name)
         .values(value=stored, last_device=device_id, updated_at=now)
     )
+
+def delete_variable(conn: Conn, name: str) -> None:
+    conn.execute(v.delete().where(v.c.name == name))
+
+
+def rename_variable(conn: Conn, old_name: str, new_name: str) -> None:
+    conn.execute(v.update().where(v.c.name == old_name).values(name=new_name))
+
+
+def update_variable_def(conn: Conn, *, name: str, type_name: str, stored: str, now: str) -> None:
+    conn.execute(
+        v.update()
+        .where(v.c.name == name)
+        .values(type=type_name, value=stored, updated_at=now)
+    )
+
+
+# --- 变量读写日志 ---
+lg = engine.variable_logs
+
+
+def insert_log(conn: Conn, *, name: str, action: str, device_id: str, value, now: str) -> None:
+    conn.execute(
+        lg.insert().values(
+            name=name, action=action, device_id=device_id,
+            value=None if value is None else str(value), logged_at=now,
+        )
+    )
+
+
+def list_logs(conn: Conn | None = None, *, action: str | None = None, limit: int = 30) -> list[dict]:
+    if conn is None:
+        with with_read_conn() as c:
+            return list_logs(c, action=action, limit=limit)
+    stmt = select(lg)
+    if action:
+        stmt = stmt.where(lg.c.action == action)
+    stmt = stmt.order_by(lg.c.id.desc()).limit(limit)
+    return rows_to_dicts(conn.execute(stmt).fetchall())

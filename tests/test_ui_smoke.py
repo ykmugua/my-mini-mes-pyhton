@@ -28,10 +28,10 @@ def _run(page_file: str | Path) -> AppTest:
 
 
 def test_main_app_renders_with_drift_alert(seeded):
-    """主入口默认页（程序下发，app_pages 接入）可正常渲染。"""
+    """主入口默认页（测试数据看板）可正常渲染。"""
     at = _run(MAIN_APP)
-    assert at.title[0].value == "📦 程序下发"
-    assert any("程序版本" in item.value for item in at.subheader) or at.data_editor
+    assert at.title[0].value == "📊 测试数据看板"
+    assert at.metric  # 看板有指标卡
 
 
 def test_program_page_editor_and_metrics(seeded):
@@ -77,9 +77,11 @@ def test_dashboard_metrics_and_untrusted_warning(seeded):
 
 def test_variables_add_from_page(seeded):
     at = _run(UI_DIR / "variables_app.py")
-    at.text_input(key="new_var_name").input("ui_ready")
+    at.text_input(key="new_var_l1").input("ui")
+    at.text_input(key="new_var_l2").input("status")
+    at.text_input(key="new_var_l3").input("ready")
     at.selectbox(key="new_var_type").select("bool")
     at.text_input(key="new_var_value").input("true")
     at.button[0].click().run()
     assert not at.exception, [str(item.value) for item in at.exception]
-    assert services.get_variable("ui_ready")["value"] is True
+    assert services.get_variable("ui.status.ready")["value"] is True

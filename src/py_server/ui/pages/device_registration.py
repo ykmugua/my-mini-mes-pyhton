@@ -137,7 +137,7 @@ def _confirm_delete_line(line: dict[str, Any]) -> None:
             f"该线体下还有 {len(references)} 台设备，"
             "请先调整这些设备的所属线体。"
         )
-    with st.container(horizontal=True, horizontal_alignment="right"):
+    with st.container(horizontal=True, horizontal_alignment="left"):
         if st.button("取消", key="cancel_delete_line"):
             _clear_pending_line_delete()
             st.rerun()
@@ -323,7 +323,7 @@ def _confirm_delete_device(device: dict[str, Any]) -> None:
         f"确定删除设备 **{device['device_id']} - {device['device_name']}** 吗？"
     )
     st.caption("删除后，引用该设备的产品工序将显示为‘未配置设备’。")
-    with st.container(horizontal=True, horizontal_alignment="right"):
+    with st.container(horizontal=True, horizontal_alignment="left"):
         if st.button("取消", key="cancel_delete_device"):
             _clear_pending_delete()
             st.rerun()
@@ -365,7 +365,7 @@ def render_page() -> None:
     # 区块 1：线体管理
     # -----------------------------------------------------------------------------
     with st.container(border=True):
-        st.subheader("线体管理")
+        st.subheader("线体管理（可直接修改，改完点“保存线体”）")
         if read_only:
             with st.expander("新增线体", expanded=False):
                 st.info("只读角色不可新增线体。")
@@ -404,15 +404,6 @@ def render_page() -> None:
                         st.toast("线体已添加")
                         st.rerun()
 
-        save_lines_clicked = False
-        if not read_only:
-            with st.container(horizontal=True, horizontal_alignment="right"):
-                save_lines_clicked = st.button(
-                    "保存线体修改",
-                    icon=":material/save:",
-                    key="save_lines",
-                )
-
         edited_lines: pd.DataFrame | None = None
         if read_only:
             st.dataframe(
@@ -426,13 +417,21 @@ def render_page() -> None:
             edited_lines = st.data_editor(
                 _line_frame(lines, include_delete=True),
                 column_config=_line_config(include_delete=True),
-                disabled=["线体编号"],
                 hide_index=True,
                 num_rows="fixed",
                 width="stretch",
                 alt="线体列表编辑器",
                 key="line_editor",
             )
+
+        save_lines_clicked = False
+        if not read_only:
+            with st.container(horizontal=True, horizontal_alignment="left"):
+                save_lines_clicked = st.button(
+                    "保存线体修改",
+                    icon=":material/save:",
+                    key="save_lines",
+                )
 
         if not lines:
             st.info("暂无线体，请新增")
@@ -469,7 +468,7 @@ def render_page() -> None:
     # 区块 2：新增设备
     # -----------------------------------------------------------------------------
     with st.container(border=True):
-        st.subheader("新增设备")
+        st.subheader("设备管理（可直接修改，改完点“保存设备修改”）")
         if read_only:
             with st.expander("新增设备", expanded=False):
                 st.info("只读角色不可新增设备。")
@@ -561,17 +560,6 @@ def render_page() -> None:
     # -----------------------------------------------------------------------------
     # 区块 3：设备列表
     # -----------------------------------------------------------------------------
-    with st.container(border=True):
-        st.subheader("设备列表")
-        save_clicked = False
-        if not read_only:
-            with st.container(horizontal=True, horizontal_alignment="right"):
-                save_clicked = st.button(
-                    "保存设备修改",
-                    icon=":material/save:",
-                    key="save_devices",
-                )
-
         edited_devices: pd.DataFrame | None = None
         if read_only:
             st.dataframe(
@@ -589,13 +577,21 @@ def render_page() -> None:
                 column_config=_device_config(
                     lines, active_steps, include_delete=True
                 ),
-                disabled=["设备编号", "设备名称", "备注"],
                 hide_index=True,
                 num_rows="fixed",
                 width="stretch",
                 alt="设备注册编辑器",
                 key="device_editor",
             )
+
+        save_clicked = False
+        if not read_only:
+            with st.container(horizontal=True, horizontal_alignment="left"):
+                save_clicked = st.button(
+                    "保存设备修改",
+                    icon=":material/save:",
+                    key="save_devices",
+                )
 
         if not devices:
             st.info("暂无设备，请新增")

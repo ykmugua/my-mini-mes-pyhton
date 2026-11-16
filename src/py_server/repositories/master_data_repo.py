@@ -161,3 +161,40 @@ def snapshot(conn: Conn | None = None) -> dict:
         "product_routes": list_product_routes(conn),
         "product_step_devices": list_product_step_devices(conn),
     }
+
+def list_program_history(program_name: str, conn: Conn | None = None) -> list[dict]:
+    """按程序名查询所有版本，按 program_id 从新到老排序。"""
+    from sqlalchemy import select
+
+    if conn is None:
+        with with_read_conn() as c:
+            return list_program_history(program_name, c)
+    stmt = (
+        select(eg.programs)
+        .where(eg.programs.c.program_name == program_name)
+        .order_by(eg.programs.c.program_id.desc())
+    )
+    return rows_to_dicts(conn.execute(stmt).fetchall())
+
+
+def delete_program_version(conn: Conn, program_id: int) -> dict | None:
+    """删除指定版本；返回被删记录（用于页面提示）。"""
+    row = conn.execute(
+        select(eg.programs).where(eg.programs.c.program_id == program_id)
+    ).fetchone()
+    if row is None:
+        return None
+    data = dict(row)
+    conn.execute(eg.programs.delete().where(eg.programs.c.program_id == program_id))
+    # 同步清理该程序的版本说明与型号关联
+    conn.execute(
+        eg.program_versions.delete().where(
+            (eg.program_versions.c.program_id == program_id)
+        )
+    )
+    conn.execute(
+        eg.program_components.delete().where(
+            eg.program_components.c.program_id == program_id
+        )
+    )
+    return data

@@ -557,14 +557,14 @@ def dashboard_snapshot(device_filter: str | None = None) -> dict:
 # -----------------------------------------------------------------------------
 # 开放性变量
 # -----------------------------------------------------------------------------
-VARIABLE_TYPES = ("int", "str", "bool")
+VARIABLE_TYPES = ("int", "float", "str", "bool")
 _VARIABLE_NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_.-]{0,63}$")
 
 
 def coerce_variable_value(type_name: str, value: Any) -> str:
     type_name = (type_name or "").strip()
     if type_name not in VARIABLE_TYPES:
-        raise ValidationError("变量类型只能是 int / str / bool")
+        raise ValidationError("变量类型只能是 int / float / str / bool")
     if type_name == "int":
         if isinstance(value, bool):
             raise ValidationError("int 类型变量不能使用布尔值")
@@ -577,6 +577,17 @@ def coerce_variable_value(type_name: str, value: Any) -> str:
             return str(int(text, 10))
         except ValueError as exc:
             raise ValidationError(f"无法把 {text!r} 解析为整数") from exc
+    if type_name == "float":
+        if isinstance(value, bool):
+            raise ValidationError("float 类型变量不能使用布尔值")
+        text = "" if value is None else str(value).strip()
+        if not text:
+            raise ValidationError("float 类型变量需要提供数值")
+        try:
+            number = float(text)
+        except ValueError as exc:
+            raise ValidationError(f"无法把 {text!r} 解析为浮点数") from exc
+        return repr(number)
     if type_name == "bool":
         if isinstance(value, bool):
             return "true" if value else "false"
@@ -595,6 +606,11 @@ def typed_variable_value(type_name: str, stored: str | None) -> str | int | bool
     if type_name == "int":
         try:
             return int(stored)
+        except (TypeError, ValueError):
+            return stored
+    if type_name == "float":
+        try:
+            return float(stored)
         except (TypeError, ValueError):
             return stored
     if type_name == "bool":
@@ -617,21 +633,24 @@ def list_variables(prefix: str = "") -> list[dict]:
     return [_variable_public(row) for row in variable_repo.list_variables(prefix=prefix)]
 
 
-def get_variable(name: str) -> dict:
+def get_variable(name: str, device_id: str | None = None) -> dict:
     name = _clean_text(name, "变量名", max_len=64)
-    with _read() as conn:
+    device_id = (device_id or "").strip()
+    with _tx() as conn:
         row = variable_repo.get_variable_row(conn, name)
         if row is None:
             raise NotFoundError(f"变量 {name} 不存在")
-        return _variable_public(row)
+        result = _variable_public(row)
+        if device_id:
+            variable_repo.insert_log(
+                conn, name=name, action="READ", device_id=device_id,
+                value=result["value"], now=db.utc_now_iso(),
+            )
+        return result
 
 
 def add_variable(name: str, type_name: str, value: Any = None) -> dict:
-    name = "" if name is None else str(name).strip()
-    if not name:
-        raise ValidationError("变量名不能为空")
-    if not _VARIABLE_NAME_RE.match(name):
-        raise ValidationError("变量名只能包含英文字母、数字、下划线、点和短横线，且以字母或下划线开头（长度 ≤ 64）")
+    name = _validate_variable_name(name)
     stored = coerce_variable_value(type_name, value)
     now = db.utc_now_iso()
     with _tx() as conn:
@@ -652,5 +671,109 @@ def set_variable(name: str, value: Any, device_id: str) -> dict:
         stored = coerce_variable_value(row["type"], value)
         now = db.utc_now_iso()
         variable_repo.update_variable(conn, name=name, stored=stored, device_id=device_id, now=now)
+        variable_repo.insert_log(
+            conn, name=name, action="WRITE", device_id=device_id,
+            value=stored, now=now,
+        )
         row = variable_repo.get_variable_row(conn, name)
         return _variable_public(row)
+
+
+def _validate_variable_name(name: str) -> str:
+    name = "" if name is None else str(name).strip()
+    if not name:
+        raise ValidationError("变量名不能为空")
+    if not _VARIABLE_NAME_RE.match(name):
+        raise ValidationError("变量名只能包含英文字母、数字、下划线、点和短横线，且以字母或下划线开头（长度 ≤ 64）")
+    return name
+
+
+def delete_variable(name: str) -> dict:
+    name = _clean_text(name, "变量名", max_len=64)
+    with _tx() as conn:
+        if not variable_repo.exists(conn, name):
+            raise NotFoundError(f"变量 {name} 不存在")
+        variable_repo.delete_variable(conn, name)
+    return {"name": name, "deleted": True}
+
+
+def rename_variable(old_name: str, new_name: str) -> dict:
+    old_name = _clean_text(old_name, "原变量名", max_len=64)
+    new_name = _validate_variable_name(new_name)
+    if old_name == new_name:
+        with _read() as conn:
+            row = variable_repo.get_variable_row(conn, old_name)
+            if row is None:
+                raise NotFoundError(f"变量 {old_name} 不存在")
+            return _variable_public(row)
+    with _tx() as conn:
+        if not variable_repo.exists(conn, old_name):
+            raise NotFoundError(f"变量 {old_name} 不存在")
+        if variable_repo.exists(conn, new_name):
+            raise ConflictError(f"变量 {new_name} 已存在")
+        variable_repo.rename_variable(conn, old_name, new_name)
+        row = variable_repo.get_variable_row(conn, new_name)
+        return _variable_public(row)
+
+
+def update_variable_def(name: str, *, type_name: str | None, value: Any) -> dict:
+    """编辑变量定义：可改类型与初始值（value=None 表示保持当前值）。"""
+    name = _clean_text(name, "变量名", max_len=64)
+    with _tx() as conn:
+        row = variable_repo.get_variable_row(conn, name)
+        if row is None:
+            raise NotFoundError(f"变量 {name} 不存在")
+        resolved_type = type_name or row["type"]
+        if value is None:
+            stored = row["value"]
+        else:
+            stored = coerce_variable_value(resolved_type, value)
+        now = db.utc_now_iso()
+        variable_repo.update_variable_def(conn, name=name, type_name=resolved_type, stored=stored, now=now)
+        row = variable_repo.get_variable_row(conn, name)
+        return _variable_public(row)
+
+
+# -----------------------------------------------------------------------------
+# 三层变量树（展示/编辑辅助；不改变底层扁平存储与设备 API）
+# -----------------------------------------------------------------------------
+def split_variable_name(name: str) -> tuple[str, str, str]:
+    """把点分变量名拆成最多三段：第一层.第二层.第三层。
+
+    不足三段时右侧补空串，保持兼容现有扁平变量（line_mode）与两段变量（line_2.ready-x）。
+    超过三段时把第三段及之后合并为第三段，保证最多三层。
+    """
+    parts = str(name or "").split(".")
+    if len(parts) > 3:
+        parts = parts[:2] + [".".join(parts[2:])]
+    parts += [""] * (3 - len(parts))
+    return parts[0], parts[1], parts[2]
+
+
+def variables_tree(variables: list[dict]) -> dict:
+    """把扁平变量列表解析为最多三层的树：{"A": {"B": {"C": value}}}。"""
+    tree: dict = {}
+    for item in variables:
+        first, second, third = split_variable_name(item["name"])
+        path = [part for part in (first, second, third) if part]
+        if not path:
+            continue
+        node = tree
+        for part in path[:-1]:
+            child = node.get(part)
+            if not isinstance(child, dict):
+                child = {}
+                node[part] = child
+            node = child
+        node[path[-1]] = item["value"]
+    return tree
+
+
+def variables_tree_from_api(prefix: str = "") -> dict:
+    """供 UI 树形接口调用：读取变量并组装成三层树。"""
+    return variables_tree(list_variables(prefix))
+
+
+
+def list_variable_logs(*, action: str | None = None, limit: int = 30) -> list[dict]:
+    return variable_repo.list_logs(action=action, limit=limit)

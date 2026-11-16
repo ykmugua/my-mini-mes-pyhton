@@ -156,7 +156,7 @@ def _confirm_delete_product(product: dict[str, Any]) -> None:
         f"{product.get('product_name', '')}** 吗？"
     )
     st.caption("删除产品将同时删除其工序流程和设备分配。")
-    with st.container(horizontal=True, horizontal_alignment="right"):
+    with st.container(horizontal=True, horizontal_alignment="left"):
         if st.button("取消", key="cancel_delete_product"):
             _clear_pending_product_delete()
             st.rerun()
@@ -223,7 +223,7 @@ def _confirm_delete_route(route: dict[str, Any]) -> None:
         f"**{step_label(st.session_state.steps, step_no)}** 吗？"
     )
     st.caption("如有其他工序仍指向该工序，保存流程时需要重新配置下站。")
-    with st.container(horizontal=True, horizontal_alignment="right"):
+    with st.container(horizontal=True, horizontal_alignment="left"):
         if st.button("取消", key="cancel_delete_route"):
             _clear_pending_route_delete()
             st.rerun()
@@ -487,15 +487,6 @@ def render_page() -> None:
     # -----------------------------------------------------------------------------
     with st.container(border=True):
         st.subheader("产品列表")
-        save_products_clicked = False
-        if not read_only:
-            with st.container(horizontal=True, horizontal_alignment="right"):
-                save_products_clicked = st.button(
-                    "保存产品修改",
-                    icon=":material/save:",
-                    key="save_products",
-                )
-
         edited_products: pd.DataFrame | None = None
         if read_only:
             st.dataframe(
@@ -516,6 +507,15 @@ def render_page() -> None:
                 alt="产品列表编辑器",
                 key="product_editor",
             )
+
+        save_products_clicked = False
+        if not read_only:
+            with st.container(horizontal=True, horizontal_alignment="left"):
+                save_products_clicked = st.button(
+                    "保存产品修改",
+                    icon=":material/save:",
+                    key="save_products",
+                )
 
         if not products:
             st.info("暂无产品，请新增")

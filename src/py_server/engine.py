@@ -141,7 +141,7 @@ variables = Table(
     Column("value", Text),
     Column("last_device", Text),
     Column("updated_at", Text, nullable=False),
-    CheckConstraint("type IN ('int', 'str', 'bool')"),
+    CheckConstraint("type IN ('int', 'float', 'str', 'bool')"),
 )
 
 upstream_devices = Table(
@@ -163,6 +163,22 @@ settings = Table(
     Column("updated_at", Text, nullable=False),
 )
 
+
+
+# 设备读写变量日志（对应程序页的拉取/上报记录）
+variable_logs = Table(
+    "variable_logs",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True, nullable=True),
+    Column("name", Text, nullable=False),
+    Column("action", Text, nullable=False),  # READ / WRITE
+    Column("device_id", Text, nullable=False),
+    Column("value", Text),
+    Column("logged_at", Text, nullable=False),
+    sqlite_autoincrement=True,
+)
+Index("idx_variable_logs_time", variable_logs.c.logged_at)
+Index("idx_variable_logs_action", variable_logs.c.action)
 
 # -----------------------------------------------------------------------------
 # 主数据（app_pages 页面接入）：工序 / 线体 / 设备 / 程序 / 产品

@@ -27,11 +27,11 @@ common.render_sidebar()
 
 navigation = st.navigation(
     [
-        st.Page(program.render_page, title="程序下发", icon="📦", url_path="program", default=True),
+        st.Page(render_dashboard, title="测试数据看板", icon="📊", url_path="dashboard", default=True),
+        st.Page(program.render_page, title="程序下发", icon="📦", url_path="program"),
         st.Page(step_registration.render_page, title="工序注册", icon="🧱", url_path="steps"),
         st.Page(device_registration.render_page, title="设备注册", icon="🔧", url_path="devices"),
         st.Page(product_management.render_page, title="产品管理", icon="🏷️", url_path="products"),
-        st.Page(render_dashboard, title="测试数据看板", icon="📊", url_path="dashboard"),
         st.Page(render_variables, title="开放性变量", icon="🔧", url_path="variables"),
     ]
 )

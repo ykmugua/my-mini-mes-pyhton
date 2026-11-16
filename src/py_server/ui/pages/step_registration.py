@@ -155,7 +155,7 @@ def _confirm_delete_step(step: dict[str, Any]) -> None:
         f"确定删除工序 **{step['step_no']} - {step['step_name']}** 吗？"
     )
     st.caption("删除后，历史程序中的该工序引用将显示为“未配置工序”。")
-    with st.container(horizontal=True, horizontal_alignment="right"):
+    with st.container(horizontal=True, horizontal_alignment="left"):
         if st.button("取消", key="cancel_delete_step"):
             _clear_pending_delete()
             st.rerun()
@@ -247,16 +247,7 @@ def render_page() -> None:
     # 区块 2：工序列表
     # -----------------------------------------------------------------------------
     with st.container(border=True):
-        st.subheader("工序列表")
-        save_clicked = False
-        if not read_only:
-            with st.container(horizontal=True, horizontal_alignment="right"):
-                save_clicked = st.button(
-                    "保存工序",
-                    icon=":material/save:",
-                    key="save_steps",
-                )
-
+        st.subheader("工序列表（可直接修改，改完点“保存工序”）")
         edited_steps: pd.DataFrame | None = None
         if read_only:
             st.dataframe(
@@ -270,13 +261,21 @@ def render_page() -> None:
             edited_steps = st.data_editor(
                 _step_frame(steps, include_delete=True),
                 column_config=_step_config(include_delete=True),
-                disabled=["工序号", "工序名", "备注"],
                 hide_index=True,
                 num_rows="fixed",
                 width="stretch",
                 alt="工序注册编辑器",
                 key="step_editor",
             )
+
+        save_clicked = False
+        if not read_only:
+            with st.container(horizontal=True, horizontal_alignment="left"):
+                save_clicked = st.button(
+                    "保存工序",
+                    icon=":material/save:",
+                    key="save_steps",
+                )
 
         if not steps:
             st.info("暂无工序，请新增")

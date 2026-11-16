@@ -88,3 +88,12 @@ class UnlockIn(BaseModel):
 
 class MasterDataIn(BaseModel):
     rows: list[dict] = Field(default_factory=list)
+
+
+class VariableRenameIn(BaseModel):
+    name: str = Field(min_length=1)
+
+
+class VariableUpdateIn(BaseModel):
+    type: str | None = None
+    value: Any = None

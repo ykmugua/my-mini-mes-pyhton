@@ -126,6 +126,10 @@ def dashboard_snapshot(device_filter: str | None = None) -> tuple[dict | None, s
     )
 
 
+def variables_tree(prefix: str = "") -> tuple[dict | None, str | None]:
+    return _cached_get(f"variables_tree_{prefix}", "/api/ui/variables/tree", {"prefix": prefix})
+
+
 def list_variables(prefix: str = "") -> tuple[list[dict], str | None]:
     return _cached_get(f"variables_{prefix}", "/api/ui/variables", {"prefix": prefix})
 
@@ -172,6 +176,18 @@ def add_variable(name: str, type_name: str, value: Any) -> dict:
 def set_variable(name: str, value: Any, device_id: str) -> dict:
     return _request("POST", f"/api/variable/{name}", json={"value": value, "device_id": device_id})
 
+
+def delete_variable(name: str) -> dict:
+    return _request("DELETE", f"/api/ui/variables/{name}")
+
+
+def rename_variable(old_name: str, new_name: str) -> dict:
+    return _request("PUT", f"/api/ui/variables/{old_name}", json={"name": new_name})
+
+
+def update_variable_def(name: str, *, type_name: str, value: Any) -> dict:
+    return _request("PATCH", f"/api/ui/variables/{name}", json={"type": type_name, "value": value})
+
 # -----------------------------------------------------------------------------
 # 主数据（app_pages 页面）
 # -----------------------------------------------------------------------------
@@ -191,3 +207,15 @@ def master_list(key: str) -> list[dict]:
 
 def master_save(key: str, rows: list[dict]) -> int:
     return _request("POST", f"/api/ui/master/{key}", json={"rows": rows})["count"]
+
+
+def program_history(name: str) -> list[dict]:
+    return _request("GET", "/api/ui/program-history", params={"name": name})
+
+
+def delete_program_version(program_id: int) -> dict:
+    return _request("DELETE", f"/api/ui/program-version/{program_id}")
+
+
+def variable_logs(action: str, limit: int = 30) -> list[dict]:
+    return _request("GET", f"/api/ui/variable-logs/{action}", params={"limit": limit})
