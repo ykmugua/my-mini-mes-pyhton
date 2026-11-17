@@ -124,3 +124,16 @@
 **当前未提交 git 的改动**：pyproject.toml、uv.lock、engine.py、seed.py、page_dashboard.py、test_architecture.py、test_ui_smoke.py、config/、repositories/station_repo.py。
 
 **补充（2026-11-17 同步时）**：README.md 已更新「功能一览」与「页面说明」两处的看板描述（产线工站监控 / station_summary / 失败详计 / 1s 局部刷新 / 设备拖拽排序），并在技术栈段落标注看板依赖 plotly + streamlit-sortables、刷新用 @st.fragment。
+
+### 2026-11-17：新增「产品查询」页面（追溯 + 解绑）
+
+**新增文件**：
+- `repositories/product_query_repo.py`：只读查询工件（按产品/工件码/状态/时间范围）、工件详情、测试履历、工艺路线、产品信息、解锁记录、产品列表。
+- `api/routers/product_query.py`：5 个只读 API（/api/ui/product/options, /workpieces, /workpiece/{id}/detail, /workpiece/{id}/history, /route/{model}），注册到 app。
+- `ui/page_product_query.py`：查询条件（产品/工件码/状态/时间）→ 结果表格+选工件 → 详情（基本信息、工艺路线、测试履历/解锁记录两个 tab、工序解绑表单）。解绑复用 `client.unlock_workpiece`，原因必填+勾选确认。
+
+**导航**：streamlit_app.py 新增「产品查询」页（url_path=product_query），位于测试数据看板之后。
+
+**services** 增加 query_workpieces/workpiece_detail/workpiece_test_history/workpiece_unlock_history/product_route_detail/distinct_products 薄封装。
+
+**验证**：144 passed；新 API 实测（产品列表/工件列表/详情/履历）正常；agent API 确认页面 ready 无异常。

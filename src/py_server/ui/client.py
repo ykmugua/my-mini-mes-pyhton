@@ -219,3 +219,26 @@ def delete_program_version(program_id: int) -> dict:
 
 def variable_logs(action: str, limit: int = 30) -> list[dict]:
     return _request("GET", f"/api/ui/variable-logs/{action}", params={"limit": limit})
+
+
+# -----------------------------------------------------------------------------
+# 产品查询/追溯（只读；解绑用 unlock_workpiece）
+# -----------------------------------------------------------------------------
+def product_options() -> list[str]:
+    return _request("GET", "/api/ui/product/options")
+
+
+def query_workpieces(**params) -> list[dict]:
+    return _request("GET", "/api/ui/product/workpieces", params=params)
+
+
+def workpiece_detail(workpiece: str) -> dict:
+    return _request("GET", f"/api/ui/product/workpiece/{workpiece}/detail")
+
+
+def workpiece_history(workpiece: str) -> dict:
+    return _request("GET", f"/api/ui/product/workpiece/{workpiece}/history")
+
+
+def product_route(product_model: str) -> dict:
+    return _request("GET", f"/api/ui/product/route/{product_model}")

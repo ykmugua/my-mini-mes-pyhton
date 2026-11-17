@@ -11,6 +11,7 @@ import streamlit as st
 from py_server.ui import common
 from py_server.ui.page_dashboard import render as render_dashboard
 from py_server.ui.page_variables import render as render_variables
+from py_server.ui.page_product_query import render as render_product_query
 from py_server.ui.pages import device_registration, product_management, program, step_registration
 
 st.set_page_config(
@@ -28,6 +29,7 @@ common.render_sidebar()
 navigation = st.navigation(
     [
         st.Page(render_dashboard, title="测试数据看板", icon="📊", url_path="dashboard", default=True),
+        st.Page(render_product_query, title="产品查询", icon="🔎", url_path="product_query"),
         st.Page(program.render_page, title="程序下发", icon="📦", url_path="program"),
         st.Page(step_registration.render_page, title="工序注册", icon="🧱", url_path="steps"),
         st.Page(device_registration.render_page, title="设备注册", icon="🔧", url_path="devices"),

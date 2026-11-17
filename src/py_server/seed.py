@@ -202,6 +202,25 @@ def seed(reset: bool = False, with_demo: bool = False) -> None:
 def _seed_demo_runs() -> None:
     """按前道顺序上报一批今天的测试数据；包含 FAIL 与不可信数据。"""
     rng = random.Random(20261112)
+    # 先让主力设备上报可信程序状态，保证正常测试结果能推进工件状态（PASS/FAIL）
+    # 直接读取已写入的 program_bindings，避免重新生成文件
+    from .repositories import binding_repo
+    from .repositories.base import with_read_conn
+
+    sha_map = {}
+    with with_read_conn() as conn:
+        for device in ("TEST-01", "TEST-02", "TEST-03"):
+            binding = binding_repo.try_binding(conn, device, "P-1001")
+            if binding:
+                sha_map[device] = binding["sha256"]
+                if device in ("TEST-01", "TEST-02"):
+                    services.report_program_status(
+                        device_id=device,
+                        product="P-1001",
+                        reported_version=binding["program_version"],
+                        reported_sha256=binding["sha256"],
+                        sha256_ok=True,
+                    )
     for index in range(1, 25):
         workpiece = f"WP-{index:04d}"
         # 前道 TEST-01：大部分 PASS，少量 FAIL
@@ -213,6 +232,7 @@ def _seed_demo_runs() -> None:
             result=first,
             measured_value=f"{rng.uniform(0.8, 1.3):.3f}A",
             program_version="v1.2.0",
+            program_sha256=sha_map.get("TEST-01"),
         )
         if first == "FAIL":
             continue
@@ -225,6 +245,7 @@ def _seed_demo_runs() -> None:
             result=second,
             measured_value=f"{rng.uniform(80, 120):.1f}MΩ",
             program_version="v1.2.0",
+            program_sha256=sha_map.get("TEST-02"),
         )
         if second == "FAIL":
             continue
@@ -237,6 +258,7 @@ def _seed_demo_runs() -> None:
                 result="PASS",
                 measured_value=f"{rng.uniform(1.4, 1.6):.2f}kV",
                 program_version="v1.1.0",
+                program_sha256="0" * 64,
             )
     # 一个已锁定的工件，供“工序锁”页面演示人工解锁
     services.report_test_result(
@@ -246,6 +268,7 @@ def _seed_demo_runs() -> None:
         result="PASS",
         measured_value="1.021A",
         program_version="v1.2.0",
+        program_sha256=sha_map.get("TEST-01"),
     )
     services.report_test_result(
         workpiece="WP-LOCKED",

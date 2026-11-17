@@ -374,7 +374,8 @@ def render() -> None:
     _render_device_manager(_load_config_devices())
 
     st.markdown("<div style='height:14px'></div>", unsafe_allow_html=True)
-    # "设备页"用 tab 容器，与卡片内"统计"页同款容器样式
-    tab_device, = st.tabs(["设备页"])
-    with tab_device:
-        _render_cards_fragment()
+    # 监控内容用 tab 组织，后续可直接在此增加其他页签
+    with st.container(border=True):
+        tab_device, = st.tabs(["设备页"])
+        with tab_device:
+            _render_cards_fragment()

@@ -8,7 +8,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from .. import config, db
-from .routers import dashboard, interlock, master_data, program, test_result, variable
+from .routers import dashboard, interlock, master_data, product_query, program, test_result, variable
 from ..services import ServiceError
 
 
@@ -38,3 +38,4 @@ app.include_router(interlock.router)
 app.include_router(variable.router)
 app.include_router(dashboard.router)
 app.include_router(master_data.router)
+app.include_router(product_query.router)

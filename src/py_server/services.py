@@ -31,6 +31,7 @@ from .repositories import (
     program_files,
     upstream_repo,
     variable_repo,
+    product_query_repo,
     workpiece_repo,
 )
 from .repositories.base import Conn, with_conn as _with_conn, with_read_conn as _with_read
@@ -777,3 +778,34 @@ def variables_tree_from_api(prefix: str = "") -> dict:
 
 def list_variable_logs(*, action: str | None = None, limit: int = 30) -> list[dict]:
     return variable_repo.list_logs(action=action, limit=limit)
+
+
+
+# -----------------------------------------------------------------------------
+# 产品查询/追溯（只读；解绑复用 unlock_workpiece）
+# -----------------------------------------------------------------------------
+def query_workpieces(**kwargs) -> list[dict]:
+    return product_query_repo.list_workpieces(**kwargs)
+
+
+def workpiece_detail(workpiece: str) -> dict | None:
+    return product_query_repo.get_workpiece(workpiece)
+
+
+def workpiece_test_history(workpiece: str) -> list[dict]:
+    return product_query_repo.test_history(workpiece)
+
+
+def workpiece_unlock_history(workpiece: str) -> list[dict]:
+    return product_query_repo.unlock_history(workpiece)
+
+
+def product_route_detail(product_model: str) -> dict:
+    return {
+        "info": product_query_repo.product_info(product_model),
+        "route": product_query_repo.product_route(product_model),
+    }
+
+
+def distinct_products() -> list[str]:
+    return product_query_repo.distinct_products()

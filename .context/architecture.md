@@ -300,3 +300,7 @@
 ## ADR-020：设备 ID 统一（2026-11-17）
 
 演示环境的 station_summary / station_fail_detail / config 设备 ID 统一为设备注册页的 TEST-xx（早期用 D01-D06，已废弃）。
+
+## 19. ADR-021：产品查询页只读+受控解绑（2026-11-17）
+
+追溯全部只读（workpieces/test_results/product_routes/unlock_logs）；工序解绑复用现有 unlock 用例（状态回 PENDING、写 unlock_logs、不原始测试记录），保留原因必填+勾选确认约束。不新建业务表。
