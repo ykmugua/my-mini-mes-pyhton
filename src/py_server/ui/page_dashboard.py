@@ -62,14 +62,12 @@ def _confirm_mon_delete(dev: dict) -> None:
 
 COMPACT_CSS = """
 <style>
-  div[data-testid='stTextInput'] input {
+  /* 条码输入框：通过 key 生成的 .st-key-* 类定位（skill: 不用 data-testid 私有类） */
+  [class*='st-key-barcode_'] input {
       font-size:20px !important; font-weight:bold !important; color:#1a73e8 !important;
       height:32px !important; padding:2px 8px !important;
   }
-  div[data-testid='stTextInput'] { margin-bottom:0 !important; }
-  div[data-testid='stCaptionContainer'], .stCaption { margin:0 !important; }
-  div[data-testid='stVerticalBlock'] { gap:4px !important; }
-  div[data-testid='stPlotlyChart'] { margin:0 !important; }
+  [class*='st-key-barcode_'] { margin-bottom:0 !important; }
   .card-title { text-align:center !important; font-size:16px !important; font-weight:700 !important; margin:0 0 10px 0 !important; line-height:1.3 !important; }
   .sortable-component { background:transparent !important; }
   .sortable-item {
@@ -174,7 +172,7 @@ def _render_card(device: dict, data: dict | None) -> None:
     device_id = device.get("device_id", "")
     # 不设固定高度，避免右侧滚动条
     with st.container(border=True):
-        st.markdown(f'<div class="card-title">{name}</div>', unsafe_allow_html=True)
+        st.html(f'<div class="card-title">{name}</div>')
         barcode = "无数据" if data is None else (
             "无条码" if (str(data.get("status", "")) == "空闲" or not data.get("barcode"))
             else data["barcode"]
@@ -183,28 +181,27 @@ def _render_card(device: dict, data: dict | None) -> None:
                       key=f"barcode_{device_id}", label_visibility="collapsed")
 
         if data is None:
-            st.markdown(_status_block("禁用", 0), unsafe_allow_html=True)
+            st.html(_status_block("禁用", 0))
             st.caption("汇总表无该设备记录，未渲染统计")
             return
         status = str(data.get("status", "禁用"))
-        st.markdown(_status_block(status, _status_seconds(data)), unsafe_allow_html=True)
+        st.html(_status_block(status, _status_seconds(data)))
 
         if status in STATUS_NO_CHART:
             st.caption(f"状态为“{STATUS_LABELS.get(status, status)}”，未渲染统计")
             return
-        st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
         # 每个页签内容用固定高度容器，保证切换页签时卡片大小不变
         TAB_BODY_H = 150
         tab_stats, tab_fail, tab_ctrl = st.tabs(["统计", "失败详计", "设备控制"])
         with tab_stats:
             with st.container(height=TAB_BODY_H, border=False):
-                st.plotly_chart(_chart(data), width="stretch", config={"displayModeBar": False})
+                st.plotly_chart(_chart(data), width="stretch", config={"displayModeBar": False}, alt=f"{name} 测试数据统计柱状图")
         with tab_fail:
             with st.container(height=TAB_BODY_H, border=False):
                 details = station_repo.list_fail_details(device_id)
                 if details:
                     frame = pd.DataFrame([{"条码": d["barcode"], "失败信息": d["test_item"]} for d in details])
-                    st.dataframe(frame, hide_index=True, width="stretch")
+                    st.dataframe(frame, hide_index=True, width="stretch", alt=f"{name} 失败项明细列表")
                 else:
                     st.caption("暂无失败记录")
         with tab_ctrl:
@@ -299,7 +296,7 @@ def _render_device_manager(config_devices: list[dict]) -> list[dict]:
                         key=MON_DEL_CLICK, width="small",
                     ),
                 },
-                hide_index=True, num_rows="fixed", width="stretch",
+                hide_index=True, num_rows="fixed", width="stretch", alt="监控设备列表",
             )
         else:
             st.info("暂无监控设备，请在上方新增")
@@ -367,13 +364,12 @@ def _render_cards_fragment() -> None:
 
 
 def render() -> None:
-    st.markdown(COMPACT_CSS, unsafe_allow_html=True)
+    st.html(COMPACT_CSS)
     st.title("产线测试工站监控｜设备主动上报")
 
     # 设备管理（含顺序/行数设置，默认折叠）——不在 fragment 内，不会被刷新打断
     _render_device_manager(_load_config_devices())
 
-    st.markdown("<div style='height:14px'></div>", unsafe_allow_html=True)
     # 监控内容用 tab 组织，后续可直接在此增加其他页签
     with st.container(border=True):
         tab_device, = st.tabs(["设备页"])

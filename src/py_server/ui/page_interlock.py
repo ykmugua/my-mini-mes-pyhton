@@ -31,7 +31,7 @@ def _render_locked(locked: list[dict]) -> None:
     if not locked:
         st.success("当前没有锁定工件。")
         return
-    st.dataframe(_locked_frame(locked), hide_index=True, width="stretch")
+    st.dataframe(_locked_frame(locked), hide_index=True, width="stretch", alt="当前锁定工件列表")
 
 
 def _render_unlock(locked: list[dict]) -> None:
@@ -106,7 +106,7 @@ def _render_unlock_logs() -> None:
                 for item in logs
             ]
         )
-        st.dataframe(frame, hide_index=True, width="stretch")
+        st.dataframe(frame, hide_index=True, width="stretch", alt="放行判定数据")
 
 
 def _cell(value) -> str:
@@ -140,6 +140,7 @@ def _render_upstream_rules() -> None:
     )
     edited = st.data_editor(
         frame,
+        alt="前道规则编辑表",
         key="upstream_editor",
         num_rows="dynamic",
         hide_index=True,

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 import pandas as pd
 import streamlit as st
 
@@ -18,6 +20,21 @@ def _status_text(row: dict) -> str:
     return " ".join(parts)
 
 
+
+
+def _dt_to_iso(dt) -> str | None:
+    """datetime_input 的本地时间 -> UTC ISO 字符串（与 workpieces.updated_at 对齐）。"""
+    if dt is None:
+        return None
+    if isinstance(dt, datetime):
+        value = dt
+    else:  # date
+        value = datetime(dt.year, dt.month, dt.day)
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=config.timezone())
+    return value.astimezone(timezone.utc).isoformat(timespec="seconds")
+
+
 def _render_query() -> list[dict]:
     with st.container(border=True):
         st.subheader("查询条件")
@@ -29,13 +46,25 @@ def _render_query() -> list[dict]:
         product = c1.selectbox("产品型号", products, key="pq_product")
         workpiece = c2.text_input("工件码（模糊）", key="pq_workpiece", placeholder="输入工件码片段")
         status = c3.selectbox("工件状态", STATUS_OPTIONS, key="pq_status")
-        c4, c5, c6 = st.columns(3)
-        date_from = c4.text_input("起始时间（ISO/时间戳）", key="pq_from", placeholder="例如 2026-11-17T00:00:00+08:00")
-        date_to = c5.text_input("结束时间（ISO/时间戳）", key="pq_to", placeholder="例如 2026-11-18T00:00:00+08:00")
-        query = c6.button("🔍 查询", key="pq_query_btn")
+        c4, c5, c6 = st.columns([1, 2, 2])
+        use_time = c4.checkbox("启用时间筛选", key="pq_use_time")
+        date_from = date_to = None
+        if use_time:
+            # 原生 datetime_input：日历弹出 + 时间输入，step=60 精确到分钟（范围查询足够）
+            date_from = c5.datetime_input(
+                "起始时间", value=None, format="YYYY/MM/DD", step=60, key="pq_from"
+            )
+            date_to = c6.datetime_input(
+                "结束时间", value=None, format="YYYY/MM/DD", step=60, key="pq_to"
+            )
+        else:
+            c5.caption("时间筛选未启用")
+        query = st.button("🔍 查询", key="pq_query_btn")
 
+    # 结果常驻 session_state：首次进入自动加载全部；之后只在点“查询”时更新
     if "pq_results" not in st.session_state:
-        st.session_state["pq_results"] = []
+        st.session_state["pq_results"] = client.query_workpieces(limit=200)
+
     if query:
         params = {"limit": 200}
         if product != "全部":
@@ -44,12 +73,16 @@ def _render_query() -> list[dict]:
             params["workpiece"] = workpiece.strip()
         if status != "全部":
             params["status"] = status
-        if date_from.strip():
-            params["date_from"] = date_from.strip()
-        if date_to.strip():
-            params["date_to"] = date_to.strip()
+        if use_time:
+            if date_from:
+                params["date_from"] = _dt_to_iso(date_from)
+            if date_to:
+                params["date_to"] = _dt_to_iso(date_to)
         try:
             st.session_state["pq_results"] = client.query_workpieces(**params)
+            # 条件变化后清掉旧选择，避免详情指向已不在结果中的工件
+            st.session_state.pop("pq_current", None)
+            st.session_state.pop("pq_selected", None)
         except ServiceError as exc:
             st.error(f"查询失败：{exc}")
     return st.session_state["pq_results"]
@@ -72,7 +105,7 @@ def _render_results(results: list[dict]) -> None:
             }
             for r in results
         ])
-        st.dataframe(frame, hide_index=True, width="stretch", height=260)
+        st.dataframe(frame, hide_index=True, width="stretch", height=260, alt="工件查询结果列表")
         ids = [r["workpiece"] for r in results]
         chosen = st.selectbox("选择工件查看追溯", ids, key="pq_selected")
         if st.button("查看追溯详情", type="primary", key="pq_detail_btn"):
@@ -117,7 +150,7 @@ def _render_detail(wp_id: str) -> None:
                         }
                         for r in route
                     ])
-                    st.dataframe(rf, hide_index=True, width="stretch")
+                    st.dataframe(rf, hide_index=True, width="stretch", alt="产品工艺路线表")
                 else:
                     st.caption("该产品未配置工序流程")
         except ServiceError:
@@ -141,7 +174,7 @@ def _render_detail(wp_id: str) -> None:
                     }
                     for t in tests
                 ])
-                st.dataframe(tf, hide_index=True, width="stretch", height=300)
+                st.dataframe(tf, hide_index=True, width="stretch", height=300, alt="工件测试履历表")
             else:
                 st.info("暂无测试记录")
     with tab_unlock:
@@ -159,7 +192,7 @@ def _render_detail(wp_id: str) -> None:
                     }
                     for u in unlocks
                 ])
-                st.dataframe(uf, hide_index=True, width="stretch", height=200)
+                st.dataframe(uf, hide_index=True, width="stretch", height=200, alt="工件解锁记录表")
             else:
                 st.info("暂无解锁记录")
 
@@ -204,9 +237,13 @@ def render() -> None:
     results = _render_query()
     _render_results(results)
 
-    if st.session_state.get("pq_current"):
-        st.divider()
-        _render_detail(st.session_state["pq_current"])
-        if st.button("关闭详情", key="pq_close_detail"):
-            st.session_state.pop("pq_current", None)
-            st.rerun()
+    st.divider()
+    # 追溯详情始终展示：优先用已选工件，否则默认取结果第一个
+    current = st.session_state.get("pq_current")
+    if not current and results:
+        current = results[0]["workpiece"]
+    if current:
+        st.session_state["pq_current"] = current
+        _render_detail(current)
+    else:
+        st.info("暂无工件，切换到“全部”状态或清空条件以查看详情")

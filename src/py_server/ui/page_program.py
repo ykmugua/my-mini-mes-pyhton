@@ -96,7 +96,7 @@ def _render_drift_alerts() -> None:
             for item in drifts
         ]
     )
-    st.dataframe(frame, hide_index=True, width="stretch")
+    st.dataframe(frame, hide_index=True, width="stretch", alt="设备记录表")
 
 
 def _render_editor() -> None:
@@ -113,6 +113,7 @@ def _render_editor() -> None:
     ]
     editor = st.data_editor(
         frame,
+        alt="程序绑定关系编辑表",
         key="program_editor",
         num_rows="dynamic",
         hide_index=True,
@@ -130,7 +131,7 @@ def _render_editor() -> None:
             "最后拉取时间": st.column_config.TextColumn("最后拉取", width="medium"),
             "更新时间": st.column_config.TextColumn("更新时间", width="medium"),
         },
-    )
+)
 
     left, right = st.columns([1, 3])
     if left.button(
@@ -213,7 +214,7 @@ def _render_logs() -> None:
                     for item in pulls
                 ]
             )
-            st.dataframe(frame, hide_index=True, width="stretch")
+            st.dataframe(frame, hide_index=True, width="stretch", alt="设备记录表")
         else:
             st.caption("暂无拉取记录。")
 
@@ -235,7 +236,7 @@ def _render_logs() -> None:
                     for item in reports
                 ]
             )
-            st.dataframe(frame, hide_index=True, width="stretch")
+            st.dataframe(frame, hide_index=True, width="stretch", alt="设备记录表")
         else:
             st.caption("暂无上报记录。")
 
