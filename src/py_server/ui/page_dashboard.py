@@ -1,151 +1,380 @@
-"""页面：测试数据看板。"""
+"""页面：产线测试工站监控（只读 station_summary 汇总表）。"""
 
 from __future__ import annotations
 
+import json
+import time
+from pathlib import Path
+
 import pandas as pd
+import plotly.graph_objects as go
 import streamlit as st
+from streamlit_sortables import sort_items
 
-from .. import config
-from . import client
-from . import common
+from ..repositories import station_repo
 
-ALL_DEVICES = "全部设备"
+DEFAULT_COLS = 6
+refresh_interval = 1000
+
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
+DEVICE_CONFIG = PROJECT_ROOT / "config" / "device_config.json"
+
+STATUS_LABELS = {"空闲": "空闲", "测试中": "测试中", "通过": "通过", "失败": "失败", "禁用": "禁用"}
+STATUS_COLORS = {"空闲": "#888888", "测试中": "#4287f5", "通过": "#28a745", "失败": "#dc3545", "禁用": "#333333"}
+STATUS_NO_CHART = {"禁用"}
+METRIC_ITEMS = ["测试总数", "一次通过", "复测通过", "失败"]
+FIELD_MAP = {"测试总数": "total", "一次通过": "first_pass", "复测通过": "retest_pass", "失败": "fail"}
+
+MON_DEL_CLICK = "mon_device_delete_click"
+MON_DEL_PENDING = "mon_device_delete_pending"
 
 
-def _metrics(snapshot: dict) -> None:
-    col1, col2, col3, col4 = st.columns(4)
-    col1.metric("今日测试总数", snapshot["total"])
-    col2.metric("PASS", snapshot["pass"])
-    col3.metric("FAIL", snapshot["fail"])
-    yield_text = "—" if snapshot["yield"] is None else f"{snapshot['yield'] * 100:.1f}%"
-    col4.metric("合格率（可信数据）", yield_text)
-    st.caption("测试总数 / PASS / FAIL 包含全部上报；合格率只统计可信数据。")
-    if snapshot["untrusted"]:
-        st.warning(
-            f"有 {snapshot['untrusted']} 条今日测试数据因程序版本/校验和不匹配被标记为"
-            "“不可信”，已排除出合格率统计。"
+def _request_mon_delete() -> None:
+    click = st.session_state.get(MON_DEL_CLICK)
+    if click is None:
+        return
+    row = int(click["row"])
+    ids = st.session_state.get("_mon_config_ids", [])
+    if 0 <= row < len(ids):
+        st.session_state[MON_DEL_PENDING] = ids[row]
+
+
+def _clear_mon_delete() -> None:
+    st.session_state.pop(MON_DEL_PENDING, None)
+
+
+@st.dialog("确认移除监控设备", icon=":material/delete_forever:", on_dismiss=_clear_mon_delete)
+def _confirm_mon_delete(dev: dict) -> None:
+    st.write(f"确定从监控中移除 **{dev['name']} ({dev['device_id']})** 吗？")
+    st.caption("仅从监控列表移除，不会删除设备注册页中的设备。")
+    with st.container(horizontal=True, horizontal_alignment="left"):
+        if st.button("取消", key="cancel_mon_del"):
+            _clear_mon_delete()
+            st.rerun()
+        if st.button("确认移除", type="primary", key="confirm_mon_del"):
+            current = json.loads(DEVICE_CONFIG.read_text(encoding="utf-8")).get("devices", [])
+            new_list = [d for d in current if d["device_id"] != dev["device_id"]]
+            _save_config_devices(new_list)
+            _clear_mon_delete()
+            st.toast("已移除")
+            st.rerun()
+
+
+COMPACT_CSS = """
+<style>
+  div[data-testid='stTextInput'] input {
+      font-size:20px !important; font-weight:bold !important; color:#1a73e8 !important;
+      height:32px !important; padding:2px 8px !important;
+  }
+  div[data-testid='stTextInput'] { margin-bottom:0 !important; }
+  div[data-testid='stCaptionContainer'], .stCaption { margin:0 !important; }
+  div[data-testid='stVerticalBlock'] { gap:4px !important; }
+  div[data-testid='stPlotlyChart'] { margin:0 !important; }
+  .card-title { text-align:center !important; font-size:16px !important; font-weight:700 !important; margin:0 0 10px 0 !important; line-height:1.3 !important; }
+  .sortable-component { background:transparent !important; }
+  .sortable-item {
+      background:#f0f2f6 !important; color:#000 !important; border-radius:6px !important;
+      padding:4px 10px !important; font-weight:700 !important; font-size:13px !important; margin:2px !important;
+  }
+</style>
+"""
+
+
+def _load_config_devices() -> list[dict]:
+    """从 config/device_config.json 读取要显示的设备。"""
+    try:
+        data = json.loads(DEVICE_CONFIG.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        st.error(f"读取设备配置失败：{exc}")
+        return []
+    return [d for d in data.get("devices", []) if d.get("enable") is True]
+
+
+def _save_config_devices(devices: list[dict]) -> None:
+    data = {"devices": devices}
+    DEVICE_CONFIG.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+def _registered_devices() -> list[dict]:
+    """设备注册页的 devices 表（供"新增"下拉选择，保留 line_id/step_no 供筛选）。"""
+    from . import client
+    try:
+        return [d for d in client.master_list("devices") if d.get("enabled")]
+    except Exception:
+        return []
+
+
+def _line_step_names() -> tuple[dict, dict]:
+    from . import client
+    try:
+        lines = {d["line_id"]: d.get("line_name") or d["line_id"] for d in client.master_list("lines")}
+        steps = {int(d["step_no"]): d.get("step_name") or str(d["step_no"]) for d in client.master_list("steps")}
+    except Exception:
+        lines, steps = {}, {}
+    return lines, steps
+
+
+def _read_summary(device_id: str) -> dict | None:
+    try:
+        return station_repo.get_by_device(device_id)
+    except Exception as exc:
+        st.error(f"数据库读取失败：{exc}")
+        st.stop()
+
+
+def _fmt_hms(seconds) -> str:
+    s = max(0, int(seconds or 0))
+    return f"{s // 3600:02d}:{(s % 3600) // 60:02d}:{s % 60:02d}"
+
+
+def _status_seconds(data: dict) -> int:
+    status = str(data.get("status", "禁用"))
+    if status in ("通过", "失败"):
+        return int(data.get("test_duration") or 0)
+    since = data.get("status_since")
+    return max(0, int(time.time()) - int(since)) if since else 0
+
+
+def _status_block(status: str, seconds: int = 0) -> str:
+    label = STATUS_LABELS.get(status, "禁用")
+    color = STATUS_COLORS.get(status, STATUS_COLORS["禁用"])
+    t = _fmt_hms(seconds)
+    return (
+        f'<div style="position:relative;background-color:{color};border-radius:6px;'
+        f'height:32px;display:flex;align-items:center;justify-content:center;">'
+        f'<span style="color:#ffffff;font-size:16px;font-weight:bold;">{label}</span>'
+        f'<span style="position:absolute;right:8px;color:#ffffff;font-size:11px;">{t}</span>'
+        f'</div>'
+    )
+
+
+def _chart(data: dict):
+    total = int(data.get("total", 0) or 0)
+    values, texts = [], []
+    for item in METRIC_ITEMS:
+        val = int(data.get(FIELD_MAP[item], 0) or 0)
+        values.append(val)
+        texts.append(f"{val} ({val / total * 100:.1f}%)" if total > 0 else f"{val} (--)")
+    fig = go.Figure(go.Bar(
+        x=values, y=METRIC_ITEMS, orientation="h",
+        marker_color=["#6c757d", "#28a745", "#4287f5", "#dc3545"],
+        text=texts, textposition="auto", hovertemplate="%{y}: %{text}<extra></extra>",
+    ))
+    fig.update_layout(
+        height=140, margin=dict(l=4, r=4, t=2, b=2),
+        xaxis=dict(visible=False), yaxis=dict(autorange="reversed", tickfont=dict(size=10)),
+        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+        showlegend=False, bargap=0.3,
+    )
+    return fig
+
+
+def _render_card(device: dict, data: dict | None) -> None:
+    name = device.get("name") or device.get("device_id")
+    device_id = device.get("device_id", "")
+    # 不设固定高度，避免右侧滚动条
+    with st.container(border=True):
+        st.markdown(f'<div class="card-title">{name}</div>', unsafe_allow_html=True)
+        barcode = "无数据" if data is None else (
+            "无条码" if (str(data.get("status", "")) == "空闲" or not data.get("barcode"))
+            else data["barcode"]
         )
-    else:
-        st.caption("今日所有测试数据均通过程序版本/校验和验证。")
+        st.text_input("当前条码", value=str(barcode), disabled=True,
+                      key=f"barcode_{device_id}", label_visibility="collapsed")
+
+        if data is None:
+            st.markdown(_status_block("禁用", 0), unsafe_allow_html=True)
+            st.caption("汇总表无该设备记录，未渲染统计")
+            return
+        status = str(data.get("status", "禁用"))
+        st.markdown(_status_block(status, _status_seconds(data)), unsafe_allow_html=True)
+
+        if status in STATUS_NO_CHART:
+            st.caption(f"状态为“{STATUS_LABELS.get(status, status)}”，未渲染统计")
+            return
+        st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+        # 每个页签内容用固定高度容器，保证切换页签时卡片大小不变
+        TAB_BODY_H = 150
+        tab_stats, tab_fail, tab_ctrl = st.tabs(["统计", "失败详计", "设备控制"])
+        with tab_stats:
+            with st.container(height=TAB_BODY_H, border=False):
+                st.plotly_chart(_chart(data), width="stretch", config={"displayModeBar": False})
+        with tab_fail:
+            with st.container(height=TAB_BODY_H, border=False):
+                details = station_repo.list_fail_details(device_id)
+                if details:
+                    frame = pd.DataFrame([{"条码": d["barcode"], "失败信息": d["test_item"]} for d in details])
+                    st.dataframe(frame, hide_index=True, width="stretch")
+                else:
+                    st.caption("暂无失败记录")
+        with tab_ctrl:
+            with st.container(height=TAB_BODY_H, border=False):
+                st.caption("设备控制功能预留")
 
 
-def _yield_chart(snapshot: dict) -> None:
-    st.subheader("按设备合格率")
-    rows = snapshot["by_device"]
-    if not rows:
-        st.info("今日暂无数据。")
-        return
-    frame = pd.DataFrame(
-        [
+def _render_device_manager(config_devices: list[dict]) -> list[dict]:
+    """监控设备管理 + 顺序调节，统一放在一个默认折叠的容器里。"""
+    all_config = list(config_devices)
+
+    with st.expander("⚙️ 监控设备管理与显示设置", expanded=False):
+        line_names, step_names = _line_step_names()
+
+        st.subheader("监控设备管理（可直接修改名称，改完点“保存修改”）")
+
+        # 新增：按产线/工序筛选后选择设备
+        with st.expander("新增监控设备", expanded=False):
+            registered = _registered_devices()
+            shown_ids = [x["device_id"] for x in all_config]
+            candidates = [d for d in registered if d["device_id"] not in shown_ids]
+
+            if candidates:
+                f1, f2 = st.columns(2)
+                line_opts = ["全部"] + sorted({str(d.get("line_id") or "") for d in candidates if d.get("line_id")})
+                step_opts = ["全部"] + sorted({int(d.get("step_no")) for d in candidates if d.get("step_no")})
+                fl = f1.selectbox("产线筛选", line_opts, key="mon_filter_line")
+                fs = f2.selectbox(
+                    "工序筛选", step_opts, key="mon_filter_step",
+                    format_func=lambda x: "全部" if x == "全部" else f"{x} - {step_names.get(x, x)}",
+                )
+                filtered = [
+                    d for d in candidates
+                    if (fl == "全部" or str(d.get("line_id") or "") == fl)
+                    and (fs == "全部" or int(d.get("step_no") or 0) == int(fs))
+                ]
+                if filtered:
+                    with st.form("mon_device_create_form", clear_on_submit=False):
+                        picked = st.selectbox(
+                            "选择设备",
+                            options=[d["device_id"] for d in filtered],
+                            format_func=lambda x: (
+                                f"{x} - {next((d['device_name'] for d in filtered if d['device_id']==x), x)}"
+                                f"（{line_names.get(str(next((d.get('line_id') for d in filtered if d['device_id']==x), '')), '')} / "
+                                f"{step_names.get(int(next((d.get('step_no') for d in filtered if d['device_id']==x), 0)), '')}）"
+                            ),
+                            key="mon_add_select",
+                        )
+                        submitted = st.form_submit_button("添加监控设备")
+                    if submitted:
+                        d = next(x for x in filtered if x["device_id"] == picked)
+                        all_config.append({
+                            "device_id": d["device_id"],
+                            "name": d.get("device_name") or d["device_id"],
+                            "line_id": str(d.get("line_id") or ""),
+                            "line_name": line_names.get(str(d.get("line_id") or ""), str(d.get("line_id") or "")),
+                            "step_no": int(d.get("step_no") or 0),
+                            "step_name": step_names.get(int(d.get("step_no") or 0), str(d.get("step_no") or "")),
+                            "ip": d.get("ip", "127.0.0.1"), "port": d.get("port", 6379), "enable": True,
+                        })
+                        _save_config_devices(all_config)
+                        st.toast(f"已添加 {d['device_id']}")
+                        st.rerun()
+                else:
+                    st.info("当前筛选条件下没有可添加的设备。")
+            else:
+                st.info("设备注册页中没有可添加的启用设备。")
+
+        # 列表（data_editor + 删除列）
+        st.session_state["_mon_config_ids"] = [d["device_id"] for d in all_config]
+        frame = pd.DataFrame([
             {
-                "设备": item["device_id"],
-                "合格率(%)": round((item["yield"] or 0) * 100, 1),
-                "测试数": item["total"],
+                "设备编号": d["device_id"],
+                "设备名称": d["name"],
+                "所属线体": (d.get("line_name") or d.get("line_id") or ""),
+                "所属工序": (d.get("step_name") or (f"工序{d['step_no']}" if d.get("step_no") else "")),
+                "删除": "删除",
             }
-            for item in rows
-        ]
-    ).set_index("设备")
-    st.bar_chart(frame["合格率(%)"], height=320, width="stretch")
-    st.caption("仅统计可信数据；合格率 = PASS / (PASS + FAIL)。")
-    st.dataframe(
-        pd.DataFrame(
-            [
-                {
-                    "设备": item["device_id"],
-                    "测试数": item["total"],
-                    "PASS": item["pass"],
-                    "FAIL": item["fail"],
-                    "合格率": "—" if item["yield"] is None else f"{item['yield'] * 100:.1f}%",
-                }
-                for item in rows
-            ]
-        ),
-        hide_index=True,
-        width="stretch",
-    )
+            for d in all_config
+        ])
+        edited = None
+        if all_config:
+            edited = st.data_editor(
+                frame,
+                column_config={
+                    "设备编号": st.column_config.TextColumn("设备编号", disabled=True, width="medium"),
+                    "设备名称": st.column_config.TextColumn("设备名称", required=True, width="medium"),
+                    "所属线体": st.column_config.TextColumn("所属线体", disabled=True, width="medium"),
+                    "所属工序": st.column_config.TextColumn("所属工序", disabled=True, width="medium"),
+                    "删除": st.column_config.ButtonColumn(
+                        "删除", type="tertiary", on_click=_request_mon_delete,
+                        key=MON_DEL_CLICK, width="small",
+                    ),
+                },
+                hide_index=True, num_rows="fixed", width="stretch",
+            )
+        else:
+            st.info("暂无监控设备，请在上方新增")
 
+        if st.button("保存修改", icon=":material/save:", key="mon_save_names"):
+            if edited is not None:
+                name_map = dict(zip(edited["设备编号"], edited["设备名称"]))
+                new_list = []
+                for d in all_config:
+                    nd = dict(d)
+                    if nd["device_id"] in name_map:
+                        nd["name"] = name_map[nd["device_id"]]
+                    new_list.append(nd)
+                _save_config_devices(new_list)
+                st.toast("监控设备已保存")
+                st.rerun()
 
-def _fail_charts(snapshot: dict) -> None:
-    st.subheader("FAIL 分布")
-    st.caption("包含不可信数据，便于现场排查；合格率仍只统计可信数据。")
-    tab_item, tab_device = st.tabs(["按测试项", "按设备"])
-    for tab, key, label in (
-        (tab_item, "fail_by_item", "测试项"),
-        (tab_device, "fail_by_device", "设备"),
-    ):
-        with tab:
-            rows = snapshot[key]
-            if not rows:
-                st.info("今日没有 FAIL 记录。")
-                continue
-            frame = pd.DataFrame(
-                [{"标签": item["label"], "FAIL 数": item["count"]} for item in rows]
-            ).set_index("标签")
-            st.bar_chart(frame["FAIL 数"], height=300, width="stretch", horizontal=True)
+        pending = st.session_state.get(MON_DEL_PENDING)
+        if pending:
+            dev = next((d for d in all_config if d["device_id"] == pending), None)
+            if dev is None:
+                _clear_mon_delete()
+            else:
+                _confirm_mon_delete(dev)
 
+        st.divider()
+        st.subheader("调整显示顺序")
 
-def _latest_table(snapshot: dict) -> None:
-    st.subheader("最新测试（今日）")
-    latest = snapshot["latest"]
-    if not latest:
-        st.info("今日暂无测试数据。")
+        n_cols = st.number_input(
+            "每行卡片数", min_value=1, max_value=12, value=DEFAULT_COLS, step=1, key="mon_cols"
+        )
+        if all_config:
+            st.caption("拖拽下面的设备卡片调节显示顺序（从左到右、从上到下）。")
+            labels = [f"{d['name']} ({d['device_id']})" for d in all_config]
+            # key 含设备列表指纹：增删设备后组件重新挂载，避免旧拖拽状态导致顺序区不刷新
+            order_fingerprint = "|".join(d["device_id"] for d in all_config)
+            sorted_labels = sort_items(
+                labels, direction="horizontal", key=f"device_order_sort_{hash(order_fingerprint)}"
+            )
+            label_to_dev = {f"{d['name']} ({d['device_id']})": d for d in all_config}
+            new_list = [label_to_dev[x] for x in sorted_labels if x in label_to_dev]
+            if new_list and len(new_list) == len(all_config) and new_list != all_config:
+                _save_config_devices(new_list)
+                st.rerun()
+    return all_config
+
+@st.fragment(run_every=refresh_interval)
+def _render_cards_fragment() -> None:
+    """只刷新卡片区域：每 1s 重查 station_summary，不影响设备管理/删除弹窗。"""
+    # 每次fragment执行都重新读配置，保证新增/排序/删除后卡片立即同步
+    devices = _load_config_devices()
+    n_cols = int(st.session_state.get("mon_cols", DEFAULT_COLS))
+    if not devices:
+        st.info("当前没有显示的设备，请在“监控设备管理与显示设置”中新增")
         return
-    frame = pd.DataFrame(
-        [
-            {
-                "上报时间": common.local_time(item["reported_at"]),
-                "工件码": item["workpiece"],
-                "设备": item["device_id"],
-                "测试项": item["test_item"],
-                "实测值": item.get("measured_value") or "",
-                "判定": item["result"],
-                "数据可信": "是" if item["trusted"] else "否（排除统计）",
-                "程序版本": item.get("program_version") or "",
-                "测试时间": common.local_time(item.get("tested_at")),
-            }
-            for item in latest
-        ]
-    )
-    st.dataframe(frame, hide_index=True, width="stretch")
-
-
-def _render_live(device_filter: str | None) -> None:
-    snapshot, error = client.dashboard_snapshot(device_filter)
-    common.show_error(error)
-    if snapshot is None:
-        st.warning("暂时无法获取看板数据。")
-        return
-    st.caption(
-        f"统计范围：{snapshot['date']}（{config.timezone().key}）· 按测试时间统计"
-        + (f" · 设备 {device_filter}" if device_filter else "")
-    )
-    _metrics(snapshot)
-    left, right = st.columns(2)
-    with left:
-        _yield_chart(snapshot)
-    with right:
-        _fail_charts(snapshot)
-    _latest_table(snapshot)
-    st.caption(f"每 10 秒自动刷新 · 数据截至 {common.now_text()}")
+    rows = [devices[i : i + n_cols] for i in range(0, len(devices), n_cols)]
+    for row in rows:
+        row_cols = st.columns(n_cols, gap="small")
+        for idx, col in enumerate(row_cols):
+            if idx < len(row):
+                device = row[idx]
+                with col:
+                    data = _read_summary(device["device_id"])
+                    _render_card(device, data)
 
 
 def render() -> None:
-    st.title("📊 测试数据看板")
-    st.caption("今日实时结果、合格率、FAIL 分布；不可信数据自动排除出合格率统计。")
-    common.render_flash()
-    common.render_readonly_notice()
+    st.markdown(COMPACT_CSS, unsafe_allow_html=True)
+    st.title("产线测试工站监控｜设备主动上报")
 
-    devices, error = client.list_devices()
-    common.show_error(error)
-    devices = devices or []
-    options = [ALL_DEVICES] + devices
-    if st.session_state.get("dash_device") not in options:
-        st.session_state["dash_device"] = ALL_DEVICES
-    device_choice = st.sidebar.selectbox("设备筛选", options, key="dash_device")
-    device_filter = None if device_choice == ALL_DEVICES else device_choice
+    # 设备管理（含顺序/行数设置，默认折叠）——不在 fragment 内，不会被刷新打断
+    _render_device_manager(_load_config_devices())
 
-    @st.fragment(run_every=10)
-    def live() -> None:
-        _render_live(device_filter)
-
-    live()
+    st.markdown("<div style='height:14px'></div>", unsafe_allow_html=True)
+    # "设备页"用 tab 容器，与卡片内"统计"页同款容器样式
+    tab_device, = st.tabs(["设备页"])
+    with tab_device:
+        _render_cards_fragment()

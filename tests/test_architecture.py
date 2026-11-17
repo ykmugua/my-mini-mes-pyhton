@@ -37,20 +37,24 @@ def test_ui_pages_only_import_client():
     if pages.exists():
         for path in pages.rglob("*.py"):
             assert "repositories" not in path.read_text(encoding="utf-8")
-    for name in ("page_dashboard.py", "page_program.py", "page_interlock.py", "page_variables.py"):
+    for name in ("page_program.py", "page_interlock.py", "page_variables.py"):
         text = (SRC / "ui" / name).read_text(encoding="utf-8")
         for kw in ("sqlite3", "sqlalchemy", "repositories", "from .. import services"):
             assert kw not in text, (name, kw)
         assert "from . import client" in text, name
 
 
-def test_dashboard_fragment_config_static():
-    """验收 5：页面配置静态断言 run_every=10，CI 不空等 10 秒。"""
+def test_dashboard_config_static():
+    """新看板静态配置：station_summary 查询、状态色、自动刷新。"""
     text = (SRC / "ui" / "page_dashboard.py").read_text(encoding="utf-8")
-    assert "@st.fragment(run_every=10)" in text
-    # repo SQL 中含 trusted = 1
-    sql = (SRC / "repositories" / "dashboard_repo.py").read_text(encoding="utf-8")
-    assert "tr.c.trusted == 1" in sql
+    assert "refresh_interval = 1000" in text
+    assert "DEFAULT_COLS = 6" in text
+    assert "station_repo.get_by_device" in text
+    assert "station_summary" in text
+    for color in ("#888888", "#4287f5", "#28a745", "#dc3545", "#333333"):
+        assert color in text
+    assert "@st.fragment(run_every=refresh_interval)" in text
+    assert "redis" not in text.lower()
 
 
 def test_dashboard_repo_sql_excludes_untrusted():

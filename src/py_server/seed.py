@@ -20,6 +20,8 @@ from urllib.parse import quote
 
 from . import config, db, master_seed, services
 from .repositories import dashboard_repo
+from .repositories.base import with_conn
+from . import engine
 
 VARIABLES = [
     ("line_mode", "str", "AUTO"),
@@ -88,6 +90,46 @@ def _write_program_file(device: str, product: str, version: str) -> tuple[str, s
     return url, sha256
 
 
+
+def seed_station_summary() -> None:
+    """演示数据：产线监控看板用的 station_summary 汇总表。"""
+    import time
+    now_ts = int(time.time())
+    # (name, status, barcode, total, first_pass, retest, fail, 时长秒)
+    # 通过/失败: 时长=测试用时; 其他: 时长=已在此状态持续时间
+    now_name = {
+        "TEST-01": ("上电测试机", "测试中", "SN202611170001", 128, 118, 6, 4, 35),
+        "TEST-01B": ("上电测试机B", "通过", "SN202611170002", 256, 240, 10, 6, 42),
+        "TEST-02": ("功能测试机", "空闲", "无条码", 95, 90, 3, 2, 180),
+        "TEST-03": ("终检机", "失败", "SN202611170004", 40, 34, 2, 4, 58),
+        "TEST-03B": ("终检机B", "通过", "SN202611170005", 77, 70, 4, 3, 30),
+        "TEST-02B": ("功能测试机B", "测试中", "SN202611170006", 60, 55, 3, 2, 20),
+    }
+    with with_conn() as conn:
+        conn.execute(engine.station_summary.delete())
+        for device_id, (name, status, barcode, total, first_pass, retest, fail, seconds) in now_name.items():
+            conn.execute(engine.station_summary.insert().values(
+                device_id=device_id, name=name, status=status, barcode=barcode,
+                total=total, first_pass=first_pass, retest_pass=retest, fail=fail,
+                status_since=now_ts - seconds, test_duration=seconds,
+            ))
+        # 失败项明细演示数据（后端维护，前端只读）
+        conn.execute(engine.station_fail_detail.delete())
+        fail_rows = [
+            ("TEST-01", "上电电流超限", "SN202611169901"),
+            ("TEST-01", "绝缘阻抗低", "SN202611169902"),
+            ("TEST-02", "功能项F3失败", "SN202611169903"),
+            ("TEST-02", "通信超时", "SN202611169904"),
+            ("TEST-03", "耐压测试失败", "SN202611170004"),
+            ("TEST-03", "包装标签缺失", "SN202611170041"),
+            ("TEST-03", "外观划痕", "SN202611170042"),
+        ]
+        for dev, item, bc in fail_rows:
+            conn.execute(engine.station_fail_detail.insert().values(
+                device_id=dev, test_item=item, barcode=bc,
+                failed_at=__import__("datetime").datetime.now(__import__("datetime").timezone.utc).isoformat(timespec="seconds"),
+            ))
+
 def seed(reset: bool = False, with_demo: bool = False) -> None:
     db.init_db()
     existing = 0
@@ -144,6 +186,7 @@ def seed(reset: bool = False, with_demo: bool = False) -> None:
 
     # 主数据（app_pages 页面）：工序/线体/设备/程序/产品
     master_seed.seed_master_data()
+    seed_station_summary()
 
     if with_demo:
         _seed_demo_runs()

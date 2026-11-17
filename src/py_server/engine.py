@@ -269,6 +269,36 @@ product_step_devices = Table(
     UniqueConstraint("product_model", "step_no", "device_id"),
 )
 
+
+# 产线工站监控汇总表（业务后端维护，前端只读）
+station_summary = Table(
+    "station_summary",
+    metadata,
+    Column("device_id", Text, primary_key=True, nullable=True),
+    Column("name", Text, nullable=False, default="", server_default=""),
+    Column("status", Text, nullable=False, default="禁用", server_default="禁用"),
+    Column("barcode", Text, nullable=False, default="无条码", server_default="无条码"),
+    Column("total", Integer, nullable=False, default=0, server_default="0"),
+    Column("first_pass", Integer, nullable=False, default=0, server_default="0"),
+    Column("retest_pass", Integer, nullable=False, default=0, server_default="0"),
+    Column("fail", Integer, nullable=False, default=0, server_default="0"),
+    Column("status_since", Integer),          # 当前状态开始时间（unix 秒）
+    Column("test_duration", Integer),          # 最近一次测试用时（秒），通过/失败时显示
+)
+
+
+# 失败项明细（后端维护，前端只读；供看板「详细」页签展示）
+station_fail_detail = Table(
+    "station_fail_detail",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True, nullable=True),
+    Column("device_id", Text, nullable=False),
+    Column("test_item", Text, nullable=False),
+    Column("barcode", Text, nullable=False),
+    Column("failed_at", Text),
+    sqlite_autoincrement=True,
+)
+
 _engines: dict[str, Engine] = {}
 
 
