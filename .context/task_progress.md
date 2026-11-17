@@ -122,3 +122,5 @@
 **验证**：144 passed（含新增 test_variable_tree.py 等）；AppTest 多次确认渲染无异常。
 
 **当前未提交 git 的改动**：pyproject.toml、uv.lock、engine.py、seed.py、page_dashboard.py、test_architecture.py、test_ui_smoke.py、config/、repositories/station_repo.py。
+
+**补充（2026-11-17 同步时）**：README.md 已更新「功能一览」与「页面说明」两处的看板描述（产线工站监控 / station_summary / 失败详计 / 1s 局部刷新 / 设备拖拽排序），并在技术栈段落标注看板依赖 plotly + streamlit-sortables、刷新用 @st.fragment。
