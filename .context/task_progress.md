@@ -100,3 +100,25 @@
 - 型号关联的新增+列表用子容器包裹（与「选择程序」同级）。
 
 **Gotcha**：Streamlit 不热重载 `ui/pages/` 子模块改动，改完必须重启 UI 进程才能生效（改主入口 streamlit_app.py 会热重载）。
+
+### 2026-11-17：测试数据看板 → 产线工站监控（完全重写）
+
+**需求演变**：从 Redis 数据源改为 **SQLite 汇总表 station_summary**（前端只读、不算业务逻辑；后端负责维护汇总表与原始流水）。
+
+**后端新增**：
+- `engine.py` 新增 `station_summary`（device_id,name,status,barcode,total,first_pass,retest_pass,fail + 后来加的 status_since,test_duration）与 `station_fail_detail`（失败项明细：device_id,test_item,barcode,failed_at）。
+- `repositories/station_repo.py`：`get_by_device()` / `list_fail_details()` 只读查询。
+- `seed.py`：`seed_station_summary()` 写入演示数据（设备 ID 最终统一为设备注册页的 TEST-xx），失败明细 7 条。
+- 依赖：`streamlit-autorefresh`、`plotly`、`streamlit-sortables` 加入；`redis` 已移除。
+
+**页面（ui/page_dashboard.py）最终结构**：
+- 标题「产线测试工站监控｜设备主动上报」。
+- 默认折叠 expander「⚙️ 监控设备管理与显示设置」：内含监控设备管理（data_editor：设备编号/设备名称/所属线体/所属工序/删除列；新增设备从设备注册页 enabled 设备按产线+工序筛选后选择；保存修改；删除确认 dialog）+ 调整显示顺序（每行卡片数 number_input 1~12；sort_items 横向拖拽排序，key 含设备列表指纹避免删除后组件状态不同步）。
+- 设备来源：`config/device_config.json`（只控制"显示哪些设备"），新增/删除/改名/排序写回该文件；config 保留 line_id/line_name/step_no/step_name。
+- 卡片区：用 `@st.fragment(run_every=1000)` **只局部刷新卡片**（不再全局 autorefresh，避免删除弹窗闪烁）；放在 `st.tabs(["设备页"])` tab 容器里（与卡片内部 tab 同款样式）。
+- 每张卡片：设备名居中（无括号 ID）→ 条码 text_input（label_visibility=collapsed，20px 蓝色加粗）→ 状态块（状态居中 + 右侧 HH:MM:SS 时间小字；通过/失败显示 test_duration 用时，其他显示 status_since 持续时间）→ 三个 tab：**统计**（plotly 横向柱状图 140px，hover 数量+百分比，total=0 显示 `--`）/ **失败详计**（dataframe 两列：条码/失败信息，height=120 可上下滚动）/ **设备控制**（预留空页）。
+- 每个 tab 内容固定高度 150px 容器，切换 tab 卡片大小不变；每行固定 n_cols 列（不足补空），卡片大小一致不填满行。
+
+**验证**：144 passed（含新增 test_variable_tree.py 等）；AppTest 多次确认渲染无异常。
+
+**当前未提交 git 的改动**：pyproject.toml、uv.lock、engine.py、seed.py、page_dashboard.py、test_architecture.py、test_ui_smoke.py、config/、repositories/station_repo.py。

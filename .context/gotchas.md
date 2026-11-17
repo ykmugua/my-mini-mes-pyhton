@@ -117,3 +117,15 @@ SQLAlchemy 2.1.8 中 `Insert.on_conflict_do_update()` 不再接受 `constraint=`
 ## Gotcha：SQLite CHECK 约束变更需重建表
 
 给 variables.type 的 CHECK 增加 float 时，SQLite 不支持 ALTER 修改约束，需建新表→INSERT SELECT→DROP→RENAME（真实 data/mes.db 已迁移，6 行数据保留）。
+
+## 14. Gotcha：streamlit-sortables 组件 key 必须随列表变化
+
+`sort_items()` 是自定义组件，key 固定时会缓存旧 items 状态；设备增删后 items 变了但组件不重建，导致顺序区显示旧列表。解决：key 含设备列表指纹，如 `f"device_order_sort_{hash('|'.join(ids))}"`。
+
+## Gotcha：全局 st_autorefresh 与 dialog/multiselect 冲突
+
+`st_autorefresh(interval=1000)` 每秒重建整个页面，会导致删除确认弹窗闪烁、交互中断。改用 `@st.fragment(run_every=1000)` 只包住需要刷新的卡片区，页面其他部分不重建。
+
+## Gotcha：st.text_input 隐藏 label 后 AppTest 仍报告 label 属性
+
+`label_visibility="collapsed"` 时视觉上不显示 label，但 AppTest 的 element.label 仍有值（proto 中 label_visibility=COLLAPSED），验证时应检查 proto。

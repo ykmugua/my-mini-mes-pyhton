@@ -288,3 +288,15 @@
 - 页面：层级视图（st.json + 递归展开）+ 平铺列表；新增表单按三层输入（第一层必填，二三层可选）。
 - 超过三段的变量名：第三段及之后合并为第三段，保证最多三层。
 - 138 passed，真实 HTTP 往返验证通过。
+
+## 18. ADR-019：工站监控看板数据源改为 station_summary（2026-11-17）
+
+**决策**：看板只读 SQLite 汇总表 station_summary（+ station_fail_detail），不读 Redis、不算业务逻辑、不操作原始流水表。
+- 前端只展示；状态/计数由后端接收报文时维护汇总表。
+- 设备显示清单来自 config/device_config.json；新增设备从设备注册页 devices 表选择（enabled=true），按产线/工序筛选。
+- 定时刷新用 `@st.fragment(run_every=1000)` 只刷卡片区，避免设备管理/删除弹窗被全局刷新打断。
+- 失败明细单独存表，供卡片「失败详计」tab 展示。
+
+## ADR-020：设备 ID 统一（2026-11-17）
+
+演示环境的 station_summary / station_fail_detail / config 设备 ID 统一为设备注册页的 TEST-xx（早期用 D01-D06，已废弃）。
