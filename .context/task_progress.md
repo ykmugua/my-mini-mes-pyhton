@@ -137,3 +137,19 @@
 **services** 增加 query_workpieces/workpiece_detail/workpiece_test_history/workpiece_unlock_history/product_route_detail/distinct_products 薄封装。
 
 **验证**：144 passed；新 API 实测（产品列表/工件列表/详情/履历）正常；agent API 确认页面 ready 无异常。
+
+### 2026-11-17 下午/晚间续：产品查询页 + skill 合规整改
+
+**产品查询页**（ui/page_product_query.py）：查询条件（产品/工件码/状态/时间）+ 查询结果 + 追溯详情（基本信息/工艺路线/测试履历/解锁记录）+ 工序解绑（复用 unlock 用例，原因必填+勾选）。新增 product_query_repo + API 路由 + client 方法 + 导航入口。所有区块一次排开；首次自动加载全部，改条件后点“查询”按钮过滤（实时查询时序不稳已修复）。时间控件最终用两个原生 st.datetime_input（format=YYYY/MM/DD, step=60, value=None），精确到分钟。
+
+**seed 修复**：report_test_result 补传 program_sha256，工件状态正确推进为 PASS(20)/FAIL(5)，此前全停留 PENDING 导致产品查询按状态查不到。
+
+**Streamlit skill 合规整改**：
+- COMPACT_CSS 从 st.markdown(unsafe_allow_html=True) 改为 st.html()；私有 data-testid 选择器改为 .st-key-barcode_*；去掉 .block-container 等私有类。
+- 状态块/卡片标题改用 st.html()；去掉纯间隔 div 的 markdown。
+- 所有 st.dataframe / st.data_editor / st.plotly_chart 补 alt=（看板/工序锁/产品查询/程序页/型号关联）。
+- 验证：unsafe_allow_html=0、use_container_width=0，144 passed，agent API 多页 ready 无异常。
+
+**看板 UI 细节**：设备页从单标签 tab 改为 bordered container 内嵌 tab；删除设备后 sort_items key 含列表指纹避免不同步；卡片 tab 固定高度 150px；每行卡片数可调；设备列表与注册页列一致（编号/名称/线体/工序/删除）。
+
+**当前改动均未提交 git**（context 与工程代码都有）。

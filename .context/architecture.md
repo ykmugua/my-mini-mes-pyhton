@@ -304,3 +304,7 @@
 ## 19. ADR-021：产品查询页只读+受控解绑（2026-11-17）
 
 追溯全部只读（workpieces/test_results/product_routes/unlock_logs）；工序解绑复用现有 unlock 用例（状态回 PENDING、写 unlock_logs、不原始测试记录），保留原因必填+勾选确认约束。不新建业务表。
+
+## 20. ADR-022：图层卡片刷新用 fragment 局部刷新（2026-11-17）
+
+全局 st_autorefresh 每秒重建整页，导致删除确认弹窗闪烁。改为 @st.fragment(run_every=1000) 只刷卡片区，设备管理/弹窗不重建。sort_items 自定义组件 key 需含设备列表指纹，避免增删设备后组件缓存旧状态。
