@@ -136,3 +136,21 @@ SQLAlchemy 2.1.8 中 `Insert.on_conflict_do_update()` 不再接受 `constraint=`
 - 历史状态：之前 `where pwsh` 指向 WindowsApps 下 0 字节 stub（PS7 实际未装成），当时回退用 5.1。
 - **当前状态（2026-11-18 验证）**：PowerShell 7.6.10 已真正安装，`where pwsh` → `C:\Program Files\PowerShell\7\pwsh.exe`，`pwsh -NoProfile -Command '$PSVersionTable.PSVersion.ToString()'` 输出 7.6.10。
 - 后续我启动脚本/执行 PS 命令一律优先用 `pwsh`（如 `pwsh -NoProfile -File .\scripts\run_ui.ps1`）。
+
+### 2026-11-18：pwsh 版本更新（商店版 7.7.0 成为默认）
+
+- 用户长期偏好：**优先使用 PowerShell 7 (`pwsh`)** 执行 PowerShell 脚本/命令，仅当 `pwsh` 不可用时回退到 Windows PowerShell 5.1。
+- 2026-11-18 再次验证：直接执行 `pwsh` 时，实际进程是 **商店版 PS 7.7.0**：
+  - 真实执行体：`C:\Program Files\WindowsApps\Microsoft.PowerShell_7.7.0.0_x64__8wekyb3d8bbwe\pwsh.exe`
+  - `where.exe pwsh` 第一项是 WindowsApps 的别名入口 `C:\Users\WL\AppData\Local\Microsoft\WindowsApps\Microsoft.PowerShell_8wekyb3d8bbwe\pwsh.exe`（0 字节 stub，能正确转发）
+  - `pwsh -NoProfile -Command '$PSVersionTable.PSVersion.ToString()'` → `7.7.0`
+- 同时机器上还有传统 MSI 安装：`C:\Program Files\PowerShell\7\pwsh.exe` → **7.6.10**（这就是上一条记录里的版本，并非被卸载，只是不再是 `pwsh` 命令默认指向）。
+- 结论：以后直接写 `pwsh` 即可，默认走 7.7.0；如需固定 7.6.10，显式调用 `C:\Program Files\PowerShell\7\pwsh.exe`。启动本工程脚本实测：`pwsh -NoProfile -File .\scripts\run_api.ps1` / `run_ui.ps1` 正常。
+
+- **关联**：[2026-11-18：PowerShell 7 已可用（长期偏好更新）]
+
+### 2026-11-18：任务完成后自动 /sync-save
+
+- 用户明确要求：**每次完成一个明确的开发/修改任务（代码改动并验证通过后），自动执行 `/sync-save`**（调用 sync_push），无需用户再说 /sync-save。
+- 范围：只读操作（查看文件、查询状态等）不触发；必须是改了东西的任务。
+- 已同步写入 AGENTS.md 的“长期偏好”段落。
