@@ -129,3 +129,10 @@ SQLAlchemy 2.1.8 中 `Insert.on_conflict_do_update()` 不再接受 `constraint=`
 ## Gotcha：st.text_input 隐藏 label 后 AppTest 仍报告 label 属性
 
 `label_visibility="collapsed"` 时视觉上不显示 label，但 AppTest 的 element.label 仍有值（proto 中 label_visibility=COLLAPSED），验证时应检查 proto。
+
+### 2026-11-18：PowerShell 7 已可用（长期偏好更新）
+
+- 用户长期偏好：**优先使用 PowerShell 7 (pwsh)** 执行 PowerShell 脚本/命令，仅当 pwsh 不可用时回退到 Windows PowerShell 5.1。
+- 历史状态：之前 `where pwsh` 指向 WindowsApps 下 0 字节 stub（PS7 实际未装成），当时回退用 5.1。
+- **当前状态（2026-11-18 验证）**：PowerShell 7.6.10 已真正安装，`where pwsh` → `C:\Program Files\PowerShell\7\pwsh.exe`，`pwsh -NoProfile -Command '$PSVersionTable.PSVersion.ToString()'` 输出 7.6.10。
+- 后续我启动脚本/执行 PS 命令一律优先用 `pwsh`（如 `pwsh -NoProfile -File .\scripts\run_ui.ps1`）。
