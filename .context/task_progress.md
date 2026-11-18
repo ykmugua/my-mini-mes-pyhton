@@ -283,3 +283,24 @@
 - seed_test_reports 改为 10 个产品 × 3 道工序（S1/S2/S3）× 每份报告 10 条测试明细。
 - 验证：主库 test_reports=30；db_1_S1/db_2_S2/db_3_S3 各 10 份 report_index、100 条明细；ProductFlow overview=10、每产品 3 条流转记录（共 30）。
 - 清理旧备份库；全量 152 passed；API/UI 重启。
+
+### 2026-11-18 看板统计时间区间完成
+
+- 按 ADR-038 完成 5 点；UI 重启；全量 152 passed。
+
+### 2026-11-18 看板工序页完成
+
+- 按 ADR-039 新增工序页 tab；全量 152 passed；UI 重启。
+
+### 2026-11-18 工序页与时间区间/刷新联动
+
+- 设备页和工序页统一用 _device_stats(device_id, applied_stat_range) 获取统计；有生效区间则按各工序库 report_index 统计，否则读 station_summary。
+- 两页仍各自 @st.fragment(run_every=refresh_interval) 每 1 秒刷新；工序页显示当前生效区间 caption。
+- AppTest：看板 0 异常；区间 caption 正确输出；全量 152 passed；UI 重启。
+
+### 2026-11-18 阶段性任务完成：前端页面功能基本完成
+
+- 产品查询：查询结果改用 ProductFlow.product_overview；筛选字段按数据库字段名与顺序；测试履历独立成同级块并按工序分 tab；产品流转/工序解绑顺序排列；工序解绑可任切工序并写备注。
+- 测试数据看板：设备页 + 工序页 tabs；监控设备管理 / 设置显示两个同级折叠容器；设置显示含卡片顺序、每行卡片数、统计时间区间（可点选 datetime、清空、查询才生效）；两页均 1 秒 fragment 刷新且共用 applied_stat_range。
+- V1.3 上传、按工序分测试库、ProductFlow 流转库、演示数据扩充（10 产品 × 3 工序 × 10 明细）均稳定。
+- 整理：README/数据模型/页面说明同步；清理 __pycache__、临时脚本、日志；compileall 通过；全量 pytest 152 passed；API/UI 重启。

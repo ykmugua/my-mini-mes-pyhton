@@ -469,3 +469,25 @@
 - AppTest：0 异常；全量 152 passed。
 
 - **关联**：[ADR-036](architecture.md#adr-036)
+
+### ADR-038：看板设置显示 + 统计时间区间（2026-11-18）
+
+- 测试数据看板两个同级折叠容器：监控设备管理 / 设置显示。
+- 设置显示：先调整卡片顺序，后“调整统计时间区间”。
+- 时间控件使用可空文本输入框，格式 YYYY-MM-DD HH:MM:SS（Streamlit 原生 datetime_input 不支持秒与空值+该格式）。
+- 三个并行控件：开始时间 / 结束时间 / 清空；下方单独“查询”按钮。只有点击查询才把区间写入 applied_stat_range 并影响卡片统计。
+- 默认规则：结束空→当前时间；开始空→结束当天 0 点；两者空→今天 0 点到现在。清空按钮把开始/结束都置空。
+- 统计按生效区间扫描各工序测试库 report_index（按 station + testexecutetime 过滤），计算 total/first_pass/retest_pass/fail 并覆盖卡片统计值。
+- 验证：全量 152 passed；AppTest 看板 0 异常；默认区间输出 2026-11-18 00:00:00 ~ now。
+
+- **关联**：[ADR-037](architecture.md#adr-037)
+
+### ADR-039：测试数据看板新增工序页 tab（2026-11-18）
+
+- 设备页同级新增“工序页” tab；按监控设备列表 config/device_config.json 的 step_no/step_name 分组统计。
+- 工序页显示：工序号、工序名、监控设备数、测试总数、一次通过、复测通过、失败、合格率；并画分组柱状图。
+- 统计值复用“设置显示”里的生效时间区间 applied_stat_range：有区间时按各工序库 report_index 统计，无区间时读 station_summary 汇总。
+- 工序页用 @st.fragment(run_every=1000) 局部刷新。
+- AppTest 0 异常；全量 152 passed；UI 重启。
+
+- **关联**：[ADR-038](architecture.md#adr-038)
