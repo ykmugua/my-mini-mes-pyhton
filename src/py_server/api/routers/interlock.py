@@ -36,6 +36,8 @@ def ui_unlock(payload: UnlockIn) -> dict:
         operator=payload.operator,
         reason=payload.reason,
         confirmed=payload.confirmed,
+        target_step=payload.target_step,
+        note=payload.note,
     )
 
 

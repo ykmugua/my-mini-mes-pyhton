@@ -270,6 +270,26 @@ product_step_devices = Table(
 )
 
 
+# V1.3 整单测试结果上报：主表（一次上报一单）
+test_reports = Table(
+    "test_reports",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True, nullable=True),
+    Column("request_id", Text, nullable=False, unique=True),
+    Column("linecode", Text, nullable=False),
+    Column("station", Text, nullable=False),
+    Column("componentcode", Text, nullable=False),
+    Column("barcode", Text, nullable=False),
+    Column("programname", Text, nullable=False),
+    Column("programversion", Text, nullable=False),
+    Column("testexecutetime", Text, nullable=False),
+    Column("result", Text, nullable=False),
+    Column("testlongtime", Text, nullable=False),
+    Column("isfinalreport", Text, nullable=False, default="false", server_default="false"),
+    Column("created_at", Text, nullable=False),
+    sqlite_autoincrement=True,
+)
+
 # 产线工站监控汇总表（业务后端维护，前端只读）
 station_summary = Table(
     "station_summary",
@@ -300,6 +320,71 @@ station_fail_detail = Table(
 )
 
 _engines: dict[str, Engine] = {}
+_details_engines: dict[str, Engine] = {}
+_report_engines: dict[str, Engine] = {}
+_flow_engines: dict[str, Engine] = {}
+
+
+def get_details_engine() -> Engine:
+    """生产明细独立库（与主库物理分离，按产品分表）。"""
+    path = str(config.details_db_path())
+    engine = _details_engines.get(path)
+    if engine is None:
+        Path(path).parent.mkdir(parents=True, exist_ok=True)
+        engine = create_engine(f"sqlite:///{path}", future=True)
+
+        @event.listens_for(engine, "connect")
+        def _details_sqlite_pragmas(dbapi_conn, _):
+            cur = dbapi_conn.cursor()
+            cur.execute("PRAGMA journal_mode=WAL")
+            cur.execute("PRAGMA synchronous=NORMAL")
+            cur.execute("PRAGMA busy_timeout=5000")
+            cur.close()
+
+        _details_engines[path] = engine
+    return engine
+
+
+
+
+def _open_engine(path: Path | str, *, foreign_keys: bool = False) -> Engine:
+    """创建 SQLite Engine（统一 WAL/busy_timeout 配置）。"""
+    path = str(path)
+    eng = create_engine(f"sqlite:///{path}", future=True)
+
+    @event.listens_for(eng, "connect")
+    def _pragmas(dbapi_conn, _):
+        cur = dbapi_conn.cursor()
+        cur.execute("PRAGMA journal_mode=WAL")
+        cur.execute("PRAGMA synchronous=NORMAL")
+        if foreign_keys:
+            cur.execute("PRAGMA foreign_keys=ON")
+        cur.execute("PRAGMA busy_timeout=5000")
+        cur.close()
+
+    return eng
+
+
+def get_report_engine(step_no: str | int, step_name: str) -> Engine:
+    """按工序获取测试报告库 Engine（db_<工序>_<工序名>.db）。"""
+    path = str(config.report_db_path(step_no, step_name))
+    eng = _report_engines.get(path)
+    if eng is None:
+        Path(path).parent.mkdir(parents=True, exist_ok=True)
+        eng = _open_engine(path)
+        _report_engines[path] = eng
+    return eng
+
+
+def get_product_flow_engine() -> Engine:
+    """产品流转库 Engine（ProductFlow.db）。"""
+    path = str(config.product_flow_db_path())
+    eng = _flow_engines.get(path)
+    if eng is None:
+        Path(path).parent.mkdir(parents=True, exist_ok=True)
+        eng = _open_engine(path)
+        _flow_engines[path] = eng
+    return eng
 
 
 def get_engine() -> Engine:
@@ -326,6 +411,9 @@ def get_engine() -> Engine:
 def reset_for_tests() -> None:
     """测试中切换数据库文件时清空 Engine 缓存。"""
     _engines.clear()
+    _details_engines.clear()
+    _report_engines.clear()
+    _flow_engines.clear()
 
 
 def init_schema() -> None:

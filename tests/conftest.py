@@ -13,6 +13,7 @@ def isolated(tmp_path, monkeypatch):
     data_dir = tmp_path / "data"
     monkeypatch.setenv("MES_DATA_DIR", str(data_dir))
     monkeypatch.setenv("MES_DB_PATH", str(data_dir / "mes.db"))
+    monkeypatch.setenv("MES_DETAILS_DB_PATH", str(data_dir / "TestReport.db"))
     monkeypatch.setenv("MES_PROGRAM_DIR", str(data_dir / "programs"))
     monkeypatch.setenv("MES_API_PUBLIC_BASE", "http://testserver")
     monkeypatch.setenv("MES_TZ", "Asia/Shanghai")

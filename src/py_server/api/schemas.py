@@ -84,6 +84,8 @@ class UnlockIn(BaseModel):
     workpiece: str = Field(min_length=1)
     operator: str = Field(min_length=1)
     reason: str = Field(min_length=1)
+    target_step: str | None = None
+    note: str | None = None
     confirmed: bool = False
 
 class MasterDataIn(BaseModel):

@@ -451,7 +451,7 @@ def list_locked_workpieces() -> list[dict]:
     return workpiece_repo.list_locked()
 
 
-def unlock_workpiece(workpiece, operator, reason, confirmed=False) -> dict:
+def unlock_workpiece(workpiece, operator, reason, confirmed=False, target_step=None, note=None) -> dict:
     workpiece = _clean_text(workpiece, "工件码", max_len=128)
     operator = _clean_text(operator, "解锁人", max_len=64)
     reason = _clean_text(reason, "解锁原因", max_len=512)
@@ -464,7 +464,8 @@ def unlock_workpiece(workpiece, operator, reason, confirmed=False) -> dict:
             raise NotFoundError(f"工件 {workpiece} 不存在")
     try:
         return _unlock_workpiece_uc.execute(
-            wp_row=wp_row, operator=operator, reason=reason, confirmed=confirmed, now=now
+            wp_row=wp_row, operator=operator, reason=reason, confirmed=confirmed, now=now,
+            target_step=target_step, note=note,
         )
     except InvariantViolation as exc:
         raise ValidationError(str(exc)) from exc
@@ -793,6 +794,10 @@ def workpiece_detail(workpiece: str) -> dict | None:
 
 
 def workpiece_test_history(workpiece: str) -> list[dict]:
+    """测试履历：优先 V1.3 整单（主子表），无则回退旧 test_results 单条。"""
+    reports = product_query_repo.test_reports_history(workpiece)
+    if reports:
+        return reports
     return product_query_repo.test_history(workpiece)
 
 

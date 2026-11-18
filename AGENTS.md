@@ -1,3 +1,10 @@
+# 长期偏好
+
+- 优先使用 PowerShell 7 (pwsh) 执行 PowerShell 脚本和命令；仅当 pwsh 不可用时回退到 Windows PowerShell 5.1。
+- 当前机器 pwsh 默认指向商店版 **PS 7.7.0**（C:\Program Files\WindowsApps\Microsoft.PowerShell_7.7.0.0_x64__8wekyb3d8bbwe\pwsh.exe，经 WindowsApps 别名 stub 转发）；另有 MSI 版 7.6.10 在 C:\Program Files\PowerShell\7\pwsh.exe。直接写 pwsh 即可，实测启动本工程脚本正常。
+
+- `/sync-save` 仅当用户主动说出时才执行；我不要自动执行。
+---
 你有 context-sync MCP 工具。开发过程中：
 
 - 踩坑了 → write_context 写到 gotchas

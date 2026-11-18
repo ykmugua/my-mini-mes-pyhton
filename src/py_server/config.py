@@ -30,6 +30,21 @@ def db_path() -> Path:
     return _env_path("MES_DB_PATH", data_dir() / "mes.db")
 
 
+def details_db_path() -> Path:
+    """兼容旧配置：默认测试报告库（新设计按工序分库后仅作迁移参考）。"""
+    return _env_path("MES_DETAILS_DB_PATH", data_dir() / "TestReport.db")
+
+
+def report_db_path(step_no: str | int, step_name: str) -> Path:
+    """按工序报告库：db_<工序号>_<工序名>.db（工序名只允许英文/数字）。"""
+    return data_dir() / f"db_{step_no}_{step_name}.db"
+
+
+def product_flow_db_path() -> Path:
+    """产品流转库：ProductFlow.db。"""
+    return _env_path("MES_PRODUCT_FLOW_DB_PATH", data_dir() / "ProductFlow.db")
+
+
 def program_dir() -> Path:
     """程序文件静态目录，由接口服务挂载到 /programs。"""
     path = _env_path("MES_PROGRAM_DIR", data_dir() / "programs")

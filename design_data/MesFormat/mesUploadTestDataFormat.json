@@ -1,17 +1,20 @@
 {
-  "station": "39C0-L2-1F-DIP16-FCT01",
   "linecode": "L2-1F-DIP-D16",
-  "testtime": "2025/4/22 13:55:35.123",
+  "station": "39C0-L2-1F-DIP16-FCT01",
+  "componentcode": "L120201091",
   "barcode": "71202011752609010004567V8083",
-  "result": "FAIL",
+  "programname": "TEST-DUT-001",
+  "programversion": "V0.0.2",
+  "testexecutetime": "2025/4/22 13:55:35.123",
   "testlongtime": "00:00:06.300",
+  "result": "FAIL",
   "details": [    
     {
       "TestItem": "测试温度",
       "TestStep": "SOC_HW_ID1",
       "StandardValue": "1.10",
       "UpperValue": "1.20",
-      "littleValue": "0.90",
+      "LowerValue": "0.90",
       "MeasureValue": "1.12",
       "TestResult": "true",
       "TestBeginTime": "13:55:35.123",
@@ -22,13 +25,12 @@
       "TestStep": "SOC_HW_ID2",
       "StandardValue": "1.10",
       "UpperValue": "1.20",
-      "littleValue": "0.90",
+      "LowerValue": "0.90",
       "MeasureValue": "1.22",
       "TestResult": "false",
       "TestBeginTime": "13:55:38.423",
       "TestEndTime": "13:55:41.423"
     }
   ],
-  "programname": null,
-  "programversion": null
+  "isfinalreport": "false"
 }

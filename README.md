@@ -18,36 +18,35 @@
 | 产品管理     | 产品主数据、工序流程（成功/失败下站）、产品-工序-设备分配范围                                                                |
 | 测试数据看板 | 产线工站监控：设备状态卡片（空闲/测试中/通过/失败/禁用）；条码、状态持续时间/测试用时；统计柱状图、失败详计列表；设备增删改与拖拽排序；1 秒局部刷新 |
 | 开放性变量   | 最多三层组/子组/键层级（JSON 树视图）；变量定义与当前值查看、前缀筛选；新增变量；30 秒自动刷新；设备按完整路径读写接口          |
-| 设备接口     | 程序拉取、程序状态上报、测试结果上报、放行查询、变量读写；测试结果幂等                                                         |
+| 设备接口     | 程序拉取、程序状态上报、测试结果上报（V1.3 整单 + 旧单条）、放行查询、变量读写；请求头幂等 + 测试项幂等                        |
 
-技术栈：**Streamlit 1.67 + FastAPI + SQLAlchemy Core + SQLite**；看板额外使用 `plotly`（柱状图）/ `streamlit-sortables`（拖拽排序），刷新用 Streamlit 原生 `@st.fragment`。改造后为双进程：**FastAPI 独占数据库，Streamlit 只通过 HTTP 访问 FastAPI，不再直连数据库**（看板是例外：按要求直接只读 SQLite 汇总表 `station_summary`）。
+技术栈：**Streamlit 1.67 + FastAPI + SQLAlchemy Core + SQLite**；看板额外使用 `plotly`（柱状图）/ `streamlit-sortables`（拖拽排序），刷新用 Streamlit 原生 `@st.fragment`。双进程部署：**FastAPI 主要给机台使用**（上传/查询/程序拉取/放行/变量）；**Streamlit 作为内部工具可直接通过 Repository 读写数据库**（看板已直读 `station_summary`），也可经 HTTP 调 FastAPI。见 design_data/system_design_framework/manual.md。
 
 ```
-                    ┌────────────────────────────┐
-   浏览器 ─────────▶│ Streamlit :8501            │
-                    │  6 个页面（st.navigation）  │
-                    │  只 import ui/client.py    │
-                    └─────────────┬──────────────┘
-                                  │ HTTP/JSON（MES_UI_API_BASE）
-   测试设备 ───────▶┌─────────────▼──────────────┐
-   (HTTP/JSON)      │ FastAPI :8000              │
-                    │  接口层 api/routers + ui/* │
-                    │  应用层 application/（3 用例）│
-                    │  领域层 domain/（纯 Python） │
-                    └─────────────┬──────────────┘
-                                  │ Repository（唯一写 SQL）
-                    ┌─────────────▼──────────────┐
-                    │ SQLAlchemy Engine (engine.py)│
-                    │ SQLite（可切 PostgreSQL）    │
-                    └─────────────┬──────────────┘
-                                  ▼
-                       data/mes.db + data/programs/
+                    ┌──────────────────────────────────┐
+   浏览器 ─────────▶│ Streamlit :8501（7 个页面）      │
+                    │  Repository 读写 / HTTP（可选）   │
+                    └───┬──────────────────────┬───────┘
+                        │ Repository 读写      │ HTTP/JSON（可选）
+                        │（内部工具）          └────────────┐
+   测试设备 ───────▶┌───▼───────────────────────────────▼─┐
+   (HTTP/JSON)      │ FastAPI :8000（主要给机台）          │
+                    │  api/routers + application/（4 用例） │
+                    │  domain/（纯 Python）                 │
+                    └───────────────┬──────────────────────┘
+                                    │ Repository（唯一写 SQL）
+                    ┌───────────────▼──────────────────────┐
+                    │ SQLAlchemy Engine (engine.py)         │
+                    │ SQLite（可切 PostgreSQL）             │
+                    └───────────────┬──────────────────────┘
+                                    ▼
+                         data/mes.db + data/programs/
 ```
 
 ### 三条取舍（本次改造明确保持）
 
-1. **FastAPI 独占数据库**：Streamlit 与机台一样只走 HTTP；UI 进程不出现 `sqlite3` / SQLAlchemy / Repository import。
-2. **薄应用层只有 3 个用例**：`report_test_result`、`unlock_workpiece`、`report_program_status` 持有事务边界；其余 CRUD 路由直接调 repo，不配空壳用例。
+1. **FastAPI 主要给机台使用**：机台经 HTTP 访问；Streamlit 是内部工具，可直接通过 Repository 读写数据库（不写 SQL、不感知 SQLAlchemy），也可经 HTTP 调 FastAPI。
+2. **薄应用层 4 个用例**：`report_test_result`、`unlock_workpiece`、`report_program_status`、`upload_test_result_v1`（MES V1.3 整单上传）持有事务边界；其余 CRUD 路由直接调 repo，不配空壳用例。
 3. **聚合不写库，事务由用例持有**：`domain/` 方法只做状态判定并返回领域结果（如 `UnlockOutcome`、`TrustVerdict`），日志与落盘由 application 用例在同一事务内完成。
 
 ---
@@ -98,9 +97,9 @@ py-server/
 │  │  ├─ trust/            # ProgramTrustPolicy / Binding / TrustVerdict
 │  │  ├─ workpiece/        # Workpiece 聚合 / UnlockOutcome / LockReason
 │  │  └─ interlock/        # InterlockPolicy 五步判定
-│  ├─ application/         # 薄应用层：仅 3 个用例，持有事务边界
-│  ├─ repositories/        # 唯一写 SQL 的层（含 master_data_repo 主数据）
-│  ├─ api/                 # FastAPI 实例 / schemas / deps / routers/
+│  ├─ application/         # 薄应用层：4 个用例，持有事务边界（含 upload_test_result_v1）
+│  ├─ repositories/        # 唯一写 SQL 的层（含 station_repo / upload_repo 幂等）
+│  ├─ api/                 # FastAPI 实例 / schemas(.py/.v1) / deps / routers/
 │  ├─ services.py          # 兼容入口：输入校验 + 委托各层
 │  ├─ ui/                  # client.py（唯一 HTTP 客户端）+ pages/ + 公共组件
 │  ├─ seed.py              # 演示数据初始化
@@ -121,6 +120,7 @@ py-server/
 | ----------------------- | ---------------------------- | -------------------------------------------------------- |
 | `MES_DATA_DIR`        | `<项目>/data`              | 运行期数据目录                                           |
 | `MES_DB_PATH`         | `$MES_DATA_DIR/mes.db`     | SQLite 文件路径                                          |
+| `MES_DETAILS_DB_PATH` | `$MES_DATA_DIR/TestReport.db` | **生产明细独立库**：每产品一张明细表，物理隔离主库         |
 | `MES_PROGRAM_DIR`     | `$MES_DATA_DIR/programs`   | 程序文件静态目录，挂在 `/programs`                     |
 | `MES_TZ`              | `Asia/Shanghai`            | “今日”统计与页面展示使用的业务时区                     |
 | `MES_API_PORT`        | `8000`                     | 接口服务端口（用于拼默认下载地址）                       |
@@ -141,8 +141,13 @@ py-server/
 | `program_status_logs` | 设备程序状态上报记录（含不可信原因）                                                         |
 | `workpieces`          | 工件当前状态：PASS/FAIL/待测、当前设备、锁定原因/时间、解锁人/原因/人工放行时间              |
 | `test_results`        | 测试结果；`UNIQUE(workpiece, device_id, test_item)` 保证幂等；`trusted` 标记数据是否可信 |
+| `station_summary`     | 产线看板汇总：设备状态/条码/总数/一次通过/复测通过/失败/持续时间；由 V1.3 上报维护，前端只读 |
+| `station_fail_detail` | 看板失败明细：设备/失败项/条码/时间；由 V1.3 上报维护，前端只读                        |
+| `test_reports`        | V1.3 整单主表（主库）：请求 ID 幂等 + JSON 顶层字段（含 isfinalreport）；每单一行      |
+| `report_index`        | **details.db 总览表**：每单一行，含 isfinalreport / failed_step / details_table 指向   |
+| `d_<hash>`            | **details.db 独立库**：每个产品/条码一张明细表，id 从 1 开始                            |
 | `unlock_logs`         | 解锁留痕（工件、解锁人、原因、锁定原因、时间）                                               |
-| `variables`           | 开放变量：名称、类型（int/str/bool）、当前值、最后写入设备、更新时间                         |
+| `variables`           | 开放变量：名称、类型（int/str/bool/float）、当前值、最后写入设备、更新时间                    |
 | `upstream_devices`    | 前道关键设备配置；产品留空表示对所有产品生效                                                 |
 | `settings`            | 预留的键值配置表                                                                             |
 
@@ -156,7 +161,10 @@ py-server/
 | ---- | ---------------------------------------- | -------------------------------------------------- |
 | GET  | `/api/program?device_id=&product=`     | 拉取程序元数据（同时写拉取记录）                   |
 | POST | `/api/program/status`                  | 上报已加载版本与校验结果                           |
-| POST | `/api/test-result`                     | 上报测试结果（幂等）                               |
+| POST | `/api/v1/test-results`                 | **V1.3 整单上报（机台主接口）**：请求头 SN/时间戳/请求 ID，幂等，更新看板汇总 |
+| POST | `/api/test-result`                     | 旧单条上报接口（内部/测试兼容用，机台不再使用）    |
+| GET  | `/api/ui/program/drift`                | 页面：版本漂移清单                                 |
+
 | GET  | `/api/interlock?workpiece=&device_id=` | 查询工件能否在本设备操作（`device_id` 建议必传） |
 | GET  | `/api/variable/{name}`                 | 读取开放变量                                       |
 | POST | `/api/variable/{name}`                 | 写入开放变量                                       |
@@ -202,7 +210,54 @@ Content-Type: application/json
 
 版本或校验和与绑定不一致、设备自检失败时 `trusted=false`，该设备后续上报的测试结果会被标记为**不可信**。只上报校验和但缺少版本、或自检失败时，也会进入页面顶部的漂移告警（提示上报信息不完整 / 自检失败）。
 
-### 6.3 上报测试结果（幂等）
+### 6.3 上报测试结果（MES V1.3 整单，机台主接口）
+
+```http
+POST /api/v1/test-results
+Content-Type: application/json; charset=UTF-8
+x-device-sn: <barcode>
+x-timestamp: <毫秒时间戳，秒级取整，13 位>
+x-request-id: <32 位 UUID，重试时保持不变>
+```
+
+请求体（所有 string 字段禁止 null，空值用 `/` 占位；服务端按字符串原样接收）：
+
+```json
+{
+  "linecode": "L2-1F-DIP-D16",
+  "station": "39C0-L2-1F-DIP16-FCT01",
+  "componentcode": "L120201091",
+  "barcode": "71202011752609010004567V8083",
+  "programname": "TEST-DUT-001",
+  "programversion": "V0.0.2",
+  "testexecutetime": "2025/4/22 13:55:35.123",
+  "result": "FAIL",
+  "testlongtime": "00:00:06.300",
+  "details": [
+    {"TestItem": "测试温度", "TestStep": "SOC_HW_ID1", "StandardValue": "1.10",
+     "UpperValue": "1.20", "LowerValue": "0.90", "MeasureValue": "1.12",
+     "TestResult": "true", "TestBeginTime": "13:55:35.123", "TestEndTime": "13:55:37.123"}
+  ]
+}
+```
+
+* 明细下限字段名是 **`LowerValue`**（以 `design_data/MesFormat/mesUploadTestDataFormat.json` 为准，协议文档里的 `littleValue` 是旧称）；
+* `x-device-sn` 必须等于 `barcode`，否则业务码 `40003`；三个请求头缺一返回 `40001`；
+* 响应统一为四字段信封：`{"success": true, "message": "success", "code": 0, "result": {...}}`；失败时 `result=null`，`code` 为 `40001/40003/409/50000`；
+* `x-request-id` 是幂等键：网络超时/5xx/50000/50300 重试时复用同一值，服务端直接返回上次结果；`409` 视为成功，不为成功重试；
+* 上报成功会自动维护 `station_summary` / `station_fail_detail`，测试数据看板 1 秒内显示真实数据；同一条码第二次上报识别为复测；
+* 整单中每条明细作为一条内部测试结果入库，沿用原有程序可信性判定（不可信仍锁定工件）。
+
+响应示例：
+
+```json
+{"success": true, "message": "success", "code": 0,
+ "result": {"workpiece": "71202011752609010004567V8083", "station": "39C0-L2-1F-DIP16-FCT01",
+            "result": "FAIL", "retest": false, "request_id": "a1b2c3d4e5f67890abcdef1234567890"}}
+```
+
+### 6.3b 上报测试结果（旧单条接口，内部/测试兼容）
+
 
 ```http
 POST /api/test-result
@@ -287,7 +342,7 @@ POST /api/variable/line_mode
 | 📊 测试数据看板 | 产线测试工站监控（只读 `station_summary` 汇总表 + `station_fail_detail` 失败明细）：设备卡片（状态色块+HH:MM:SS 时间）；「统计/失败详计/设备控制」页签；`@st.fragment(run_every=1000)` 只刷新卡片区；折叠式「监控设备管理」（从设备注册页选择设备、按产线/工序筛选、data_editor 管理、拖拽排序、每行卡片数可调） |
 | 🔧 开放性变量   | 前缀筛选；变量表；新增变量表单；30 秒自动刷新；接口示例                                                                                                                                                         |
 
-页面通过 `ui/client.py` 以 HTTP 访问 FastAPI 的 `/api/ui/*`，接口层再委托同一套 domain/application/repositories，因此页面里的“放行状态自检”、看板统计与设备接口结果完全一致。
+页面可直接通过 Repository 读写数据库（不写 SQL、不感知 SQLAlchemy），也可经 `ui/client.py` 以 HTTP 访问 FastAPI；两条路径复用同一套 domain/application/repositories，因此页面里的“放行状态自检”、看板统计与设备接口结果完全一致。
 
 ---
 
@@ -301,9 +356,10 @@ POST /api/variable/line_mode
 | 2 | 设备上报版本不一致时程序页面顶部告警                    | `program_drift()` + 页面顶部 `st.error`；`test_acceptance_2_version_drift_alert`、`test_main_app_renders_with_drift_alert` |
 | 3 | 前道无 PASS 拒绝；FAIL 工件后续设备拒绝                 | `test_acceptance_3_interlock_rules`                                                                                              |
 | 4 | 解锁必须原因 + 勾选确认，解锁后放行恢复、记录可查       | `test_acceptance_4_unlock_requires_reason_and_confirm`、`test_interlock_unlock_from_page`                                      |
-| 5 | 看板 10 秒内更新，校验和不匹配不计入合格率              | `st.fragment(run_every=10)`；`test_acceptance_5_dashboard_excludes_untrusted`                                                  |
+| 5 | 看板 1 秒内更新，校验和不匹配不计入合格率               | `st.fragment(run_every=1000)`；`test_acceptance_5_dashboard_excludes_untrusted`                                                  |
 | 6 | 新增变量后设备读到初始值，设备写入后页面显示新值        | `test_acceptance_6_variables_roundtrip`、`test_variables_add_from_page`                                                        |
 | 7 | 重复上报幂等                                            | `UNIQUE(workpiece, device_id, test_item)`；`test_acceptance_7_duplicate_report_is_idempotent`                                  |
+| 8 | V1.3 整单上报：请求头校验、幂等、看板汇总、复测          | `POST /api/v1/test-results`；`test_upload_v1.py`（6 个用例）                                                                   |
 
 手动验证示例（服务启动后）：
 
@@ -332,9 +388,9 @@ uv run python examples/device_client.py --device TEST-01 --product P-1001 demo
 uv run pytest
 ```
 
-当前结果：**39 passed**，包括：
+当前结果：**150 passed**，包括：
 
-* 7 条验收标准的自动化用例；
+* 7 条验收标准 + V1.3 上传 6 条自动化用例；
 * 接口边界（404/400/422、多产品歧义、静态文件下载、类型校验、变量前缀筛选）；
 * 业务规则（漂移、可信性、前道规则、失败与解锁）；
 * 4 个 Streamlit 页面的 AppTest 冒烟，以及页面内解锁/新增变量/只读角色交互。
@@ -346,7 +402,7 @@ uv run pytest
 1. **接口服务**绑定 `0.0.0.0:8000`，**页面**绑定 `0.0.0.0:8501`，设备与办公网通过 `http://<服务器内网IP>:端口` 访问；
 2. 设置 `MES_API_PUBLIC_BASE=http://<服务器内网IP>:8000`，保证上传程序文件后生成的下载地址设备可达；
 3. 放行 Windows 防火墙对应端口；
-4. SQLite 使用 WAL 模式；只有 FastAPI 进程直连数据库，Streamlit 通过 HTTP 访问。建议单机部署 + 定期备份 `data/`（停服复制，或 `sqlite3 mes.db "VACUUM INTO 'backup.db'"`）；
+4. SQLite 使用 WAL 模式；FastAPI 主要给机台使用，Streamlit 作为内部工具可直接经 Repository 读写数据库（不写 SQL），也可经 HTTP 调 FastAPI。建议单机部署 + 定期备份 `data/`（停服复制，或 `sqlite3 mes.db "VACUUM INTO 'backup.db'"`）；
 5. 程序文件默认存本地静态目录；若改用对象存储，只需把 `download_url` 指向对象存储地址并填写 SHA256，数据库结构不变；
 6. 当前没有接口鉴权，仅适合内网使用；如需收紧，可在反向代理层加 IP 白名单或 Basic Auth。
 
@@ -356,8 +412,10 @@ uv run pytest
 
 **设备拿不到程序，返回 404？** 先确认该设备+产品已在“程序下发”页面保存绑定；若设备绑定了多个产品，请求必须带 `product`。
 
+**设备用 `/api/v1/test-results` 上报后看板没更新？** 确认请求头三项齐全、`x-device-sn` 与 `barcode` 一致、响应 `code=0`；看板 1 秒局部刷新，只需等一个刷新周期。
+
 **设备上报了测试数据，看板提示“不可信”？** 检查该设备是否调用了 `/api/program/status` 上报当前版本与 SHA256，以及上报值是否与绑定一致；版本漂移告警也会同时出现。
 
 **解锁后为什么还拦截？** 解锁只解除工件锁；若设备本身程序不可信，仍会按规则 3 拒绝放行。先让设备重新加载并上报正确的程序版本。
 
-**修改绑定后需要重启服务吗？** 不需要。页面保存即写库，设备下次 `GET /api/program` 就拿到新值；Streamlit 和接口服务各自持有短连接，读到的是同一份数据。
+**修改绑定后需要重启服务吗？** 不需要。页面通过 Repository 保存即写库，设备下次 `GET /api/program` 就拿到新值；Streamlit 和接口服务各自持有短连接，读到的是同一份数据。

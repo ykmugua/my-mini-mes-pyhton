@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 from typing import Any
 
 import pandas as pd
@@ -107,6 +109,8 @@ def _validate_steps(
             return None, "工序号必须是正整数"
         if not step_name:
             return None, "工序号和工序名不能为空"
+        if not re.fullmatch(r"[A-Za-z0-9]+", step_name):
+            return None, "工序名只能包含英文字母和数字（用于生成数据库名）"
         if step_no in step_nos:
             return None, "工序号不能重复"
         if step_name.casefold() in step_names:

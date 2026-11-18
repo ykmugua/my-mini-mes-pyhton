@@ -2,25 +2,25 @@
   "steps": [
     {
       "step_no": 1,
-      "step_name": "上电测试",
+      "step_name": "S1",
       "enabled": true,
       "remark": "首站上电与基础安全检查"
     },
     {
       "step_no": 2,
-      "step_name": "功能测试",
+      "step_name": "S2",
       "enabled": true,
       "remark": "功能与参数校验"
     },
     {
       "step_no": 3,
-      "step_name": "终检",
+      "step_name": "S3",
       "enabled": true,
       "remark": "出货前最终检查"
     },
     {
       "step_no": 4,
-      "step_name": "包装",
+      "step_name": "S4",
       "enabled": false,
       "remark": "当前阶段暂未启用"
     }

@@ -91,6 +91,139 @@ def _write_program_file(device: str, product: str, version: str) -> tuple[str, s
 
 
 
+
+
+def seed_test_reports() -> None:
+    """演示数据：10 个产品各走 S1/S2/S3 三道工序，每份报告 10 条明细。"""
+    import copy
+    import json
+    from datetime import datetime, timezone, timedelta
+
+    from . import config
+    from .repositories import product_flow_store, report_repo, report_route
+    from .repositories.base import with_conn
+
+    template_path = config.PROJECT_ROOT / "design_data" / "MesFormat" / "mesUploadTestDataFormat.json"
+    try:
+        template = json.loads(template_path.read_text(encoding="utf-8"))
+    except (FileNotFoundError, ValueError):
+        template = {
+            "linecode": "L2-1F-DIP-D16", "station": "39C0-L2-1F-DIP16-FCT01",
+            "componentcode": "L120201091", "barcode": "SN202611170001",
+            "programname": "TEST-DUT-001", "programversion": "V0.0.2",
+            "testexecutetime": "2025/4/22 13:55:35.123",
+            "isfinalreport": "false", "result": "FAIL", "testlongtime": "00:00:06.300",
+            "details": [{
+                "TestItem": "测试温度", "TestStep": "SOC_HW_ID1", "StandardValue": "1.10",
+                "UpperValue": "1.20", "LowerValue": "0.90", "MeasureValue": "1.12",
+                "TestResult": "true", "TestBeginTime": "13:55:35.123", "TestEndTime": "13:55:37.123",
+            }],
+        }
+
+    # 每道工序对应测试设备
+    STEP_STATIONS = {
+        "1": "TEST-01",
+        "2": "TEST-02",
+        "3": "TEST-03",
+    }
+    # 测试条目模板：10 个
+    TEST_ITEMS = [
+        "上电电压", "工作电流", "测试温度", "绝缘阻抗", "通信握手",
+        "固件版本", "功能自检", "耐压测试", "信号强度", "外观检查",
+    ]
+
+    base_time = datetime(2026, 11, 18, 9, 0, 0, tzinfo=timezone.utc)
+    reports: list[tuple[dict, list[dict]]] = []
+    seq = 0
+    for i in range(1, 11):  # 10 个产品
+        barcode = f"SN20261118{i:04d}"
+        componentcode = f"L1202010{(90 + i):02d}"
+        for step_no, station in STEP_STATIONS.items():
+            seq += 1
+            data = copy.deepcopy(template)
+            data["barcode"] = barcode
+            data["componentcode"] = componentcode
+            data["station"] = station
+            data["linecode"] = f"L{step_no}"
+            data["programname"] = f"TEST-DUT-S{step_no}"
+            data["programversion"] = f"V0.0.{i}"
+            t = base_time + timedelta(minutes=seq * 3, seconds=i)
+            data["testexecutetime"] = t.strftime("%Y/%m/%d %H:%M:%S.") + f"{t.microsecond // 1000:03d}"
+            data["testlongtime"] = f"00:00:{5 + i:02d}.{100 + i:03d}"
+            # 10 条明细
+            details = []
+            for j, item_name in enumerate(TEST_ITEMS):
+                d = copy.deepcopy(template["details"][0])
+                d["TestItem"] = item_name
+                d["TestStep"] = f"S{step_no}_{j + 1:02d}"
+                d["StandardValue"] = f"{1.00 + j * 0.05:.2f}"
+                d["UpperValue"] = f"{1.20 + j * 0.05:.2f}"
+                d["LowerValue"] = f"{0.80 + j * 0.05:.2f}"
+                measure = 1.05 + (i * 0.002) + (j * 0.01) + (int(step_no) * 0.01)
+                d["MeasureValue"] = f"{measure:.2f}"
+                # 每份报告控制 1~2 条失败，其他通过
+                fail_indexes = {(i + int(step_no)) % 10, (i + int(step_no) + 3) % 10}
+                d["TestResult"] = "false" if j in fail_indexes else "true"
+                d["TestBeginTime"] = (t + timedelta(seconds=j)).strftime("%H:%M:%S.") + f"{t.microsecond // 1000:03d}"
+                d["TestEndTime"] = (t + timedelta(seconds=j + 1)).strftime("%H:%M:%S.") + f"{t.microsecond // 1000:03d}"
+                details.append(d)
+            data["details"] = details
+            data["result"] = "FAIL" if any(d["TestResult"] == "false" for d in details) else "PASS"
+            data["isfinalreport"] = "true" if step_no == "3" else "false"
+
+            report = {k: data[k] for k in (
+                "linecode", "station", "componentcode", "barcode",
+                "programname", "programversion", "testexecutetime",
+                "result", "testlongtime", "isfinalreport"
+            )}
+            report["request_id"] = f"demo{seq:032d}"
+            report["created_at"] = t.astimezone(timezone.utc).isoformat(timespec="seconds")
+            reports.append((report, details))
+
+    with with_conn() as conn:
+        from sqlalchemy import delete
+
+        from .engine import test_reports, workpieces
+        from .repositories import report_details_store, workpiece_repo
+
+        report_details_store.drop_all_tables()
+        product_flow_store.reset_all()
+        conn.execute(delete(test_reports))
+        for report, details in reports:
+            report_engine = report_route.report_engine_for_station(report["station"], conn)
+            step_info = report_route.step_for_station(report["station"], conn)
+            report_repo.insert_report(conn, report=report, details=details, report_engine=report_engine)
+            failed_steps = [d["TestStep"] for d in details if d["TestResult"] == "false"]
+            report_details_store.insert_overview(report, ",".join(failed_steps), report_engine)
+            # 产品流转库：每个产品三次流转
+            if step_info:
+                product_flow_store.upsert_flow(
+                    barcode=report["barcode"], componentcode=report["componentcode"],
+                    board_status=("normal" if report["result"] == "PASS" else "lock")
+                        if report["isfinalreport"] == "true" else "normal",
+                    step_no=str(step_info["step_no"]),
+                    next_step=str(int(step_info["step_no"]) + 1) if str(step_info["step_no"]).isdigit() else "",
+                    line_id=step_info.get("line_id") or "",
+                    device=report["station"],
+                    note=("test pass" if report["result"] == "PASS" else "test fail"),
+                    changed_at=report["created_at"],
+                )
+            # 同步工件主表
+            workpiece_repo.insert_workpiece_ignore(
+                conn, workpiece=report["barcode"], product="P-1001", now=report["created_at"]
+            )
+            conn.execute(
+                workpieces.update()
+                .where(workpieces.c.workpiece == report["barcode"])
+                .values(
+                    product="P-1001",
+                    current_device=report["station"],
+                    status="FAIL" if report["result"] == "FAIL" else "PASS",
+                    updated_at=report["created_at"],
+                )
+            )
+
+
 def seed_station_summary() -> None:
     """演示数据：产线监控看板用的 station_summary 汇总表。"""
     import time
@@ -187,6 +320,7 @@ def seed(reset: bool = False, with_demo: bool = False) -> None:
     # 主数据（app_pages 页面）：工序/线体/设备/程序/产品
     master_seed.seed_master_data()
     seed_station_summary()
+    seed_test_reports()
 
     if with_demo:
         _seed_demo_runs()

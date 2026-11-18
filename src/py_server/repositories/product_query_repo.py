@@ -14,7 +14,10 @@ def list_workpieces(
     *,
     product: str | None = None,
     workpiece: str | None = None,
-    status: str | None = None,
+    device: str | None = None,
+    board_status: str | None = None,
+    current_step: str | None = None,
+    test_step: str | None = None,
     date_from: str | None = None,
     date_to: str | None = None,
     limit: int = 200,
@@ -24,7 +27,8 @@ def list_workpieces(
     if conn is None:
         with with_read_conn() as c:
             return list_workpieces(
-                product=product, workpiece=workpiece, status=status,
+                product=product, workpiece=workpiece, device=device,
+                board_status=board_status, current_step=current_step, test_step=test_step,
                 date_from=date_from, date_to=date_to, limit=limit, conn=c,
             )
     w = eg.workpieces
@@ -33,8 +37,6 @@ def list_workpieces(
         conds.append(w.c.product == product)
     if workpiece:
         conds.append(w.c.workpiece.contains(workpiece))
-    if status:
-        conds.append(w.c.status == status)
     if date_from:
         conds.append(w.c.updated_at >= date_from)
     if date_to:
@@ -43,7 +45,83 @@ def list_workpieces(
     if conds:
         stmt = stmt.where(and_(*conds))
     stmt = stmt.order_by(w.c.updated_at.desc()).limit(limit)
-    return rows_to_dicts(conn.execute(stmt).fetchall())
+    rows = rows_to_dicts(conn.execute(stmt).fetchall())
+
+    # 补入仅在 V1.3 整单报告中的工件（未走工件主表也能查询到）
+    known = {r["workpiece"] for r in rows}
+    tr = eg.test_reports
+    rconds = []
+    if workpiece:
+        rconds.append(tr.c.barcode.contains(workpiece))
+    if date_from:
+        rconds.append(tr.c.created_at >= date_from)
+    if date_to:
+        rconds.append(tr.c.created_at <= date_to)
+    rstmt = select(tr).order_by(tr.c.created_at.desc()).limit(limit)
+    if rconds:
+        rstmt = rstmt.where(and_(*rconds))
+    for report in rows_to_dicts(conn.execute(rstmt).fetchall()):
+        barcode = report["barcode"]
+        if barcode in known:
+            continue
+        if product and product != "全部":
+            # 报告单没有 product 字段，无法按产品过滤，保持排除
+            continue
+        rows.append({
+            "workpiece": barcode,
+            "product": None,
+            "status": "PASS" if report.get("result") == "PASS" else "FAIL",
+            "current_device": report.get("station"),
+            "lock_reason": None,
+            "updated_at": report.get("created_at"),
+        })
+        known.add(barcode)
+    # 合并产品流转总览（按条码）
+    from . import product_flow_store, report_details_store
+    from .. import config as cfg
+    from .. import engine as eg2
+
+    flow_rows = product_flow_store.list_overview()
+    flow_by_bc = {r["barcode"]: r for r in flow_rows}
+
+    # 合并测试报告总览（跨所有工序库），用于测试工序筛选
+    report_by_bc: dict[str, dict] = {}
+    for path in sorted(cfg.data_dir().glob("db_*.db")):
+        parts = path.stem.split("_", 2)
+        if len(parts) != 3:
+            continue
+        eng = eg2.get_report_engine(parts[1], parts[2])
+        for rr in report_details_store.list_overview(None, eng):
+            bc = rr.get("barcode")
+            if bc and bc not in report_by_bc:
+                report_by_bc[bc] = rr
+
+    for r in rows:
+        bc = r["workpiece"]
+        fr = flow_by_bc.get(bc)
+        if fr:
+            r["board_status"] = fr.get("board_status") or ""
+            r["current_step"] = fr.get("current_step") or ""
+            r["last_report_device"] = fr.get("last_report_device") or ""
+            r["last_report_note"] = fr.get("last_report_note") or ""
+            r["product"] = r.get("product") or fr.get("componentcode") or ""
+        rr = report_by_bc.get(bc)
+        if rr:
+            r["test_step"] = rr.get("station") or ""
+            r["isfinalreport"] = rr.get("isfinalreport") or ""
+
+    # 应用新增筛选
+    if device:
+        rows = [r for r in rows if (r.get("current_device") or r.get("last_report_device") or "") == device]
+    if board_status:
+        rows = [r for r in rows if r.get("board_status") == board_status]
+    if current_step:
+        rows = [r for r in rows if str(r.get("current_step")) == str(current_step)]
+    if test_step:
+        rows = [r for r in rows if r.get("test_step") == test_step]
+
+    rows.sort(key=lambda r: r.get("updated_at") or "", reverse=True)
+    return rows[:limit]
 
 
 def get_workpiece(workpiece: str, conn: Conn | None = None) -> dict | None:
@@ -117,3 +195,13 @@ def distinct_products(conn: Conn | None = None) -> list[str]:
     w = eg.workpieces
     rows = conn.execute(select(w.c.product).where(w.c.product.is_not(None)).distinct().order_by(w.c.product)).fetchall()
     return [r[0] for r in rows if r[0]]
+
+
+def test_reports_history(workpiece: str, conn: Conn | None = None) -> list[dict]:
+    """按条码查询 V1.3 整单测试履历（主子表 JOIN，新到旧）。"""
+    if conn is None:
+        with with_read_conn() as c:
+            return test_reports_history(workpiece, c)
+    from . import report_repo
+
+    return report_repo.list_reports(workpiece, conn)

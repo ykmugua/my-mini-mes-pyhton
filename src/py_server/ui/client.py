@@ -159,11 +159,14 @@ def replace_upstream_rules(rows: list[dict]) -> int:
     return _request("POST", "/api/ui/upstream", json={"rows": rows})["count"]
 
 
-def unlock_workpiece(workpiece: str, operator: str, reason: str, confirmed: bool) -> dict:
+def unlock_workpiece(workpiece: str, operator: str, reason: str, confirmed: bool, target_step: str | None = None, note: str | None = None) -> dict:
     return _request(
         "POST",
         "/api/ui/unlock",
-        json={"workpiece": workpiece, "operator": operator, "reason": reason, "confirmed": confirmed},
+        json={
+            "workpiece": workpiece, "operator": operator, "reason": reason,
+            "target_step": target_step, "note": note, "confirmed": confirmed,
+        },
     )
 
 
@@ -234,6 +237,51 @@ def query_workpieces(**params) -> list[dict]:
 
 def workpiece_detail(workpiece: str) -> dict:
     return _request("GET", f"/api/ui/product/workpiece/{workpiece}/detail")
+
+
+def step_options() -> list[dict]:
+    return _request("GET", "/api/ui/product/step-options")
+
+
+def report_index(barcode: str | None = None, step_no: str | None = None) -> list[dict]:
+    params = {}
+    if barcode:
+        params["barcode"] = barcode
+    if step_no:
+        params["step_no"] = step_no
+    return _request("GET", "/api/ui/product/report-index", params=params or None)
+
+
+def report_details(table: str, step_no: str | None = None) -> list[dict]:
+    params = {"table": table}
+    if step_no:
+        params["step_no"] = step_no
+    return _request("GET", "/api/ui/product/report-details", params=params)
+
+
+def product_flow_overview(
+    barcode: str | None = None,
+    componentcode: str | None = None,
+    device: str | None = None,
+    board_status: str | None = None,
+    current_step: str | None = None,
+) -> list[dict]:
+    params = {}
+    if barcode:
+        params["barcode"] = barcode
+    if componentcode:
+        params["componentcode"] = componentcode
+    if device:
+        params["device"] = device
+    if board_status:
+        params["board_status"] = board_status
+    if current_step:
+        params["current_step"] = current_step
+    return _request("GET", "/api/ui/product/flow-overview", params=params or None)
+
+
+def product_flow_details(flow_table: str) -> list[dict]:
+    return _request("GET", "/api/ui/product/flow-details", params={"flow_table": flow_table})
 
 
 def workpiece_history(workpiece: str) -> dict:
