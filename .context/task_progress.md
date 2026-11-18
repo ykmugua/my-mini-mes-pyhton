@@ -153,3 +153,133 @@
 **看板 UI 细节**：设备页从单标签 tab 改为 bordered container 内嵌 tab；删除设备后 sort_items key 含列表指纹避免不同步；卡片 tab 固定高度 150px；每行卡片数可调；设备列表与注册页列一致（编号/名称/线体/工序/删除）。
 
 **当前改动均未提交 git**（context 与工程代码都有）。
+
+### 2026-11-18 MES V1.3 上传改造完成
+
+- 新增 schemas_v1.py / application/upload_test_result_v1.py / repositories/upload_repo.py / engine.upload_requests 表。
+- station_repo 新增 apply_result/ensure_device（上传时维护看板汇总）。
+- test_result router 同时提供 V1.3 整单接口和旧单条接口。
+- 新增 tests/test_upload_v1.py（6 个用例）。
+- design_data/system_design_framework/manual.md 已按方案 A 改措辞。
+- 全量测试：150 passed。
+- 服务已用 pwsh 重启，8000/8501 正常。
+
+### 2026-11-18 文档同步（README + design_data）
+
+- README.md：技术栈/取舍改为“FastAPI 写入唯一入口，看板经 Repo 只读”；设备接口表加 V1.3；新增 6.3 整单上传章节 + 6.3b 旧接口；目录/数据模型（+station_summary/station_fail_detail/upload_requests、variables float）；验收加第 8 条；测试数 39→150；刷新 10s→1s；部署/FAQ 同步。
+- design_data/MesFormat/MES上传接口文档.md：littleValue→LowerValue（以 JSON 示例为准）；5.3 码表标注已实现；待确认事项两项勾选已落地。
+- design_data/system_design_framework/manual.md：上一轮已按方案 A 改措辞（FastAPI 写入唯一入口 + 看板只读例外）。
+
+### 2026-11-18 System_Architecture_Diagram.drawio 同步
+
+- 之前只更新了 manual.md，架构图 drawio 仍是旧的 /api/upload /api/records 接口名。
+- 本轮更新：FastAPI 节点改为实际接口（含 POST /api/v1/test-results V1.3 + 旧单条）；Repository 节点改为实际 repo（含 station_repo 只读 / upload_repo 幂等）；新增“station_summary 看板汇总表（Repository 只读旁路）”节点与 Streamlit→Repo 只读虚线；机台→FastAPI 连线改为 HTTP POST /api/v1/test-results。XML 校验通过（17 cells）。
+
+### 2026-11-18 产品查询页交互重构
+
+- 用户指出“查询条件往后设计思路有问题”。已重写 page_product_query.py：
+  - 状态过滤 selectbox → st.segmented_control（4 个选项一眼看全）；
+  - 查询结果 st.dataframe 改为 on_select="rerun" + selection_mode="single-row"，点行选中工件；
+  - 删除“选择工件查看追溯”下拉框 + “查看追溯详情”按钮；
+  - 点行写 pq_current，查询后若已选工件仍在新结果中则保留，否则清除；不再默认展示第一个；
+  - 详情区整体包一个 bordered container；工艺路线用 expander；测试履历/解锁记录/工序解绑改为三个 tabs。
+- 验证：py_compile 通过；AppTest 零异常，segmented_control 生效；全量 pytest 150 passed；UI 已重启。
+
+### 2026-11-18 JSON 字段顺序调整同步
+
+- 用户调整 mesUploadTestDataFormat.json：programname/programversion 从末尾移到 linecode 之后。字段集合不变，仅顺序。
+- 同步：MES上传接口文档.md（3.1 结构、3.2 字段表、3.4 示例）、README.md 6.3 示例、schemas_v1.py TestResultUploadIn 字段顺序、tests/test_upload_v1.py payload。
+- JSON 对象顺序不影响 Pydantic 解析，代码功能不变；test_upload_v1.py 6 个用例通过。
+
+### 2026-11-18 整单主子表 + 测试履历展示完成
+
+- engine.py：新增 test_reports/test_report_details，删除 upload_requests。
+- 新增 repositories/report_repo.py：insert_report（主子表同事务）、get_by_request_id、list_reports。
+- 改 upload_test_result_v1.py：写主子表、幂等用 request_id、保留 station_summary 汇总和旧 test_results 联锁写入。
+- 改 product_query_repo/services：workpiece_test_history 优先整单、回退旧表。
+- 改 page_product_query.py：新增 _render_test_history，整单顶层字段文本框、details 列表；旧记录表格兼容。
+- seed.py：新增 seed_test_reports 演示数据（SN202611170001）；已执行 seed --reset --demo。
+- 测试：新增 test_v1_upload_master_detail_history；全量 151 passed；API/UI 已重启。
+
+### 2026-11-18 演示整单数据改为从 JSON 派生 10 份
+
+- seed_test_reports() 改为读取 design_data/MesFormat/mesUploadTestDataFormat.json 作模板，派生 10 份不同整单（SN202611180001~0010），每份不同 station/linecode/programname/programversion/testtime/testlongtime/result/明细实测值与判定；写入主子表共 10 reports + 20 details。
+- 已执行 seed --reset --demo 验证：10/20 条正确；全量 pytest 151 passed。
+
+### 2026-11-18 产品查询测试履历展示修正（按用户原意）
+
+- 用户指出上一版把顶层字段做成 8 个 text_input 很怪。已改为：每个 V1.3 整单一个容器，上方用一个只读 st.text_area 按 JSON 格式显示顶层字段（station/linecode/programname/programversion/testtime/barcode/result/testlongtime，不含 details），下方用 dataframe 显示 details 列表。
+- 旧单条记录仍用表格兼容。
+- 验证：py_compile + AppTest 零异常；全量 pytest 151 passed；UI 已重启。
+
+### 2026-11-18 修复产品查询显示旧数据问题
+
+- seed 写 workpieces 主表 + product_query_repo 补入 report-only 工件；AppTest 选中 SN202611180001 验证 text_area（255 字符 JSON）+ details dataframe 正常；全量 151 passed；杀掉重复进程后重启 API/UI。
+
+### 2026-11-18 JSON 字段变更 + 显示要求落地
+
+- 按新 JSON 全链路改字段；seed 重新派生 10 份（含 componentcode）；删除旧库重建；验证 reports=10/details=20，首单 componentcode=L120201091。
+- 产品查询：顶层 9 个只读文本框，details 10 列（含 id）；AppTest 验证 0 异常、10 text_inputs、details 10 列；全量 pytest 151 passed；服务已重启。
+
+### 2026-11-18 明细独立库完成
+
+- 实施 ADR-027；验证 10 产品=10 张表、每表 id 从 1 开始；README 配置/数据模型已更新；全量 pytest 151 passed；服务已重启。
+
+### 2026-11-18 report_index 总览表 + isfinalreport 完成
+
+- 实施 ADR-028；总览表写入/查询在 report_details_store；seed 派生数据写入总览表；新增测试 test_v1_upload_writes_overview；全量 152 passed；服务已重启。
+
+### 2026-11-18 六点要求完成
+
+- 按 ADR-029 完成；重启 API/UI；全量 152 passed；演示库 TestReport.db 含 10 SN_ 表 + report_index、无 sqlite_sequence。
+
+### 2026-11-18 data 清理 + 明细动态列
+
+- 清理 data/ 下 16 个旧 DB 备份文件；保留 mes.db/TestReport.db 及 programs。
+- page_product_query 测试明细改为动态列 + 首位序号列；全量 pytest 152 passed；UI 已重启。
+
+### 2026-11-18 数据库约定文档
+
+- 按用户要求只写文档不改代码；新建 design_data/DatabaseConventions 两份约定文档；manual.md 增加引用；context 记 ADR-030。
+
+### 2026-11-18 ADR-031 首版完成
+
+- 实现按工序分测试库与 ProductFlow 首版；工序输入限制英文数字；产品查询新增产品流转 tab；seed 生成 S1/S2/S3 工序库和 ProductFlow.db；全量 152 passed；服务已重启。
+
+### 2026-11-18 流转规范化 6 点完成
+
+- 时间与状态规范化、列名/备注、解锁页设计、去掉解锁记录 tab；重建 ProductFlow.db；清理 18 个备份库；全量 152 passed；API/UI 已重启。
+
+### 2026-11-18 产品查询交互修复
+
+- 产品流转按当前条码过滤并自动选中；解绑页识别 ProductFlow lock；解锁支持 flow-only；全量 152 passed；API/UI 重启。
+
+### 2026-11-18 产品查询改造完成
+
+- 按 ADR-033 完成 3 点；服务重启；全量 152 passed。
+
+### 2026-11-18 产品查询页面结构再调整
+
+- 测试履历独立成查询结果同级块；详情 tab 只保留产品流转/工序解绑；查询条件保留一个工序下拉框；UI 重启；全量 152 passed。
+
+### 2026-11-18 详情区精简完成
+
+- 按 ADR-035 完成 4 点；UI 重启；全量 152 passed。
+
+### 2026-11-18 查询条件与表头调整完成
+
+- 按 ADR-036 完成；全量 152 passed；API/UI 重启。
+
+### 2026-11-18 查询结果改为流转总览完成
+
+- 按 ADR-037 完成；API/UI 重启；全量 152 passed。
+
+### 2026-11-18 查询条件顺序最终调整
+
+- 查询下拉顺序按 product_overview 字段：barcode/componentcode/board_status/current_step/last_report_device；查询按钮放第二行左下。AppTest 0 异常；全量 152 passed；UI 重启。
+
+### 2026-11-18 演示数据扩充
+
+- seed_test_reports 改为 10 个产品 × 3 道工序（S1/S2/S3）× 每份报告 10 条测试明细。
+- 验证：主库 test_reports=30；db_1_S1/db_2_S2/db_3_S3 各 10 份 report_index、100 条明细；ProductFlow overview=10、每产品 3 条流转记录（共 30）。
+- 清理旧备份库；全量 152 passed；API/UI 重启。

@@ -308,3 +308,164 @@
 ## 20. ADR-022：图层卡片刷新用 fragment 局部刷新（2026-11-17）
 
 全局 st_autorefresh 每秒重建整页，导致删除确认弹窗闪烁。改为 @st.fragment(run_every=1000) 只刷卡片区，设备管理/弹窗不重建。sort_items 自定义组件 key 需含设备列表指纹，避免增删设备后组件缓存旧状态。
+
+### ADR-023：MES V1.3 整单上传接口（2026-11-18）
+
+- 新增 `POST /api/v1/test-results`：机台主上传接口，整单 payload（station/linecode/testtime/barcode/result/testlongtime/details[]/programname/programversion）+ 三请求头（x-device-sn/x-timestamp/x-request-id）。
+- 字段 `LowerValue`（按 mesUploadTestDataFormat.json），不是文档里的 littleValue。
+- 响应统一信封 `{success,message,code,result}`；result 可为 null。
+- 旧接口 `/api/test-result` 保留，仅供内部/测试使用（用户选 B：不物理删除）。
+- V1.3 上报后维护 station_summary / station_fail_detail；复测判定=同一 barcode 在 test_results 已有记录。
+- 幂等键 x-request-id → upload_requests 表。
+- 架构冲突处理：方案 A——看板继续走 Streamlit → station_repo → Engine 直读，design_data/system_design_framework/manual.md 的措辞已改为“FastAPI 是机台上传和业务写入的唯一入口，只读看板是例外”。
+
+- **关联**：[ADR-022](architecture.md#adr-022)
+
+### ADR-024：架构定位修正——FastAPI 主给机台，Streamlit 可经 Repository 读写（2026-11-18）
+
+- 用户明确：FastAPI 主要给机台使用；Streamlit 作为内部工具**可以直接通过 Repository 读写数据库**（看板已如此），也可经 HTTP 调 FastAPI。
+- 作废之前 ADR-023 / README / manual 里"FastAPI 是写入唯一入口"的措辞。
+- 正确表述：**Repository 是唯一写 SQL 的地方**；上层（FastAPI 和 Streamlit）都不写 SQL、不感知 SQLAlchemy，都经 Repository 访问数据库。
+- 已同步更新：README.md（技术栈/取舍/ASCII 图/部署/FAQ）、design_data/system_design_framework/manual.md、System_Architecture_Diagram.drawio。
+- 结论：V1.3 实现代码不变（仍复用 services/report_test_result），只是文档/架构图的定位描述纠正。
+
+- **关联**：[ADR-023](architecture.md#adr-023)
+
+### ADR-025：V1.3 整单上报主子表建模（2026-11-18）
+
+- 按用户设计：新增 `test_reports`（整单主表，request_id 唯一做幂等）+ `test_report_details`（明细子表，自增 id + report_id 关联）。
+- 删除原 `upload_requests` 幂等表；幂等直接用主表 request_id 唯一键。
+- 旧 `test_results` 单条表保留，继续服务 `/api/test-result` 和可信性/联锁；V1.3 上报仍逐条调 `services.report_test_result` 保持联锁链路。
+- 产品查询测试履历：优先返回新主子表整单（顶层字段 + details 列表），无则回退旧 test_results 单条表格。
+- 前端测试履历：整单顶层字段用只读 text_input 显示，details 用 dataframe 列表。
+- seed 演示数据新增一单 SN202611170001（两条明细），供页面立即展示。
+
+- **关联**：[ADR-023](architecture.md#adr-023)，[ADR-024](architecture.md#adr-024)
+
+### ADR-026：V1.3 JSON 字段变更（componentcode / testexecutetime）2026-11-18
+
+- 用户修改 mesUploadTestDataFormat.json：新增 `componentcode`（型号码），`testtime` 改名 `testexecutetime`；字段顺序改为 linecode/station/componentcode/barcode/programname/programversion/testexecutetime/testlongtime/result/details。
+- 同步：schemas_v1、engine.test_reports、upload 用例、seed 派生 10 份、测试、README、协议文档。
+- 产品查询展示按用户明确要求：JSON 顶层字段每个用只读 text_input（9 个），details 用 dataframe 10 列（含子表自增 id + 9 个明细字段）。
+
+- **关联**：[ADR-025](architecture.md#adr-025)
+
+### ADR-027：生产明细独立库 + 每产品一张明细表（2026-11-18）
+
+- 用户要求：生产数据几十万级，details 必须和主表/其他部分分离；格式稳定，换项目只改 Details 部分；每个产品独占一张明细表，id 从 1 开始。
+- 新增独立 SQLite 库 `data/details.db`（环境变量 `MES_DETAILS_DB_PATH`），主库 `mes.db` 仍存 test_reports 主表/业务数据。
+- 新增 repositories/report_details_store.py：按 barcode 哈希生成表名 `d_<hash16>`，每个产品一张表；id 自增从 1 开始，含 report_id + 9 个 JSON 明细字段；按 report_id 索引。
+- report_repo.insert_report 写主表到主库，明细到独立库；list_reports 按 report_id 从独立库读明细。
+- engine.py 删除共享 test_report_details 表；get_details_engine() 管理独立库 Engine；reset_for_tests 清两套缓存。
+- seed 重置调 drop_all_tables() 清空独立库；conftest 给测试隔离 MES_DETAILS_DB_PATH。
+- 验证：10 个产品 = 10 张 d_* 表，每张 id 从 1 开始；全量 151 passed。
+
+- **关联**：[ADR-026](architecture.md#adr-026)
+
+### ADR-028：details.db 总览表 report_index + isfinalreport（2026-11-18）
+
+- 用户再改 JSON：新增 `isfinalreport`（是否最终报告）。
+- 设计定稿：details.db 里新增总览表 `report_index`，列：id / linecode / station / componentcode / barcode / programname / programversion / testexecutetime / testlongtime / details_table / isfinalreport / failed_step。每次整单上报一行；details_table 存 `d_<hash>` 表名指向该产品的明细表；failed_step 存失败项 TestStep（成功为空）。
+- 原 details.db 每产品明细表 d_<hash> 不变（每行一条明细，id 从 1 开始，report_id 关联）。总览表提供全局/产品级快速查询入口。
+- 主库 test_reports 也加 isfinalreport 列；schemas_v1、上传用例、seed、测试、README、协议文档同步。
+- 验证：overview 10 行、detail tables 10 张；全量 pytest 152 passed。
+
+- **关联**：[ADR-027](architecture.md#adr-027)
+
+### ADR-029：TestReport.db 表结构与查询交互定稿（2026-11-18）
+
+- 用户 6 点要求全部落地：
+  1. 明细表名去掉 d_ 前缀，改为 `SN_<条码safe>_<hash16>`（如 SN_SN202611180001_d6e753570391a815）；
+  2. 明细表去掉 report_id 列和索引；
+  3. 独立库从 details.db 改名 TestReport.db（MES_DETAILS_DB_PATH）；
+  4. 明细表/总览表不用 AUTOINCREMENT（id INTEGER PRIMARY KEY），重置时 DROP sqlite_sequence；验证无 sqlite_sequence；
+  5. 产品查询去掉时间筛选；
+  6. 测试履历分两块：上块 report_index 总览表（按条码筛选、点行选中），下块按选中行 details_table 显示对应明细表（10 列，无 report_id）。
+- 新增 API：/api/ui/product/report-index、/api/ui/product/report-details（校验 SN_ 表名格式防注入）。
+- 验证：10 SN_ 表 + report_index，无 sqlite_sequence；AppTest 0 异常、datetime_input 0；全量 152 passed。
+
+- **关联**：[ADR-028](architecture.md#adr-028)
+
+### ADR-030：数据库约定文档（2026-11-18）
+
+- 用户要求先把约定的测试报告数据库、产品流转数据库写成文档，代码暂不改。
+- 新增 design_data/DatabaseConventions/测试报告数据库约定.md：按工序分库 db_<工序号>_<工序名>.db；report_index + SN_<条码safe>_<hash16> 明细表；工序注册限制英文/数字；修改序号/名称时重命名库；上报路由规则（待实现）。
+- 新增 design_data/DatabaseConventions/产品流转数据库约定.md：ProductFlow.db；product_overview（条码/型号/板状态/当前工序/设备/时间/flow_table）+ 每产品 F_<条码safe>_<hash16> 流转表（id/板状态/所在工序/下站工序/线体/设备/时间）。
+- manual.md 增加“数据库约定（补充）”引用小节。
+- 当前代码尚未完全按上述约定实现；文档作为后续实现依据。
+
+- **关联**：[ADR-029](architecture.md#adr-029)
+
+### ADR-031：按工序分测试库 + ProductFlow 首版实现（2026-11-18）
+
+- 用户确认“改工序名为英文数字 + 产品流转放产品查询页 tab”后开始实现。
+- config/engine：新增 report_db_path(step_no, step_name) → db_<工序>_<工序名>.db；product_flow_db_path() → ProductFlow.db；engine 增加 get_report_engine / get_product_flow_engine 及多库缓存。
+- master_data.json 工序名改为 S1/S2/S3/S4；step_registration._validate_steps 限制工序名只能 [A-Za-z0-9]+。
+- report_route.py：按 station 查 devices.step_no + steps.step_name，决定工序报告库；未注册设备回退 TestReport.db。
+- report_details_store 支持传入 Engine；report_repo.insert_report/list_reports 支持 report_engine。
+- upload_test_result_v1 上报写入对应工序库 + ProductFlow；unlock_workpiece 解锁写 ProductFlow（手动解锁）。
+- product_flow_store.py：ProductFlow.db 总览表 + 每产品 F_<条码safe>_<hash16> 流转表。
+- API 增加 report-index/details 的 step_no 参数；新增 flow-overview/flow-details；client 同步；产品查询页新增“产品流转”tab。
+- seed 演示数据路由到注册设备对应工序，生成 db_1_S1.db / db_2_S2.db / db_3_S3.db 与 ProductFlow.db；保留 TestReport.db 兼容旧数据。
+- 验证：全量 152 passed；API/UI 重启；data/ 运行时库 = mes.db + ProductFlow.db + 3 个工序库 + TestReport.db（兼容）。
+
+- **关联**：[ADR-030](architecture.md#adr-030)
+
+### ADR-032：ProductFlow 时间与状态规范化（2026-11-18）
+
+- changed_at/updated_at 统一为业务时区 `YYYY-MM-DD HH:MM:SS`（normalize_time）。
+- product_overview.current_device 改名 last_report_device；新增 last_report_note。每产品流转表新增 note；上报写 test pass/test fail，解锁写 note 或 unlock。
+- 状态枚举改英文：normal / lock / final（当前上报按 PASS/FAIL 写 normal/lock；解锁写 normal）。
+- 产品查询页删除“解锁记录”tab；产品流转总览显示最后一次上报设备/备注。
+- 工序解绑表单新增“切换到的工序”选择（来自 /api/ui/product/step-options）和上报备注；unlock API/services/usecase/client 传 target_step/note，并写 ProductFlow。
+- 验证：ProductFlow 列与格式正确；全量 152 passed；重启服务。
+
+- **关联**：[ADR-031](architecture.md#adr-031)
+
+### ADR-033：产品查询筛选/测试履历分工序（2026-11-18）
+
+- 工序解绑去掉“解绑原因”，只保留目标工序 + 备注；备注同时作为 reason 与流转 note，写入 ProductFlow。
+- 查询条件改为全部下拉框：产品型号、工件码、工件状态、板状态、当前工序、测试工序；选项来自两个总览表（product_overview + report_index 跨工序库）。
+- /api/ui/product/workpieces 增加 board_status/current_step/test_step 筛选；product_query_repo.list_workpieces 合并 workpieces + test_reports + ProductFlow 总览字段后过滤。
+- 测试履历按工序拆 tab：测试履历-1/2/3/4 + 产品流转 + 工序解绑；每个测试履历 tab 只显示对应工序库的 report_index/details。
+- AppTest：0 异常；selectbox 7 个；tabs 6 个；全量 152 passed。
+
+- **关联**：[ADR-032](architecture.md#adr-032)
+
+### ADR-034：测试履历独立成页面块（2026-11-18）
+
+- 用户要求：测试履历与查询结果同级，不再作为追溯详情内的 tab；详情 tab 去掉按工序拆分的测试履历，只保留产品流转/工序解绑。
+- 查询条件合并“当前工序/测试工序”为一个“工序”下拉框（内部仍传 test_step）。
+- 页面结构：查询条件 → 查询结果 → 测试履历（独立 container，按工序 S1/S2/S3/S4 分 tab） → 追溯详情（基本信息/工艺路线 + 产品流转/工序解绑 tabs）。
+- AppTest：0 异常；selectbox 6 个；subheaders 顺序正确；tabs 含测试履历工序 tab 与详情 tab；全量 152 passed。
+
+- **关联**：[ADR-033](architecture.md#adr-033)
+
+### ADR-035：详情区精简（2026-11-18）
+
+- 产品流转总览只展示当前条码对应的一行（frame.head(1)），不做行选择。
+- 板状态筛选固定为 全部/normal/lock/final（支持 final）。
+- 追溯详情区去掉 tabs，按顺序直接展示：产品流转 → 工序解绑。
+- 去掉追溯详情 basic metrics（状态/产品型号/当前设备/锁定）与锁定原因提示；保留工艺路线折叠区。
+- AppTest：0 异常；subheaders 查询条件/查询结果/测试履历/追溯详情；markdown 包含产品流转/工序解绑；全量 152 passed。
+
+- **关联**：[ADR-034](architecture.md#adr-034)
+
+### ADR-036：查询条件与流转表头调整（2026-11-18）
+
+- 查询条件顺序改为：工件码 → 产品型号 → 设备 → 查询按钮（第一行末尾），下一行：板状态 → 工序。
+- 去掉“工件状态”，改为“设备”筛选；后端 /api/ui/product/workpieces 与 product_query_repo.list_workpieces 增加 device 参数，按 current_device/last_report_device 过滤。
+- product_overview 展示表头改为数据库字段名（id/barcode/componentcode/board_status/current_step/last_report_device/last_report_note/updated_at）。
+- AppTest：0 异常；全量 152 passed。
+
+- **关联**：[ADR-035](architecture.md#adr-035)
+
+### ADR-037：查询结果改用产品流转总览（2026-11-18）
+
+- 产品查询页“查询结果”数据源从 workpieces/test_reports 混合列表改为 ProductFlow.db 的 product_overview。
+- /api/ui/product/flow-overview 支持 barcode/componentcode/device/board_status/current_step 过滤；client.product_flow_overview 同步。
+- 查询结果列名直接用数据库字段名：id/barcode/componentcode/board_status/current_step/last_report_device/last_report_note/updated_at；点行取 barcode 作为 pq_current。
+- 查询条件选项也从 product_overview 派生（条码=barcode，型号=componentcode，设备=last_report_device）。
+- AppTest：0 异常；全量 152 passed。
+
+- **关联**：[ADR-036](architecture.md#adr-036)

@@ -154,3 +154,76 @@ SQLAlchemy 2.1.8 中 `Insert.on_conflict_do_update()` 不再接受 `constraint=`
 - 用户明确要求：**每次完成一个明确的开发/修改任务（代码改动并验证通过后），自动执行 `/sync-save`**（调用 sync_push），无需用户再说 /sync-save。
 - 范围：只读操作（查看文件、查询状态等）不触发；必须是改了东西的任务。
 - 已同步写入 AGENTS.md 的“长期偏好”段落。
+
+### 2026-11-18：/sync-save 仅用户主动说时执行（更正上一条）
+
+- 用户更正：**不要自动执行 `/sync-save`**。只有用户主动说出 /sync-save 时才调用 sync_push。
+- 上一条“任务完成后自动 /sync-save”作废，AGENTS.md 已同步改回。
+
+### 2026-11-18：V1.3 实现踩坑
+
+- `repositories/base.py` 的 `Conn.execute()` 返回项目自定义 `Result`，只支持 `fetchone()/fetchall()`，**没有 `scalar_one()`**；count 查询用 `int(conn.execute(stmt).fetchone()[0])`（参考 binding_repo.binding_count）。
+- 删除旧接口会让 15 个业务规则测试失败（它们依赖 `/api/test-result`）；用户选择保留旧接口（方案 B），不要物理删除。
+
+### 2026-11-18：架构措辞别写死“FastAPI 唯一入口”
+
+- 用户纠正过两次：不要写成“FastAPI 独占数据库/写入唯一入口”。他的定位是：FastAPI 主要给机台；Streamlit 是内部工具，可直接经 Repository 读写数据库（不写 SQL 即可）。
+- 写文档/架构图时用这个定位；代码上 Streamlit 已通过 repositories/station_repo 等访问，符合分层（Repository 隔离 SQL）。
+
+### 2026-11-18：st.dataframe 行选择做表格选择器
+
+- 产品查询页用 `st.dataframe(..., on_select="rerun", selection_mode="single-row", key=...)`，事件在 `event.selection.rows`，是 0-based 行索引；映射回 results[idx] 取工件码。
+- 不要在表格里做选中又另加一个 selectbox + 按钮，两套选择逻辑会打架（用户明确要求改掉）。
+- AppTest 里 `at.segmented_control` 可以访问 segmented_control；emoji 标签在 GBK 控制台打印会报 UnicodeEncodeError，只是测试脚本问题不是页面问题。
+
+### 2026-11-18：主子表插入时取自增 id
+
+- `repositories.base.Conn.execute()` 返回的包装 Result 没有可靠的 `lastrowid`；SQLAlchemy 2.0 insert 经 Conn 包装后 `result.inserted_primary_key` 也拿不到。
+- 解决：插入主表后用 `conn.lastrowid`（Conn 包装类字段），若为 None 则按唯一键（request_id）`select(id)` 查回。
+- seed.py 在 py_server 包顶层，内部导入必须用 `from .repositories ...` / `from .engine ...`，不能用 `from ..`。
+
+### 2026-11-18：产品查询展示“还是以前那种”的真实原因
+
+- 现象：代码已改成 JSON 文本框 + details 列表，但页面还是旧表格。
+- 根因1：seed 只写 test_reports 主子表，没写 workpieces 主表，导致新演示工件 SN202611180001~0010 不在查询结果列表里；用户实际选中的是旧工件 WP-xxxx，走“旧单条记录兼容表格”分支，看起来没变。
+- 修复：seed_test_reports 同步写 workpieces（status/当前设备来自整单）；product_query_repo.list_workpieces 也补入“仅在 test_reports 中”的工件，避免真实上报后查不到。
+- 根因2：曾出现两个 Streamlit 进程同时运行（旧进程没杀干净），重启时要用 Get-CimInstance 按命令行匹配杀掉所有 streamlit/uvicorn 进程。
+
+### 2026-11-18：SQLite 表结构变更必须删库重建
+
+- engine.py 改了 Table 列后，`seed --reset --demo` 只清数据，`create_all()` 不会 ALTER 已有表，旧库仍是旧列 → 报 `table test_reports has no column named componentcode`。
+- 处理：先停掉占用 mes.db 的 API/UI 进程，删除 data/mes.db*（db/wal/shm），再跑 seed --reset --demo 重建表。
+- 另: 测 AppTest 时必须确保 API 服务已启动，否则 client 报 WinError 10061，验证结果无效。
+
+### 2026-11-18：动态表名安全与 SQLite 表结构变更
+
+- 每产品一张明细表时，表名由 `sha256(barcode)[:16]` 派生（`d_` 前缀），避免条码含特殊字符/超长；不要直接用条码拼 SQL。
+- 主库表结构变更后（如删除 test_report_details），必须停服删 mes.db* 再 seed --reset --demo；create_all 不会 ALTER 已有表。
+- 独立详情库 changes 不影响主库：seed 重置时调 report_details_store.drop_all_tables()。
+
+### 2026-11-18：SQLite 动态表名不能以数字开头
+
+- 纯 16 位 hash 作表名时，如以数字开头（933786...），SQLite 报 `unrecognized token`。
+- 解决：表名用 `SN_<safe条码>_<hash16>`，SQL 中为动态表名加双引号；router 校验 `SN_[0-9A-Za-z_]{1,40}_[0-9a-f]{16}` 防注入。
+- SQLite `sqlite_sequence` 由 AUTOINCREMENT 自动创建；用户要求删除，则主键用 `INTEGER PRIMARY KEY`（仍有 rowid 自增）并在重置时 DROP sqlite_sequence。
+
+### 2026-11-18 data 目录清理与动态明细列
+
+- data/ 运行时只应保留两个数据库：mes.db + TestReport.db（各带 -shm/-wal），以及 programs/ 目录。之前表结构重建反复 rename 留下的 details_* / mes_* / TestReport_* 备份文件已清理（16 个）。
+- 测试明细页面列不再写死：pd.DataFrame(details) 直接用数据库返回的列；丢弃原 id 列，在最前插入 "序号" 自增列。这样数据库 detail 表加/减字段时页面自动跟随。
+
+### 2026-11-18：多库改造踩坑
+
+- repos 自定义 Row 不是 SQLAlchemy Row，没有 `_mapping`；需用 dict(row) 访问列名。
+- 批量替换 `with eg.get_details_engine().begin()` 时误把 drop_all_tables 改成 `_engine_for(engine)`，导致 NameError；drop_all_tables 必须固定用默认 details engine。
+- seed 的 station 必须是 devices 表已注册设备，否则 report_route 回退 TestReport.db，不会生成 db_<工序>_<工序名>.db。
+
+### 2026-11-18 产品查询两个交互问题
+
+- 筛选条码后产品流转应自动聚焦该产品：/api/ui/product/flow-overview 增加 barcode 参数；_render_product_flow(wp_id) 接收当前选中条码过滤，单个匹配时自动选中第一行展示流转表。
+- 选中 ProductFlow lock 但 mes.db 工件未锁时，页面原解锁判断只看 detail.locked 显示“未锁定”。已改为同时检查 product_flow_overview 的 board_status==lock。
+- 解锁用例支持 flow_only：仅当 mes.db 未锁且显式传 target_step 时，跳过领域工件解锁，只写 ProductFlow；否则保持未锁不可重复解锁规则（通过验收测试）。
+
+### 2026-11-18 参数改名要清理全部旧引用
+
+- 将 list_workpieces 的 status 参数改名 device 时，函数体中仍有 status 过滤导致 NameError（500）。参数改名后用 `Select-String '\bstatus\b'` 全文检查并清理旧引用。
