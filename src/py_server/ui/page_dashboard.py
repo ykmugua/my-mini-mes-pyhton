@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import time
+from datetime import datetime
 from pathlib import Path
 
 import pandas as pd
@@ -210,10 +211,10 @@ def _render_card(device: dict, data: dict | None) -> None:
 
 
 def _render_device_manager(config_devices: list[dict]) -> list[dict]:
-    """监控设备管理 + 顺序调节，统一放在一个默认折叠的容器里。"""
+    """监控设备管理（新增/编辑/删除），默认折叠容器。"""
     all_config = list(config_devices)
 
-    with st.expander("⚙️ 监控设备管理与显示设置", expanded=False):
+    with st.expander("⚙️ 监控设备管理", expanded=False):
         line_names, step_names = _line_step_names()
 
         st.subheader("监控设备管理（可直接修改名称，改完点“保存修改”）")
@@ -322,16 +323,134 @@ def _render_device_manager(config_devices: list[dict]) -> list[dict]:
             else:
                 _confirm_mon_delete(dev)
 
-        st.divider()
-        st.subheader("调整显示顺序")
+    return all_config
 
-        n_cols = st.number_input(
+DT_FORMAT = "%Y-%m-%d %H:%M:%S"
+
+
+def _parse_stat_time(value) -> datetime | None:
+    """解析统计时间；支持 datetime/date、YYYY-MM-DD HH:MM:SS 及报告里的斜杠格式。"""
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value
+    value = str(value).strip()
+    if not value:
+        return None
+    for fmt in (
+        "%Y-%m-%d %H:%M:%S", "%Y/%m/%d %H:%M:%S",
+        "%Y-%m-%d %H:%M", "%Y/%m/%d %H:%M",
+        "%Y/%m/%d %H:%M:%S.%f", "%Y-%m-%d %H:%M:%S.%f",
+    ):
+        try:
+            return datetime.strptime(value, fmt)
+        except ValueError:
+            continue
+    return None
+
+
+def _clear_stat_inputs() -> None:
+    st.session_state["stat_time_start"] = None
+    st.session_state["stat_time_end"] = None
+
+
+def _apply_stat_range() -> None:
+    """点“查询”时计算生效区间：结束空→当前；开始空→结束当天0点；都空→今天0点到现在。"""
+    start = _parse_stat_time(st.session_state.get("stat_time_start", ""))
+    end = _parse_stat_time(st.session_state.get("stat_time_end", ""))
+    if end is None:
+        end = datetime.now()
+    if start is None:
+        start = end.replace(hour=0, minute=0, second=0, microsecond=0)
+    st.session_state["applied_stat_range"] = (start, end)
+
+
+def _stats_for_range(device_id: str, start: datetime, end: datetime) -> dict:
+    """按生效时间区间，从各工序测试库 report_index 统计该设备的数据。"""
+    from sqlalchemy import text as sql_text
+
+    from .. import config as cfg
+    from .. import engine as eg
+
+    records: list[dict] = []
+    for path in sorted(cfg.data_dir().glob("db_*.db")):
+        parts = path.stem.split("_", 2)
+        if len(parts) != 3:
+            continue
+        eng = eg.get_report_engine(parts[1], parts[2])
+        try:
+            with eng.connect() as conn:
+                rows = conn.execute(sql_text(
+                    "SELECT barcode, station, testexecutetime, failed_step FROM report_index"
+                )).fetchall()
+        except Exception:
+            continue
+        for row in rows:
+            m = row._mapping if hasattr(row, "_mapping") else None
+            if m is None:
+                continue
+            if str(m["station"]) != str(device_id):
+                continue
+            ts = _parse_stat_time(str(m["testexecutetime"] or ""))
+            if ts is None or not (start <= ts <= end):
+                continue
+            records.append({
+                "barcode": str(m["barcode"] or ""),
+                "ts": ts,
+                "failed": bool(str(m["failed_step"] or "").strip()),
+            })
+
+    total = len(records)
+    fail = sum(1 for r in records if r["failed"])
+    # 复测判定：同一条码在该设备内按时间排序，第一条 PASS 记一次通过，后续记复测通过
+    by_barcode: dict[str, list[dict]] = {}
+    for r in records:
+        by_barcode.setdefault(r["barcode"], []).append(r)
+    first_pass = 0
+    retest_pass = 0
+    for group in by_barcode.values():
+        passes = [r for r in sorted(group, key=lambda x: x["ts"]) if not r["failed"]]
+        if passes:
+            first_pass += 1
+            retest_pass += len(passes) - 1
+    return {
+        "total": total,
+        "first_pass": first_pass,
+        "retest_pass": retest_pass,
+        "fail": fail,
+    }
+
+
+def _device_stats(device_id: str, applied) -> dict:
+    """设备页与工序页共用的统计来源：有生效区间则按工序库 report_index 统计，否则读 station_summary。"""
+    keys = ("total", "first_pass", "retest_pass", "fail")
+    if applied:
+        return {k: int(_stats_for_range(device_id, applied[0], applied[1]).get(k) or 0) for k in keys}
+    row = _read_summary(device_id)
+    if row is None:
+        return {k: 0 for k in keys}
+    return {k: int(row.get(k) or 0) for k in keys}
+
+
+def _range_caption() -> str:
+    applied = st.session_state.get("applied_stat_range")
+    if not applied:
+        return "统计区间：未筛选（全部汇总数据）"
+    a, b = applied
+    return f"统计区间：{a.strftime(DT_FORMAT)} ~ {b.strftime(DT_FORMAT)}"
+
+
+def _render_display_order(all_config: list[dict]) -> None:
+    """设置显示：每行卡片数、卡片顺序、统计时间区间。"""
+    with st.expander("🔀 设置显示", expanded=False):
+        st.number_input(
             "每行卡片数", min_value=1, max_value=12, value=DEFAULT_COLS, step=1, key="mon_cols"
         )
+
+        # 1) 调整卡片顺序
         if all_config:
             st.caption("拖拽下面的设备卡片调节显示顺序（从左到右、从上到下）。")
             labels = [f"{d['name']} ({d['device_id']})" for d in all_config]
-            # key 含设备列表指纹：增删设备后组件重新挂载，避免旧拖拽状态导致顺序区不刷新
             order_fingerprint = "|".join(d["device_id"] for d in all_config)
             sorted_labels = sort_items(
                 labels, direction="horizontal", key=f"device_order_sort_{hash(order_fingerprint)}"
@@ -341,7 +460,33 @@ def _render_device_manager(config_devices: list[dict]) -> list[dict]:
             if new_list and len(new_list) == len(all_config) and new_list != all_config:
                 _save_config_devices(new_list)
                 st.rerun()
-    return all_config
+        else:
+            st.info("当前没有显示的设备，请先在“监控设备管理”中新增")
+
+        # 2) 调整统计时间区间（放在卡片顺序下面）
+        st.markdown("**调整统计时间区间**")
+        c1, c2, c3 = st.columns([2, 2, 1], vertical_alignment="bottom")
+        c1.datetime_input(
+            "开始时间", value=None, format="YYYY-MM-DD", step=60, required=True,
+            key="stat_time_start",
+        )
+        c2.datetime_input(
+            "结束时间", value=None, format="YYYY-MM-DD", step=60, required=True,
+            key="stat_time_end",
+        )
+        c3.button("清空", key="stat_time_clear", on_click=_clear_stat_inputs)
+        st.button("查询", key="stat_time_query", on_click=_apply_stat_range, type="primary")
+
+        applied = st.session_state.get("applied_stat_range")
+        if applied:
+            a, b = applied
+            st.caption(
+                f"当前生效区间：{a.strftime(DT_FORMAT)} ~ {b.strftime(DT_FORMAT)}"
+                "（修改时间后需点“查询”才会生效）"
+            )
+        else:
+            st.caption("可点选日期和时间（精确到分钟）；留空时按默认规则，点“查询”生效。")
+
 
 @st.fragment(run_every=refresh_interval)
 def _render_cards_fragment() -> None:
@@ -350,7 +495,7 @@ def _render_cards_fragment() -> None:
     devices = _load_config_devices()
     n_cols = int(st.session_state.get("mon_cols", DEFAULT_COLS))
     if not devices:
-        st.info("当前没有显示的设备，请在“监控设备管理与显示设置”中新增")
+        st.info("当前没有显示的设备，请在“监控设备管理”中新增")
         return
     rows = [devices[i : i + n_cols] for i in range(0, len(devices), n_cols)]
     for row in rows:
@@ -360,18 +505,91 @@ def _render_cards_fragment() -> None:
                 device = row[idx]
                 with col:
                     data = _read_summary(device["device_id"])
+                    applied = st.session_state.get("applied_stat_range")
+                    if data is not None:
+                        data = {**data, **_device_stats(device["device_id"], applied)}
                     _render_card(device, data)
+
+
+@st.fragment(run_every=refresh_interval)
+def _render_step_fragment() -> None:
+    """工序页：按工序聚合监控设备列表中的统计数据。"""
+    devices = _load_config_devices()
+    if not devices:
+        st.info("当前没有显示的设备，请先在“监控设备管理”中新增")
+        return
+
+    applied = st.session_state.get("applied_stat_range")
+    st.caption(_range_caption())
+    groups: dict[int, dict] = {}
+    for d in devices:
+        step_no = int(d.get("step_no") or 0)
+        step_name = str(d.get("step_name") or f"工序{step_no}")
+        if step_no not in groups:
+            groups[step_no] = {
+                "step_name": step_name, "device_count": 0,
+                "total": 0, "first_pass": 0, "retest_pass": 0, "fail": 0,
+            }
+        g = groups[step_no]
+        g["device_count"] += 1
+
+        stats = _device_stats(d["device_id"], applied)
+        for k in ("total", "first_pass", "retest_pass", "fail"):
+            g[k] += int(stats.get(k) or 0)
+
+    rows = []
+    for step_no in sorted(groups):
+        g = groups[step_no]
+        total = g["total"]
+        pass_cnt = g["first_pass"] + g["retest_pass"]
+        rows.append({
+            "工序号": step_no,
+            "工序名": g["step_name"],
+            "监控设备数": g["device_count"],
+            "测试总数": total,
+            "一次通过": g["first_pass"],
+            "复测通过": g["retest_pass"],
+            "失败": g["fail"],
+            "合格率": f"{(pass_cnt / total * 100):.1f}%" if total else "--",
+        })
+    frame = pd.DataFrame(rows)
+    st.dataframe(frame, hide_index=True, width="stretch", alt="按工序划分的监控设备统计汇总")
+
+    if frame.empty:
+        return
+    fig = go.Figure()
+    for col, name, color in (
+        ("测试总数", "测试总数", "#6c757d"),
+        ("一次通过", "一次通过", "#28a745"),
+        ("复测通过", "复测通过", "#4287f5"),
+        ("失败", "失败", "#dc3545"),
+    ):
+        fig.add_bar(
+            x=[f"{r['工序号']} {r['工序名']}" for r in rows],
+            y=[r[col] for r in rows], name=name, marker_color=color,
+        )
+    fig.update_layout(
+        barmode="group", height=300, margin=dict(l=4, r=4, t=8, b=4),
+        xaxis_title="工序", yaxis_title="数量", bargap=0.25,
+        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+        legend=dict(orientation="h", y=1.08),
+    )
+    st.plotly_chart(fig, width="stretch", config={"displayModeBar": False}, alt="按工序划分的测试统计分组柱状图")
 
 
 def render() -> None:
     st.html(COMPACT_CSS)
     st.title("产线测试工站监控｜设备主动上报")
 
-    # 设备管理（含顺序/行数设置，默认折叠）——不在 fragment 内，不会被刷新打断
-    _render_device_manager(_load_config_devices())
+    # 两个同级折叠容器：设备管理 / 显示顺序——不在 fragment 内，不会被刷新打断
+    devices = _load_config_devices()
+    _render_device_manager(devices)
+    _render_display_order(devices)
 
-    # 监控内容用 tab 组织，后续可直接在此增加其他页签
+    # 监控内容用 tab 组织：设备页 / 工序页
     with st.container(border=True):
-        tab_device, = st.tabs(["设备页"])
+        tab_device, tab_step = st.tabs(["设备页", "工序页"])
         with tab_device:
             _render_cards_fragment()
+        with tab_step:
+            _render_step_fragment()

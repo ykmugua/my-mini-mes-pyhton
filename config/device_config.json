@@ -1,17 +1,6 @@
 {
   "devices": [
     {
-      "device_id": "TEST-03",
-      "name": "终检机",
-      "ip": "127.0.0.1",
-      "port": 6379,
-      "enable": true,
-      "line_id": "L2",
-      "line_name": "二线",
-      "step_no": 3,
-      "step_name": "终检"
-    },
-    {
       "device_id": "TEST-01B",
       "name": "上电测试机B",
       "ip": "127.0.0.1",
@@ -21,6 +10,17 @@
       "line_name": "一线",
       "step_no": 1,
       "step_name": "上电测试"
+    },
+    {
+      "device_id": "TEST-03",
+      "name": "终检机",
+      "ip": "127.0.0.1",
+      "port": 6379,
+      "enable": true,
+      "line_id": "L2",
+      "line_name": "二线",
+      "step_no": 3,
+      "step_name": "终检"
     },
     {
       "device_id": "TEST-03B",
