@@ -491,3 +491,38 @@
 - AppTest 0 异常；全量 152 passed；UI 重启。
 
 - **关联**：[ADR-038](architecture.md#adr-038)
+
+## 21. ProductFlow.db product_overview 增加 traycode（2026-11-19）
+- `product_overview` 在 `componentcode` 后新增 `traycode TEXT NOT NULL DEFAULT ''`（逻辑顺序；SQLite 已有库 ALTER 只能追加到末尾，物理位置在最后，页面/查询按代码控制的顺序显示）。
+- 写入来源：V1.3 上报 `traycode` 可选字段（schemas_v1.py 默认 ''），`upload_test_result_v1.execute()` 透传给 `product_flow_store.upsert_flow(traycode=...)`；seed 演示数据按产品生成 `T{2000+i:05d}`。
+- 解锁场景 `traycode=None` → UPDATE 不覆盖已有值；新建行写 ''。
+- 查询链路全加 `traycode` 参数：`product_flow_store.list_overview` → API `/api/ui/product/flow-overview` → `ui.client.product_flow_overview` → 产品查询页面（`pq_traycode` 下拉，第一行 4 列：barcode/componentcode/traycode/board_status；结果表与追溯总览表均在 componentcode 后显示 traycode）。
+- 主库 `test_reports` 不加该列（避免改动主表 schema），只在 flow 库留档。
+
+## 22. 产品流转约定文档同步（2026-11-19）
+- `design_data/DatabaseConventions/产品流转数据库约定.md`：总览表字段补 `traycode`/`last_report_note`，修正旧名 `current_device`→`last_report_device`，板状态枚举改为英文 normal/lock/final（与代码一致），去掉“尚未实现”过时说明。
+- README：ProductFlow.db 表说明补 traycode；V1.3 请求体 JSON 示例加 `traycode` 字段。
+
+### ADR-040：report_index 列按上传 JSON 顺序重排，result/traycode 入库，details 保持 hash 表（2026-11-19）
+- 决策：各工序测试库 `db_<工序号>.db` 的 `report_index` 列顺序按 `design_data/MesFormat/mesUploadTestDataFormat.json` 的键顺序排列：`id, linecode, station, componentcode, traycode, barcode, programname, programversion, testexecutetime, testlongtime, result, isfinalreport, details_table`。
+- 变更：新增 `traycode`、`result` 两列；移除派生列 `failed_step`（失败判定统一用顶层 `result`，从 V1.3 请求原样落库）。列顺序决定 UI 展示列顺序。
+- 向后兼容：检测到旧 schema（无 `result` 列）时 `ensure_overview_table` 自动重建 `report_index`（演示数据可重新 seed）；旧行不迁移。
+- `details` 仍按 hash 方式：每产品一张 `SN_<条码safe>_<hash16>` 表，`details_table` 指向该表；明细表结构不变。
+- 接口文档 V1.3 同步：3.1 结构 / 3.2 顶层字段 / 3.4 示例统一按 JSON 键顺序；`traycode` 标记为上报可选字段。
+- UI 同步：产品查询“测试报告总览”按新列顺序中文表头展示；看板时间区间统计改用 `result` 判定失败。
+- 关联：ADR-028 / ADR-030 / ADR-038
+- **关联**：[ADR-028](architecture.md#adr-028)，[ADR-030](architecture.md#adr-030)，[ADR-038](architecture.md#adr-038)
+
+## 23. 测试报告库 report_index 按 JSON 顺序重建（2026-11-19）
+- `design_data/MesFormat/mesUploadTestDataFormat.json` 顶层字段顺序：linecode/station/componentcode/traycode/barcode/programname/programversion/testexecutetime/testlongtime/result/details/isfinalreport。
+- `report_index` 物理列顺序改为：id/linecode/station/componentcode/traycode/barcode/programname/programversion/testexecutetime/testlongtime/result/isfinalreport/failed_step/details_table（新增 traycode、result；系统列 id 在前，failed_step/details_table 内部列在后）。
+- `report_details_store.py`：`OVERVIEW_COLUMNS`、CREATE DDL、insert_overview SQL 全部按新顺序；`ensure_overview_table()` 增加自动迁移：检测列不符时 ALTER RENAME 旧表 → 按新 DDL 重建 → SELECT 迁移（缺失列填空串）→ DROP 旧表。
+- 主库 `test_reports` 无 traycode 列：upload/seed 写主表时须剔除 traycode，仅 insert_overview 写该列。
+- 演示数据 seed：`report` dict 带 traycode/result；新增逻辑在重建前清空每个 `db_*.db` 分库的 report_index 与 SN_ 明细表（原 drop_all_tables() 只清默认 TestReport.db，导致旧行残留）。
+- UI 产品查询的测试履历总览表改用数据库字段名、按 JSON 顺序显示（去掉中文表头）。
+- 文档同步：MES上传接口文档.md（3.1/3.2/3.4 按 JSON 顺序加 traycode）、测试报告数据库约定.md 总览表字段表、README 请求体示例。
+
+## 24. 载具注册页面与 trays 主数据（2026-11-19）
+- 新增主数据 `trays`（载具/托盘）：字段 traycode(PK)/tray_name/capacity(载荷数量=一个托盘放几块板)/enabled/remark；定义在 `engine.py`，读写在 `master_data_repo.list_trays/replace_trays` 并纳入 `snapshot()`，master API(`/api/ui/master/{key}`) 与 `_common.MASTER_KEYS` 同步加 key。
+- 新页面 `src/py_server/ui/pages/tray_registration.py`：导航注册在设备注册下方（url_path=trays）；风格同设备注册的设备管理（外层 container + 新增载具 expander + form border=False + data_editor 列表带删除列 + 左下保存按钮 + 删除确认 dialog）。
+- 演示数据：master_data.json 加 trays（T02001~T02003），master_seed.seed_master_data 整体替换写入。

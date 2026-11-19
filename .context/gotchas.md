@@ -227,3 +227,7 @@ SQLAlchemy 2.1.8 中 `Insert.on_conflict_do_update()` 不再接受 `constraint=`
 ### 2026-11-18 参数改名要清理全部旧引用
 
 - 将 list_workpieces 的 status 参数改名 device 时，函数体中仍有 status 过滤导致 NameError（500）。参数改名后用 `Select-String '\bstatus\b'` 全文检查并清理旧引用。
+
+## 15. seed 重建分库数据（2026-11-19）
+- `report_details_store.drop_all_tables()` 只清默认 details engine（TestReport.db），不会清 `db_<工序号>.db` 分库；seed --reset 重建演示数据时若只调它，分库的 report_index 旧行会残留（出现 id 1-10 旧空值 + 11-20 新数据）。已在 seed_test_reports() 中遍历 `config.data_dir().glob("db_*.db")` 逐个 DROP report_index/SN_表 修复。
+- seed 的 report dict 加了 traycode 后，直接传给 report_repo.insert_report 会报 `CompileError: Unconsumed column names: traycode`（主表 test_reports 无该列）；需先用 dict comprehension 剔除 traycode 再写主表。
