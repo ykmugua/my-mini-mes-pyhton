@@ -31,6 +31,7 @@ class TestResultUploadIn(BaseModel):
     linecode: str = Field(min_length=1)
     station: str = Field(min_length=1)
     componentcode: str = Field(min_length=1)
+    traycode: str = ""
     barcode: str = Field(min_length=1)
     programname: str = Field(min_length=1)
     programversion: str = Field(min_length=1)

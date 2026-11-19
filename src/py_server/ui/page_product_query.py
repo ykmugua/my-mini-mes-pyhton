@@ -25,6 +25,7 @@ def _result_frame(results: list[dict]) -> pd.DataFrame:
         "id": r.get("id") or "",
         "barcode": r.get("barcode") or "",
         "componentcode": r.get("componentcode") or "",
+        "traycode": r.get("traycode") or "",
         "board_status": r.get("board_status") or "",
         "current_step": r.get("current_step") or "",
         "last_report_device": r.get("last_report_device") or "",
@@ -44,6 +45,7 @@ def _render_query() -> list[dict]:
         def opts(values):
             return ["全部"] + sorted({str(v) for v in values if v not in (None, "")})
         products = opts([r.get("componentcode") for r in all_wps])
+        traycodes = opts([r.get("traycode") for r in all_wps])
         workpiece_options = opts([r.get("barcode") for r in all_wps])
         device_options = opts(
             [r.get("last_report_device") for r in all_wps]
@@ -53,14 +55,15 @@ def _render_query() -> list[dict]:
             [r.get("test_step") for r in all_wps] + [r.get("current_step") for r in all_wps]
         )
 
-        # 顺序按 product_overview 字段顺序：barcode/componentcode/board_status/current_step/last_report_device
+        # 顺序按 product_overview 字段顺序：barcode/componentcode/traycode/board_status/current_step/last_report_device
         c1, c2, c3 = st.columns(3)
         workpiece = c1.selectbox("barcode", workpiece_options, key="pq_workpiece")
         product = c2.selectbox("componentcode", products, key="pq_product")
-        board_status = c3.selectbox("board_status", board_status_options, key="pq_board_status")
-        c4, c5 = st.columns(2)
-        test_step = c4.selectbox("current_step", test_step_options, key="pq_test_step")
-        device = c5.selectbox("last_report_device", device_options, key="pq_device")
+        traycode = c3.selectbox("traycode", traycodes, key="pq_traycode")
+        c4, c5, c6 = st.columns(3)
+        board_status = c4.selectbox("board_status", board_status_options, key="pq_board_status")
+        test_step = c5.selectbox("current_step", test_step_options, key="pq_test_step")
+        device = c6.selectbox("last_report_device", device_options, key="pq_device")
         query = st.button("🔍 查询", key="pq_query_btn")
 
     # 结果常驻 session_state：首次进入自动加载全部；之后只在点“查询”时更新
@@ -83,6 +86,7 @@ def _render_query() -> list[dict]:
             new_results = client.product_flow_overview(
                 barcode=None if workpiece == "全部" else workpiece,
                 componentcode=None if product == "全部" else product,
+                traycode=None if traycode == "全部" else traycode,
                 device=None if device == "全部" else device,
                 board_status=None if board_status == "全部" else board_status,
                 current_step=None if test_step == "全部" else test_step,
@@ -138,18 +142,20 @@ def _render_test_history(tests: list[dict], barcode: str, step_no: str | None = 
         st.info("该工件暂无测试报告总览")
         return
 
+    # 列顺序严格按 mesUploadTestDataFormat.json 的字段顺序
     ov_frame = pd.DataFrame([{
-        "报告id": r["id"],
-        "产线": r.get("linecode") or "",
-        "工位": r.get("station") or "",
-        "型号码": r.get("componentcode") or "",
-        "条码": r.get("barcode") or "",
-        "程序名称": r.get("programname") or "",
-        "程序版本": r.get("programversion") or "",
-        "测试时间": r.get("testexecutetime") or "",
-        "测试用时": r.get("testlongtime") or "",
-        "最终报告": r.get("isfinalreport") or "",
-        "失败项": r.get("failed_step") or "",
+        "linecode": r.get("linecode") or "",
+        "station": r.get("station") or "",
+        "componentcode": r.get("componentcode") or "",
+        "traycode": r.get("traycode") or "",
+        "barcode": r.get("barcode") or "",
+        "programname": r.get("programname") or "",
+        "programversion": r.get("programversion") or "",
+        "testexecutetime": r.get("testexecutetime") or "",
+        "testlongtime": r.get("testlongtime") or "",
+        "result": r.get("result") or "",
+        "isfinalreport": r.get("isfinalreport") or "",
+        "failed_step": r.get("failed_step") or "",
     } for r in overview])
     event = st.dataframe(
         ov_frame, hide_index=True, width="stretch", height=200,
@@ -197,6 +203,7 @@ def _render_product_flow(barcode: str | None = None) -> None:
         "id": r["id"],
         "barcode": r.get("barcode") or "",
         "componentcode": r.get("componentcode") or "",
+        "traycode": r.get("traycode") or "",
         "board_status": r.get("board_status") or "",
         "current_step": r.get("current_step") or "",
         "last_report_device": r.get("last_report_device") or "",

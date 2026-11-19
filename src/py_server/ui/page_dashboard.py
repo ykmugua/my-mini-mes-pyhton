@@ -107,7 +107,7 @@ def _line_step_names() -> tuple[dict, dict]:
     from . import client
     try:
         lines = {d["line_id"]: d.get("line_name") or d["line_id"] for d in client.master_list("lines")}
-        steps = {int(d["step_no"]): d.get("step_name") or str(d["step_no"]) for d in client.master_list("steps")}
+        steps = {str(d["step_no"]): d.get("step_name") or str(d["step_no"]) for d in client.master_list("steps")}
     except Exception:
         lines, steps = {}, {}
     return lines, steps
@@ -220,56 +220,55 @@ def _render_device_manager(config_devices: list[dict]) -> list[dict]:
         st.subheader("监控设备管理（可直接修改名称，改完点“保存修改”）")
 
         # 新增：按产线/工序筛选后选择设备
-        with st.expander("新增监控设备", expanded=False):
-            registered = _registered_devices()
-            shown_ids = [x["device_id"] for x in all_config]
-            candidates = [d for d in registered if d["device_id"] not in shown_ids]
+        registered = _registered_devices()
+        shown_ids = [x["device_id"] for x in all_config]
+        candidates = [d for d in registered if d["device_id"] not in shown_ids]
 
-            if candidates:
-                f1, f2 = st.columns(2)
-                line_opts = ["全部"] + sorted({str(d.get("line_id") or "") for d in candidates if d.get("line_id")})
-                step_opts = ["全部"] + sorted({int(d.get("step_no")) for d in candidates if d.get("step_no")})
-                fl = f1.selectbox("产线筛选", line_opts, key="mon_filter_line")
-                fs = f2.selectbox(
-                    "工序筛选", step_opts, key="mon_filter_step",
-                    format_func=lambda x: "全部" if x == "全部" else f"{x} - {step_names.get(x, x)}",
-                )
-                filtered = [
-                    d for d in candidates
-                    if (fl == "全部" or str(d.get("line_id") or "") == fl)
-                    and (fs == "全部" or int(d.get("step_no") or 0) == int(fs))
-                ]
-                if filtered:
-                    with st.form("mon_device_create_form", clear_on_submit=False):
-                        picked = st.selectbox(
-                            "选择设备",
-                            options=[d["device_id"] for d in filtered],
-                            format_func=lambda x: (
-                                f"{x} - {next((d['device_name'] for d in filtered if d['device_id']==x), x)}"
-                                f"（{line_names.get(str(next((d.get('line_id') for d in filtered if d['device_id']==x), '')), '')} / "
-                                f"{step_names.get(int(next((d.get('step_no') for d in filtered if d['device_id']==x), 0)), '')}）"
-                            ),
-                            key="mon_add_select",
-                        )
-                        submitted = st.form_submit_button("添加监控设备")
-                    if submitted:
-                        d = next(x for x in filtered if x["device_id"] == picked)
-                        all_config.append({
-                            "device_id": d["device_id"],
-                            "name": d.get("device_name") or d["device_id"],
-                            "line_id": str(d.get("line_id") or ""),
-                            "line_name": line_names.get(str(d.get("line_id") or ""), str(d.get("line_id") or "")),
-                            "step_no": int(d.get("step_no") or 0),
-                            "step_name": step_names.get(int(d.get("step_no") or 0), str(d.get("step_no") or "")),
-                            "ip": d.get("ip", "127.0.0.1"), "port": d.get("port", 6379), "enable": True,
-                        })
-                        _save_config_devices(all_config)
-                        st.toast(f"已添加 {d['device_id']}")
-                        st.rerun()
-                else:
-                    st.info("当前筛选条件下没有可添加的设备。")
+        if candidates:
+            f1, f2 = st.columns(2)
+            line_opts = ["全部"] + sorted({str(d.get("line_id") or "") for d in candidates if d.get("line_id")})
+            step_opts = ["全部"] + sorted({str(d.get("step_no")) for d in candidates if d.get("step_no")})
+            fl = f1.selectbox("产线筛选", line_opts, key="mon_filter_line")
+            fs = f2.selectbox(
+                "工序筛选", step_opts, key="mon_filter_step",
+                format_func=lambda x: "全部" if x == "全部" else f"{x} - {step_names.get(x, x)}",
+            )
+            filtered = [
+                d for d in candidates
+                if (fl == "全部" or str(d.get("line_id") or "") == fl)
+                and (fs == "全部" or str(d.get("step_no") or "") == str(fs))
+            ]
+            if filtered:
+                with st.form("mon_device_create_form", clear_on_submit=False):
+                    picked = st.selectbox(
+                        "选择设备",
+                        options=[d["device_id"] for d in filtered],
+                        format_func=lambda x: (
+                            f"{x} - {next((d['device_name'] for d in filtered if d['device_id']==x), x)}"
+                            f"（{line_names.get(str(next((d.get('line_id') for d in filtered if d['device_id']==x), '')), '')} / "
+                            f"{step_names.get(str(next((d.get('step_no') for d in filtered if d['device_id']==x), '')), '')}）"
+                        ),
+                        key="mon_add_select",
+                    )
+                    submitted = st.form_submit_button("添加监控设备")
+                if submitted:
+                    d = next(x for x in filtered if x["device_id"] == picked)
+                    all_config.append({
+                        "device_id": d["device_id"],
+                        "name": d.get("device_name") or d["device_id"],
+                        "line_id": str(d.get("line_id") or ""),
+                        "line_name": line_names.get(str(d.get("line_id") or ""), str(d.get("line_id") or "")),
+                        "step_no": str(d.get("step_no") or ""),
+                        "step_name": step_names.get(str(d.get("step_no") or ""), str(d.get("step_no") or "")),
+                        "ip": d.get("ip", "127.0.0.1"), "port": d.get("port", 6379), "enable": True,
+                    })
+                    _save_config_devices(all_config)
+                    st.toast(f"已添加 {d['device_id']}")
+                    st.rerun()
             else:
-                st.info("设备注册页中没有可添加的启用设备。")
+                st.info("当前筛选条件下没有可添加的设备。")
+        else:
+            st.info("设备注册页中没有可添加的启用设备。")
 
         # 列表（data_editor + 删除列）
         st.session_state["_mon_config_ids"] = [d["device_id"] for d in all_config]
@@ -377,7 +376,7 @@ def _stats_for_range(device_id: str, start: datetime, end: datetime) -> dict:
         parts = path.stem.split("_", 2)
         if len(parts) != 3:
             continue
-        eng = eg.get_report_engine(parts[1], parts[2])
+        eng = eg.get_report_engine(path.stem[3:])
         try:
             with eng.connect() as conn:
                 rows = conn.execute(sql_text(
@@ -521,9 +520,9 @@ def _render_step_fragment() -> None:
 
     applied = st.session_state.get("applied_stat_range")
     st.caption(_range_caption())
-    groups: dict[int, dict] = {}
+    groups: dict[str, dict] = {}
     for d in devices:
-        step_no = int(d.get("step_no") or 0)
+        step_no = str(d.get("step_no") or "")
         step_name = str(d.get("step_name") or f"工序{step_no}")
         if step_no not in groups:
             groups[step_no] = {
@@ -538,7 +537,7 @@ def _render_step_fragment() -> None:
             g[k] += int(stats.get(k) or 0)
 
     rows = []
-    for step_no in sorted(groups):
+    for step_no in sorted(groups, key=lambda x: (not x.isdigit(), int(x) if x.isdigit() else x)):
         g = groups[step_no]
         total = g["total"]
         pass_cnt = g["first_pass"] + g["retest_pass"]

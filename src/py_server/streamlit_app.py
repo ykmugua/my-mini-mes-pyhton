@@ -12,7 +12,7 @@ from py_server.ui import common
 from py_server.ui.page_dashboard import render as render_dashboard
 from py_server.ui.page_variables import render as render_variables
 from py_server.ui.page_product_query import render as render_product_query
-from py_server.ui.pages import device_registration, product_management, program, step_registration
+from py_server.ui.pages import device_registration, tray_registration, product_management, program, step_registration
 
 st.set_page_config(
     page_title="旁路 MES · 产线测试数据",
@@ -33,6 +33,7 @@ navigation = st.navigation(
         st.Page(program.render_page, title="程序下发", icon="📦", url_path="program"),
         st.Page(step_registration.render_page, title="工序注册", icon="🧱", url_path="steps"),
         st.Page(device_registration.render_page, title="设备注册", icon="🔧", url_path="devices"),
+        st.Page(tray_registration.render_page, title="载具注册", icon="📦", url_path="trays"),
         st.Page(product_management.render_page, title="产品管理", icon="🏷️", url_path="products"),
         st.Page(render_variables, title="开放性变量", icon="🔧", url_path="variables"),
     ]

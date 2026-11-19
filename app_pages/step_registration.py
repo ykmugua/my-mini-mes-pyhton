@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 from typing import Any
 
 import pandas as pd
@@ -43,14 +45,12 @@ def _step_frame(
 
 def _step_config(*, include_delete: bool) -> dict[str, Any]:
     config: dict[str, Any] = {
-        "工序号": st.column_config.NumberColumn(
+        "工序号": st.column_config.TextColumn(
             "工序号",
-            help="必填，全厂唯一。",
-            min_value=1,
-            step=1,
-            format="%d",
+            help="必填，全厂唯一；只能包含英文字母和数字。",
             required=True,
             width="small",
+            validate=r"^[A-Za-z0-9]+$",
         ),
         "工序名": st.column_config.TextColumn(
             "工序名",
@@ -79,7 +79,7 @@ def _validate_steps(
     rows: list[dict[str, Any]],
 ) -> tuple[list[dict[str, Any]] | None, str | None]:
     steps: list[dict[str, Any]] = []
-    step_nos: set[int] = set()
+    step_nos: set[str] = set()
     step_names: set[str] = set()
 
     for row in rows:
@@ -97,12 +97,9 @@ def _validate_steps(
         if not _text(raw_step_no):
             return None, "工序号和工序名不能为空"
 
-        try:
-            step_no = int(float(raw_step_no))
-        except (TypeError, ValueError):
-            return None, "工序号必须是正整数"
-        if step_no < 1:
-            return None, "工序号必须是正整数"
+        step_no = _text(raw_step_no)
+        if not re.fullmatch(r"[A-Za-z0-9]+", step_no):
+            return None, "工序号只能包含英文字母和数字"
         if not step_name:
             return None, "工序号和工序名不能为空"
         if step_no in step_nos:
@@ -136,7 +133,7 @@ def _request_step_delete() -> None:
     row_index = int(click["row"])
     steps = st.session_state.get("steps", [])
     if 0 <= row_index < len(steps):
-        st.session_state[PENDING_DELETE_KEY] = int(steps[row_index]["step_no"])
+        st.session_state[PENDING_DELETE_KEY] = str(steps[row_index]["step_no"])
 
 
 def _clear_pending_delete() -> None:
@@ -165,7 +162,7 @@ def _confirm_delete_step(step: dict[str, Any]) -> None:
             st.session_state.steps = [
                 item
                 for item in st.session_state.steps
-                if int(item["step_no"]) != int(step["step_no"])
+                if str(item["step_no"]) != str(step["step_no"])
             ]
             _clear_pending_delete()
             st.toast("工序已删除")
@@ -289,7 +286,7 @@ with st.container(border=True):
             (
                 step
                 for step in steps
-                if int(step["step_no"]) == int(pending_step_no)
+                if str(step["step_no"]) == str(pending_step_no)
             ),
             None,
         )

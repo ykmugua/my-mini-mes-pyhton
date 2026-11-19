@@ -51,7 +51,7 @@ SQLAlchemy Engine ──执行 SQL──> SQLite（未来可换 PostgreSQL）
 
 测试数据和产品流转数据与主数据分离，详细约定见：
 
-- [测试报告数据库约定](../DatabaseConventions/测试报告数据库约定.md)：按工序分库 `db_<工序>_<工序名>.db`；`report_index` + 每产品明细表 `SN_<条码>_<hash>`。
+- [测试报告数据库约定](../DatabaseConventions/测试报告数据库约定.md)：按工序分库 `db_<工序号>.db`；`report_index` + 每产品明细表 `SN_<条码>_<hash>`。
 - [产品流转数据库约定](../DatabaseConventions/产品流转数据库约定.md)：`ProductFlow.db`；`product_overview` + 每产品流转表 `F_<条码>_<hash>`。
 
 当前代码尚未完全按上述约定实现；文档作为后续实现依据。

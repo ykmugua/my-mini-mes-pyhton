@@ -186,7 +186,7 @@ Index("idx_variable_logs_action", variable_logs.c.action)
 steps = Table(
     "steps",
     metadata,
-    Column("step_no", Integer, primary_key=True, nullable=True),
+    Column("step_no", Text, primary_key=True, nullable=True),
     Column("step_name", Text, nullable=False),
     Column("enabled", Integer, nullable=False, default=1, server_default="1"),
     Column("remark", Text, nullable=False, default="", server_default=""),
@@ -205,7 +205,17 @@ devices = Table(
     Column("device_id", Text, primary_key=True, nullable=True),
     Column("device_name", Text, nullable=False),
     Column("line_id", Text, nullable=False),
-    Column("step_no", Integer, nullable=False),
+    Column("step_no", Text, nullable=False),
+    Column("enabled", Integer, nullable=False, default=1, server_default="1"),
+    Column("remark", Text, nullable=False, default="", server_default=""),
+)
+
+trays = Table(
+    "trays",
+    metadata,
+    Column("traycode", Text, primary_key=True, nullable=True),
+    Column("tray_name", Text, nullable=False),
+    Column("capacity", Integer, nullable=False, default=1, server_default="1"),
     Column("enabled", Integer, nullable=False, default=1, server_default="1"),
     Column("remark", Text, nullable=False, default="", server_default=""),
 )
@@ -219,7 +229,7 @@ programs = Table(
     Column("version_description", Text, nullable=False, default="", server_default=""),
     Column("sha256", Text, nullable=False),
     Column("download_url", Text, nullable=False),
-    Column("step_no", Integer, nullable=False),
+    Column("step_no", Text, nullable=False),
     sqlite_autoincrement=True,
 )
 
@@ -254,7 +264,7 @@ product_routes = Table(
     "product_routes",
     metadata,
     Column("product_model", Text, nullable=False),
-    Column("step_no", Integer, nullable=False),
+    Column("step_no", Text, nullable=False),
     Column("success_next_step", Text, nullable=False),
     Column("fail_next_step", Text, nullable=False),
     UniqueConstraint("product_model", "step_no"),
@@ -264,7 +274,7 @@ product_step_devices = Table(
     "product_step_devices",
     metadata,
     Column("product_model", Text, nullable=False),
-    Column("step_no", Integer, nullable=False),
+    Column("step_no", Text, nullable=False),
     Column("device_id", Text, nullable=False),
     UniqueConstraint("product_model", "step_no", "device_id"),
 )
@@ -365,9 +375,9 @@ def _open_engine(path: Path | str, *, foreign_keys: bool = False) -> Engine:
     return eng
 
 
-def get_report_engine(step_no: str | int, step_name: str) -> Engine:
+def get_report_engine(step_no: str | int) -> Engine:
     """按工序获取测试报告库 Engine（db_<工序>_<工序名>.db）。"""
-    path = str(config.report_db_path(step_no, step_name))
+    path = str(config.report_db_path(step_no))
     eng = _report_engines.get(path)
     if eng is None:
         Path(path).parent.mkdir(parents=True, exist_ok=True)

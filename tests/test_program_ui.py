@@ -119,7 +119,7 @@ def test_upload_program_requires_and_stores_step() -> None:
     at.text_input(key="upload_program_name").input("UPLOAD_TEST")
     at.text_input(key="upload_program_version").input("v9.0.0")
     at.text_input(key="upload_version_description").input("新增型号参数支持")
-    at.selectbox(key="upload_step_no").select(2)
+    at.selectbox(key="upload_step_no").select("2")
     at.file_uploader(key="upload_program_file").upload("bundle.zip", content)
     at.form_submit_button[0].click().run()
 
@@ -127,7 +127,7 @@ def test_upload_program_requires_and_stores_step() -> None:
     programs = at.session_state["programs"]
     assert len(programs) == 4
     assert programs[-1]["program_id"] == 4
-    assert programs[-1]["step_no"] == 2
+    assert programs[-1]["step_no"] == "2"
     assert programs[-1]["version_description"] == "新增型号参数支持"
     assert "program_mode" not in programs[-1]
     assert programs[-1]["sha256"] == hashlib.sha256(content).hexdigest()
@@ -142,7 +142,7 @@ def test_upload_program_requires_and_stores_step() -> None:
     } in at.session_state["program_versions"]
 
     updated_frame = at.data_editor[0].value
-    assert updated_frame.iloc[-1]["所属工序"] == 2
+    assert updated_frame.iloc[-1]["所属工序"] == "2"
     assert updated_frame.iloc[-1]["版本说明"] == "新增型号参数支持"
     assert updated_frame.iloc[-1]["关联型号数"] == 0
     assert updated_frame.iloc[-1]["程序类型"] == "未关联"
@@ -158,7 +158,7 @@ def test_program_editor_saves_selected_version() -> None:
 
     assert not at.exception, [str(item.value) for item in at.exception]
     assert at.session_state["programs"][0]["program_version"] == "v1.0.0"
-    assert at.session_state["programs"][0]["step_no"] == 1
+    assert at.session_state["programs"][0]["step_no"] == "1"
     assert (
         at.session_state["programs"][0]["version_description"]
         == "首版上电测试程序"

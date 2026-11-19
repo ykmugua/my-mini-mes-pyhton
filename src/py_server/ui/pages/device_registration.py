@@ -371,7 +371,7 @@ def render_page() -> None:
                 st.info("只读角色不可新增线体。")
         else:
             with st.expander("新增线体", expanded=False):
-                with st.form("line_create_form", clear_on_submit=False):
+                with st.form("line_create_form", clear_on_submit=False, border=False):
                     id_col, name_col = st.columns(2)
                     new_line_id = id_col.text_input(
                         "线体编号",
@@ -475,8 +475,9 @@ def render_page() -> None:
         else:
             with st.expander("新增设备", expanded=False):
                 active_step_nos = [int(step["step_no"]) for step in active_steps]
-                with st.form("device_create_form", clear_on_submit=False):
-                    id_col, name_col = st.columns([1, 2])
+                with st.form("device_create_form", clear_on_submit=False, border=False):
+                    # 第一行：设备编号 + 设备名称 + 所属线体
+                    id_col, name_col, line_col = st.columns(3)
                     new_device_id = id_col.text_input(
                         "设备编号",
                         key="new_device_id",
@@ -487,7 +488,6 @@ def render_page() -> None:
                         key="new_device_name",
                         placeholder="例如 包装检测机",
                     )
-                    line_col, step_col = st.columns(2)
                     new_line_id = line_col.selectbox(
                         "所属线体",
                         options=[str(line["line_id"]) for line in lines],
@@ -504,6 +504,8 @@ def render_page() -> None:
                         disabled=not lines,
                         key="new_device_line_id",
                     )
+                    # 第二行：所属工序 + 备注 + 启用
+                    step_col, remark_col, enabled_col = st.columns(3)
                     new_step_no = step_col.selectbox(
                         "所属工序",
                         options=active_step_nos,
@@ -515,17 +517,15 @@ def render_page() -> None:
                         disabled=not active_steps,
                         key="new_device_step_no",
                     )
-                    if "new_device_enabled" not in st.session_state:
-                        st.session_state["new_device_enabled"] = True
-                    new_device_enabled = st.checkbox(
-                        "启用",
-                        key="new_device_enabled",
-                    )
-                    new_device_remark = st.text_input(
+                    new_device_remark = remark_col.text_input(
                         "备注",
                         key="new_device_remark",
                         placeholder="可选，用于填写现场说明",
                     )
+                    new_device_enabled_text = enabled_col.selectbox(
+                        "启用", options=["是", "否"], key="new_device_enabled_text",
+                    )
+                    # 第三行：添加按钮（左侧单独一行）
                     submitted = st.form_submit_button(
                         "添加设备",
                         disabled=not active_steps or not lines,
@@ -541,7 +541,7 @@ def render_page() -> None:
                             "设备名称": new_device_name.strip(),
                             "所属线体": new_line_id,
                             "所属工序": new_step_no,
-                            "启用": bool(new_device_enabled),
+                            "启用": new_device_enabled_text == "是",
                             "备注": new_device_remark.strip(),
                         }
                     )

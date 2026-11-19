@@ -53,6 +53,7 @@ def ensure_overview_table() -> None:
                     id INTEGER PRIMARY KEY,
                     barcode TEXT NOT NULL,
                     componentcode TEXT NOT NULL,
+                    traycode TEXT NOT NULL DEFAULT '',
                     board_status TEXT NOT NULL,
                     current_step TEXT NOT NULL,
                     last_report_device TEXT NOT NULL,
@@ -64,6 +65,8 @@ def ensure_overview_table() -> None:
         else:
             if "current_device" in cols and "last_report_device" not in cols:
                 conn.execute(text("ALTER TABLE product_overview RENAME COLUMN current_device TO last_report_device"))
+            if "traycode" not in cols:
+                conn.execute(text("ALTER TABLE product_overview ADD COLUMN traycode TEXT NOT NULL DEFAULT ''"))
             if "last_report_note" not in cols:
                 conn.execute(text("ALTER TABLE product_overview ADD COLUMN last_report_note TEXT NOT NULL DEFAULT ''"))
         conn.execute(text(
@@ -100,6 +103,7 @@ def upsert_flow(
     *,
     barcode: str,
     componentcode: str,
+    traycode: str | None = None,
     board_status: str,
     step_no: str,
     next_step: str,
@@ -132,31 +136,45 @@ def upsert_flow(
         if existing is None:
             conn.execute(text("""
                 INSERT INTO product_overview
-                (barcode, componentcode, board_status, current_step, last_report_device,
+                (barcode, componentcode, traycode, board_status, current_step, last_report_device,
                  last_report_note, updated_at, flow_table)
-                VALUES (:bc, :cc, :bs, :step, :dev, :note, :ts, :ft)
+                VALUES (:bc, :cc, :tc, :bs, :step, :dev, :note, :ts, :ft)
             """), {
-                "bc": barcode, "cc": componentcode or "", "bs": board_status,
+                "bc": barcode, "cc": componentcode or "", "tc": traycode or "", "bs": board_status,
                 "step": str(step_no), "dev": device or "", "note": str(note or ""),
                 "ts": ts, "ft": table,
             })
         else:
-            conn.execute(text("""
-                UPDATE product_overview
-                SET componentcode=:cc, board_status=:bs, current_step=:step,
-                    last_report_device=:dev, last_report_note=:note,
-                    updated_at=:ts, flow_table=:ft
-                WHERE barcode=:bc
-            """), {
-                "bc": barcode, "cc": componentcode or "", "bs": board_status,
-                "step": str(step_no), "dev": device or "", "note": str(note or ""),
-                "ts": ts, "ft": table,
-            })
+            if traycode is None:
+                conn.execute(text("""
+                    UPDATE product_overview
+                    SET componentcode=:cc, board_status=:bs, current_step=:step,
+                        last_report_device=:dev, last_report_note=:note,
+                        updated_at=:ts, flow_table=:ft
+                    WHERE barcode=:bc
+                """), {
+                    "bc": barcode, "cc": componentcode or "", "bs": board_status,
+                    "step": str(step_no), "dev": device or "", "note": str(note or ""),
+                    "ts": ts, "ft": table,
+                })
+            else:
+                conn.execute(text("""
+                    UPDATE product_overview
+                    SET componentcode=:cc, traycode=:tc, board_status=:bs, current_step=:step,
+                        last_report_device=:dev, last_report_note=:note,
+                        updated_at=:ts, flow_table=:ft
+                    WHERE barcode=:bc
+                """), {
+                    "bc": barcode, "cc": componentcode or "", "tc": traycode or "",
+                    "bs": board_status, "step": str(step_no), "dev": device or "",
+                    "note": str(note or ""), "ts": ts, "ft": table,
+                })
 
 
 def list_overview(
     barcode: str | None = None,
     componentcode: str | None = None,
+    traycode: str | None = None,
     device: str | None = None,
     board_status: str | None = None,
     current_step: str | None = None,
@@ -170,6 +188,9 @@ def list_overview(
     if componentcode:
         conds.append("componentcode = :cc")
         params["cc"] = componentcode
+    if traycode:
+        conds.append("traycode = :tc")
+        params["tc"] = traycode
     if device:
         conds.append("last_report_device = :dev")
         params["dev"] = device

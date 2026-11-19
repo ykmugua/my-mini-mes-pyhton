@@ -1,25 +1,25 @@
 {
   "steps": [
     {
-      "step_no": 1,
+      "step_no": "1",
       "step_name": "S1",
       "enabled": true,
       "remark": "首站上电与基础安全检查"
     },
     {
-      "step_no": 2,
+      "step_no": "2",
       "step_name": "S2",
       "enabled": true,
       "remark": "功能与参数校验"
     },
     {
-      "step_no": 3,
+      "step_no": "3",
       "step_name": "S3",
       "enabled": true,
       "remark": "出货前最终检查"
     },
     {
-      "step_no": 4,
+      "step_no": "4",
       "step_name": "S4",
       "enabled": false,
       "remark": "当前阶段暂未启用"
@@ -40,7 +40,7 @@
       "device_id": "TEST-01",
       "device_name": "上电测试机",
       "line_id": "L1",
-      "step_no": 1,
+      "step_no": "1",
       "enabled": true,
       "remark": "一线上电测试工位"
     },
@@ -48,7 +48,7 @@
       "device_id": "TEST-01B",
       "device_name": "上电测试机B",
       "line_id": "L1",
-      "step_no": 1,
+      "step_no": "1",
       "enabled": true,
       "remark": "一线上电备用机"
     },
@@ -56,7 +56,7 @@
       "device_id": "TEST-02",
       "device_name": "功能测试机",
       "line_id": "L2",
-      "step_no": 2,
+      "step_no": "2",
       "enabled": true,
       "remark": "一线功能测试工位"
     },
@@ -64,7 +64,7 @@
       "device_id": "TEST-02B",
       "device_name": "功能测试机B",
       "line_id": "L2",
-      "step_no": 2,
+      "step_no": "2",
       "enabled": true,
       "remark": "二线功能测试工位"
     },
@@ -72,7 +72,7 @@
       "device_id": "TEST-03",
       "device_name": "终检机",
       "line_id": "L2",
-      "step_no": 3,
+      "step_no": "3",
       "enabled": true,
       "remark": "一线终检工位"
     },
@@ -80,7 +80,7 @@
       "device_id": "TEST-03B",
       "device_name": "终检机B",
       "line_id": "L2",
-      "step_no": 3,
+      "step_no": "3",
       "enabled": true,
       "remark": "二线终检工位"
     },
@@ -88,7 +88,7 @@
       "device_id": "TEST-04",
       "device_name": "备用上电测试机",
       "line_id": "L1",
-      "step_no": 1,
+      "step_no": "1",
       "enabled": false,
       "remark": "备用设备，当前停用"
     }
@@ -101,7 +101,7 @@
       "version_description": "增加压力检测与启动保护",
       "sha256": "6f3b8e0c1d2a9f7e4b5c6d8a1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f",
       "download_url": "http://192.168.1.50:8000/programs/fw_TEST-01_v1.2.0.zip",
-      "step_no": 1
+      "step_no": "1"
     },
     {
       "program_id": 2,
@@ -110,7 +110,7 @@
       "version_description": "修复型号切换后的参数缓存",
       "sha256": "a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90",
       "download_url": "http://192.168.1.50:8000/programs/fw_FUNC-TEST_v2.0.1.7z",
-      "step_no": 2
+      "step_no": "2"
     },
     {
       "program_id": 3,
@@ -119,7 +119,7 @@
       "version_description": "正式终检参数模板",
       "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
       "download_url": "http://192.168.1.50:8000/programs/fw_FINAL-CHECK_v1.0.0.zip",
-      "step_no": 3
+      "step_no": "3"
     }
   ],
   "program_versions": [
@@ -197,19 +197,19 @@
   "product_routes": [
     {
       "product_model": "P-1001",
-      "step_no": 1,
+      "step_no": "1",
       "success_next_step": "2",
       "fail_next_step": "LOCK"
     },
     {
       "product_model": "P-1001",
-      "step_no": 2,
+      "step_no": "2",
       "success_next_step": "3",
       "fail_next_step": "LOCK"
     },
     {
       "product_model": "P-1001",
-      "step_no": 3,
+      "step_no": "3",
       "success_next_step": "END",
       "fail_next_step": "LOCK"
     }
@@ -217,23 +217,46 @@
   "product_step_devices": [
     {
       "product_model": "P-1001",
-      "step_no": 1,
+      "step_no": "1",
       "device_id": "TEST-01"
     },
     {
       "product_model": "P-1001",
-      "step_no": 1,
+      "step_no": "1",
       "device_id": "TEST-01B"
     },
     {
       "product_model": "P-1001",
-      "step_no": 2,
+      "step_no": "2",
       "device_id": "TEST-02"
     },
     {
       "product_model": "P-1001",
-      "step_no": 3,
+      "step_no": "3",
       "device_id": "TEST-03"
+    }
+  ],
+  "trays": [
+    {
+      "traycode": "T02001",
+      "tray_name": "01号载具",
+      "capacity": 20,
+      "enabled": true,
+      "remark": "一线DIP托盘"
+    },
+    {
+      "traycode": "T02002",
+      "tray_name": "02号载具",
+      "capacity": 20,
+      "enabled": true,
+      "remark": "一线DIP托盘"
+    },
+    {
+      "traycode": "T02003",
+      "tray_name": "03号载具",
+      "capacity": 24,
+      "enabled": true,
+      "remark": "二线备载具"
     }
   ]
 }

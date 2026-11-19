@@ -39,7 +39,7 @@ def test_product_page_renders_four_sections() -> None:
     assert len(at.data_editor) == 2
     assert at.selectbox(key="selected_product").value == "P-1001"
     assert at.selectbox(key="assign_line").value == "L1"
-    assert at.selectbox(key="assign_step").value == 1
+    assert at.selectbox(key="assign_step").value == "1"
     assert at.multiselect(key="assign_P-1001_L1_1").value == [
         "TEST-01",
         "TEST-01B",
@@ -175,7 +175,7 @@ def test_route_duplicate_step_is_rejected() -> None:
     at.session_state["product_routes"].append(
         {
             "product_model": "P-1001",
-            "step_no": 1,
+            "step_no": "1",
             "success_next_step": "END",
             "fail_next_step": "LOCK",
         }
@@ -216,17 +216,17 @@ def test_route_editor_saves_success_and_fail_targets() -> None:
     route = next(
         route
         for route in at.session_state["product_routes"]
-        if route["product_model"] == "P-1001" and route["step_no"] == 1
+        if route["product_model"] == "P-1001" and route["step_no"] == "1"
     )
-    assert route["success_next_step"] == 3
-    assert route["fail_next_step"] == 3
+    assert route["success_next_step"] == "3"
+    assert route["fail_next_step"] == "3"
 
 
 def test_delete_route_confirmation_removes_only_selected_step() -> None:
     at = _open_page(_run())
     at.session_state["pending_product_route_delete"] = {
         "product_model": "P-1001",
-        "step_no": 1,
+        "step_no": "1",
     }
     at.run()
 
@@ -237,14 +237,14 @@ def test_delete_route_confirmation_removes_only_selected_step() -> None:
     assert not at.exception, [str(item.value) for item in at.exception]
     assert {
         route["step_no"] for route in at.session_state["product_routes"]
-    } == {2, 3}
+    } == {"2", "3"}
 
 
 def test_delete_route_cancel_keeps_route() -> None:
     at = _open_page(_run())
     at.session_state["pending_product_route_delete"] = {
         "product_model": "P-1001",
-        "step_no": 1,
+        "step_no": "1",
     }
     at.run()
     at.button(key="cancel_delete_route").click().run()
@@ -252,15 +252,15 @@ def test_delete_route_cancel_keeps_route() -> None:
     assert not at.exception, [str(item.value) for item in at.exception]
     assert {
         route["step_no"] for route in at.session_state["product_routes"]
-    } == {1, 2, 3}
+    } == {"1", "2", "3"}
 
 
 def test_success_cycle_warns_but_saves() -> None:
     at = _run()
     routes = at.session_state["product_routes"]
-    next(route for route in routes if route["step_no"] == 2)[
+    next(route for route in routes if route["step_no"] == "2")[
         "success_next_step"
-    ] = 1
+    ] = "1"
     at = _open_page(at)
     at.button(key="save_product_routes").click().run()
 
@@ -271,7 +271,7 @@ def test_success_cycle_warns_but_saves() -> None:
 def test_device_assignment_switches_and_saves() -> None:
     at = _open_page(_run())
     at.selectbox(key="assign_line").select("L2").run()
-    at.selectbox(key="assign_step").select(2).run()
+    at.selectbox(key="assign_step").select("2").run()
     assignment = at.multiselect(key="assign_P-1001_L2_2")
     assert assignment.value == ["TEST-02"]
 
@@ -282,7 +282,7 @@ def test_device_assignment_switches_and_saves() -> None:
     assigned = {
         item["device_id"]
         for item in at.session_state["product_step_devices"]
-        if item["product_model"] == "P-1001" and item["step_no"] == 2
+        if item["product_model"] == "P-1001" and item["step_no"] == "2"
     }
     assert assigned == {"TEST-02B"}
     assert all(
@@ -293,7 +293,7 @@ def test_device_assignment_switches_and_saves() -> None:
 
 def test_device_candidates_are_filtered_by_line_step_and_enabled() -> None:
     at = _open_page(_run())
-    at.selectbox(key="assign_step").select(2).run()
+    at.selectbox(key="assign_step").select("2").run()
 
     assert "当前线体下该工序暂无启用设备，请先在设备注册页添加或调整设备" in [
         item.value for item in at.info

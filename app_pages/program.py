@@ -159,7 +159,7 @@ def _program_config(
         "程序名": st.column_config.TextColumn("程序名", required=True, width="medium"),
         "所属工序": st.column_config.SelectboxColumn(
             "所属工序",
-            options=[int(step["step_no"]) for step in steps],
+            options=[str(step["step_no"]) for step in steps],
             format_func=lambda step_no: step_label(steps, step_no),
             required=True,
             width="medium",
@@ -245,7 +245,7 @@ def _validate_program_rows(
     str | None,
 ]:
     current_by_id = {int(item["program_id"]): item for item in current}
-    valid_steps = {int(item["step_no"]) for item in steps}
+    valid_steps = {str(item["step_no"]) for item in steps}
     updated: list[dict[str, Any]] = []
     updated_versions = [{**item} for item in program_versions]
     used_names: set[str] = set()
@@ -260,7 +260,7 @@ def _validate_program_rows(
 
         name = _text(row.get("程序名"))
         version = _text(row.get("版本"))
-        step_no = _integer(row.get("所属工序"))
+        step_no = _text(row.get("所属工序"))
         sha_display = _text(row.get("SHA256"))
         if not name or not version:
             return None, None, "程序名和程序版本不能为空"
@@ -295,7 +295,7 @@ def _validate_program_rows(
                 "program_name": name,
                 "program_version": version,
                 "sha256": sha256,
-                "step_no": step_no,
+                "step_no": str(step_no),
                 "version_description": version_description,
             }
         )
@@ -381,7 +381,7 @@ with st.container(border=True):
                     step_no = step_col.selectbox(
                         "所属工序",
                         options=[
-                            int(step["step_no"]) for step in active_steps
+                            str(step["step_no"]) for step in active_steps
                         ],
                         format_func=lambda value: step_label(active_steps, value),
                         key="upload_step_no",
@@ -435,7 +435,7 @@ with st.container(border=True):
                                         "http://192.168.1.50:8000/programs/"
                                         f"{clean_name}_{clean_version}{suffix}"
                                     ),
-                                    "step_no": int(step_no),
+                                    "step_no": str(step_no),
                                 }
                             )
                             st.session_state.programs = programs

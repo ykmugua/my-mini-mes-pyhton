@@ -19,11 +19,11 @@ def _mock_program_pulls(
     records = []
     for index in range(30):
         program = programs[index % len(programs)]
-        step_no = int(program["step_no"])
+        step_no = str(program["step_no"])
         records.append(
             {
-                "device_id": f"TEST-{step_no:02d}",
-                "product": "P-1001" if step_no < 3 else "P-1002",
+                "device_id": f"TEST-{int(step_no):02d}" if str(step_no).isdigit() else f"TEST-{step_no}",
+                "product": "P-1001" if step_no in {"1", "2"} else "P-1002",
                 "program_version": program["program_version"],
                 "sha256": program["sha256"],
                 "pulled_at": (
@@ -41,7 +41,7 @@ def _mock_program_status_logs(
     records = []
     for index in range(30):
         program = programs[index % len(programs)]
-        step_no = int(program["step_no"])
+        step_no = str(program["step_no"])
         variant = index % 6
         trusted = variant not in {2, 5}
         reported_version = (
@@ -54,8 +54,8 @@ def _mock_program_status_logs(
             reason = "SHA256 校验不一致"
         records.append(
             {
-                "device_id": f"TEST-{step_no:02d}",
-                "product": "P-1001" if step_no < 3 else "P-1002",
+                "device_id": f"TEST-{int(step_no):02d}" if str(step_no).isdigit() else f"TEST-{step_no}",
+                "product": "P-1001" if step_no in {"1", "2"} else "P-1002",
                 "reported_version": reported_version,
                 "reported_sha256": program["sha256"],
                 "sha256_ok": variant != 5,
@@ -79,7 +79,7 @@ def initial_program_state() -> dict[str, list[dict[str, Any]]]:
             "version_description": "增加压力检测与启动保护",
             "sha256": "6f3b8e0c1d2a9f7e4b5c6d8a1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f",
             "download_url": "http://192.168.1.50:8000/programs/fw_TEST-01_v1.2.0.zip",
-            "step_no": 1,
+            "step_no": "1",
         },
         {
             "program_id": 2,
@@ -88,7 +88,7 @@ def initial_program_state() -> dict[str, list[dict[str, Any]]]:
             "version_description": "修复型号切换后的参数缓存",
             "sha256": "a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90",
             "download_url": "http://192.168.1.50:8000/programs/fw_FUNC-TEST_v2.0.1.7z",
-            "step_no": 2,
+            "step_no": "2",
         },
         {
             "program_id": 3,
@@ -97,31 +97,31 @@ def initial_program_state() -> dict[str, list[dict[str, Any]]]:
             "version_description": "正式终检参数模板",
             "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
             "download_url": "http://192.168.1.50:8000/programs/fw_FINAL-CHECK_v1.0.0.zip",
-            "step_no": 3,
+            "step_no": "3",
         },
     ]
     return {
         "steps": [
             {
-                "step_no": 1,
+                "step_no": "1",
                 "step_name": "上电测试",
                 "enabled": True,
                 "remark": "首站上电与基础安全检查",
             },
             {
-                "step_no": 2,
+                "step_no": "2",
                 "step_name": "功能测试",
                 "enabled": True,
                 "remark": "功能与参数校验",
             },
             {
-                "step_no": 3,
+                "step_no": "3",
                 "step_name": "终检",
                 "enabled": True,
                 "remark": "出货前最终检查",
             },
             {
-                "step_no": 4,
+                "step_no": "4",
                 "step_name": "包装",
                 "enabled": False,
                 "remark": "当前阶段暂未启用",
@@ -136,7 +136,7 @@ def initial_program_state() -> dict[str, list[dict[str, Any]]]:
                 "device_id": "TEST-01",
                 "device_name": "上电测试机",
                 "line_id": "L1",
-                "step_no": 1,
+                "step_no": "1",
                 "enabled": True,
                 "remark": "一线上电测试工位",
             },
@@ -144,7 +144,7 @@ def initial_program_state() -> dict[str, list[dict[str, Any]]]:
                 "device_id": "TEST-01B",
                 "device_name": "上电测试机B",
                 "line_id": "L1",
-                "step_no": 1,
+                "step_no": "1",
                 "enabled": True,
                 "remark": "一线上电备用机",
             },
@@ -152,7 +152,7 @@ def initial_program_state() -> dict[str, list[dict[str, Any]]]:
                 "device_id": "TEST-02",
                 "device_name": "功能测试机",
                 "line_id": "L2",
-                "step_no": 2,
+                "step_no": "2",
                 "enabled": True,
                 "remark": "一线功能测试工位",
             },
@@ -160,7 +160,7 @@ def initial_program_state() -> dict[str, list[dict[str, Any]]]:
                 "device_id": "TEST-02B",
                 "device_name": "功能测试机B",
                 "line_id": "L2",
-                "step_no": 2,
+                "step_no": "2",
                 "enabled": True,
                 "remark": "二线功能测试工位",
             },
@@ -168,7 +168,7 @@ def initial_program_state() -> dict[str, list[dict[str, Any]]]:
                 "device_id": "TEST-03",
                 "device_name": "终检机",
                 "line_id": "L2",
-                "step_no": 3,
+                "step_no": "3",
                 "enabled": True,
                 "remark": "一线终检工位",
             },
@@ -176,7 +176,7 @@ def initial_program_state() -> dict[str, list[dict[str, Any]]]:
                 "device_id": "TEST-03B",
                 "device_name": "终检机B",
                 "line_id": "L2",
-                "step_no": 3,
+                "step_no": "3",
                 "enabled": True,
                 "remark": "二线终检工位",
             },
@@ -184,7 +184,7 @@ def initial_program_state() -> dict[str, list[dict[str, Any]]]:
                 "device_id": "TEST-04",
                 "device_name": "备用上电测试机",
                 "line_id": "L1",
-                "step_no": 1,
+                "step_no": "1",
                 "enabled": False,
                 "remark": "备用设备，当前停用",
             },
@@ -256,19 +256,19 @@ def initial_program_state() -> dict[str, list[dict[str, Any]]]:
         "product_routes": [
             {
                 "product_model": "P-1001",
-                "step_no": 1,
-                "success_next_step": 2,
+                "step_no": "1",
+                "success_next_step": "2",
                 "fail_next_step": "LOCK",
             },
             {
                 "product_model": "P-1001",
-                "step_no": 2,
-                "success_next_step": 3,
+                "step_no": "2",
+                "success_next_step": "3",
                 "fail_next_step": "LOCK",
             },
             {
                 "product_model": "P-1001",
-                "step_no": 3,
+                "step_no": "3",
                 "success_next_step": "END",
                 "fail_next_step": "LOCK",
             },
@@ -276,22 +276,22 @@ def initial_program_state() -> dict[str, list[dict[str, Any]]]:
         "product_step_devices": [
             {
                 "product_model": "P-1001",
-                "step_no": 1,
+                "step_no": "1",
                 "device_id": "TEST-01",
             },
             {
                 "product_model": "P-1001",
-                "step_no": 1,
+                "step_no": "1",
                 "device_id": "TEST-01B",
             },
             {
                 "product_model": "P-1001",
-                "step_no": 2,
+                "step_no": "2",
                 "device_id": "TEST-02",
             },
             {
                 "product_model": "P-1001",
-                "step_no": 3,
+                "step_no": "3",
                 "device_id": "TEST-03",
             },
         ],
@@ -312,7 +312,7 @@ def initialize_program_state() -> None:
         for device in st.session_state.get("devices", []):
             device.setdefault(
                 "line_id",
-                "L1" if int(device["step_no"]) == 1 else "L2",
+                "L1" if str(device["step_no"]) == "1" else "L2",
             )
         return
 
@@ -324,7 +324,7 @@ def initialize_program_state() -> None:
         if isinstance(old_steps, list) and old_steps:
             st.session_state["steps"] = [
                 {
-                    "step_no": int(step["step_no"]),
+                    "step_no": str(step["step_no"]),
                     "step_name": str(step["step_name"]),
                     "enabled": True,
                     "remark": "",
@@ -340,7 +340,7 @@ def initialize_program_state() -> None:
                 defaults["program_versions"]
             )
 
-        steps = [int(step["step_no"]) for step in st.session_state["steps"]]
+        steps = [str(step["step_no"]) for step in st.session_state["steps"]]
         default_descriptions = {
             (str(item["program_id"]), str(item["program_version"])): str(
                 item["version_description"]
@@ -404,7 +404,7 @@ def initialize_program_state() -> None:
     for device in st.session_state["devices"]:
         device.setdefault(
             "line_id",
-            "L1" if int(device["step_no"]) == 1 else "L2",
+            "L1" if str(device["step_no"]) == "1" else "L2",
         )
 
     for key in (

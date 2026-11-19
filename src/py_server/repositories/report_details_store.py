@@ -103,30 +103,64 @@ def drop_all_tables() -> None:
 
 # 总览表（details.db 内）：每次整单上报一行，指向该产品的明细表
 OVERVIEW_COLUMNS = [
-    "id", "linecode", "station", "componentcode", "barcode",
+    "id", "linecode", "station", "componentcode", "traycode", "barcode",
     "programname", "programversion", "testexecutetime", "testlongtime",
-    "details_table", "isfinalreport", "failed_step",
+    "result", "isfinalreport", "failed_step", "details_table",
 ]
 
 
+_NEW_OVERVIEW_DDL = """
+    id INTEGER PRIMARY KEY,
+    linecode TEXT NOT NULL,
+    station TEXT NOT NULL,
+    componentcode TEXT NOT NULL,
+    traycode TEXT NOT NULL DEFAULT '',
+    barcode TEXT NOT NULL,
+    programname TEXT NOT NULL,
+    programversion TEXT NOT NULL,
+    testexecutetime TEXT NOT NULL,
+    testlongtime TEXT NOT NULL,
+    result TEXT NOT NULL DEFAULT '',
+    isfinalreport TEXT NOT NULL DEFAULT 'false',
+    failed_step TEXT NOT NULL DEFAULT '',
+    details_table TEXT NOT NULL
+"""
+
+# 目标物理列顺序（与 JSON 字段顺序一致；系统列 id/失败项/关联表按约定位置）
+_OVERVIEW_TARGET_COLS = [c.split()[0] for c in _NEW_OVERVIEW_DDL.strip().splitlines() if c.strip()]
+
+
 def ensure_overview_table(engine=None) -> None:
+    """保证 report_index 存在且物理列顺序与 JSON 约定一致；旧结构自动重建迁移。"""
     with _engine_for(engine).begin() as conn:
-        conn.execute(text("""
-            CREATE TABLE IF NOT EXISTS report_index (
-                id INTEGER PRIMARY KEY,
-                linecode TEXT NOT NULL,
-                station TEXT NOT NULL,
-                componentcode TEXT NOT NULL,
-                barcode TEXT NOT NULL,
-                programname TEXT NOT NULL,
-                programversion TEXT NOT NULL,
-                testexecutetime TEXT NOT NULL,
-                testlongtime TEXT NOT NULL,
-                details_table TEXT NOT NULL,
-                isfinalreport TEXT NOT NULL DEFAULT 'false',
-                failed_step TEXT NOT NULL DEFAULT ''
-            )
-        """))
+        exists = conn.execute(text(
+            "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='report_index'"
+        )).scalar()
+        cols = []
+        if exists:
+            cols = [r[1] for r in conn.execute(text("PRAGMA table_info(report_index)")).fetchall()]
+        if cols and cols != _OVERVIEW_TARGET_COLS:
+            # 旧表缺列或顺序不符：备份 -> 重建 -> 迁移 -> 删除旧表
+            conn.execute(text("ALTER TABLE report_index RENAME TO report_index_old"))
+            conn.execute(text(f"CREATE TABLE report_index ({_NEW_OVERVIEW_DDL})"))
+            # 兼容旧表：缺失列填空串
+            def col(name: str, default: str = "''") -> str:
+                return f"COALESCE({name}, {default})" if name in cols else default
+            conn.execute(text(f"""
+                INSERT INTO report_index
+                (id, linecode, station, componentcode, traycode, barcode, programname,
+                 programversion, testexecutetime, testlongtime, result,
+                 isfinalreport, failed_step, details_table)
+                SELECT id, {col('linecode')}, {col('station')}, {col('componentcode')},
+                       {col('traycode')}, {col('barcode')}, {col('programname')},
+                       {col('programversion')}, {col('testexecutetime')}, {col('testlongtime')},
+                       {col('result')}, {col('isfinalreport', "'false'")}, {col('failed_step')},
+                       {col('details_table')}
+                FROM report_index_old
+            """))
+            conn.execute(text("DROP TABLE report_index_old"))
+        elif not cols:
+            conn.execute(text(f"CREATE TABLE report_index ({_NEW_OVERVIEW_DDL})"))
         conn.execute(text(
             "CREATE INDEX IF NOT EXISTS idx_report_index_barcode ON report_index(barcode)"
         ))
@@ -138,25 +172,27 @@ def insert_overview(report: dict, failed_step: str, engine=None) -> int:
     table = detail_table_name(report["barcode"])
     sql = text("""
         INSERT INTO report_index
-        (linecode, station, componentcode, barcode, programname, programversion,
-         testexecutetime, testlongtime, details_table, isfinalreport, failed_step)
-        VALUES (:linecode, :station, :componentcode, :barcode, :programname,
-                :programversion, :testexecutetime, :testlongtime,
-                :details_table, :isfinalreport, :failed_step)
+        (linecode, station, componentcode, traycode, barcode, programname, programversion,
+         testexecutetime, testlongtime, result, isfinalreport, failed_step, details_table)
+        VALUES (:linecode, :station, :componentcode, :traycode, :barcode, :programname,
+                :programversion, :testexecutetime, :testlongtime, :result,
+                :isfinalreport, :failed_step, :details_table)
     """)
     with _engine_for(engine).begin() as conn:
         conn.execute(sql, {
             "linecode": report.get("linecode", ""),
             "station": report.get("station", ""),
             "componentcode": report.get("componentcode", ""),
+            "traycode": report.get("traycode", ""),
             "barcode": report.get("barcode", ""),
             "programname": report.get("programname", ""),
             "programversion": report.get("programversion", ""),
             "testexecutetime": report.get("testexecutetime", ""),
             "testlongtime": report.get("testlongtime", ""),
-            "details_table": table,
+            "result": report.get("result", ""),
             "isfinalreport": str(report.get("isfinalreport", "false")),
             "failed_step": failed_step or "",
+            "details_table": table,
         })
         result = conn.execute(text("SELECT last_insert_rowid()"))
         return int(result.scalar())

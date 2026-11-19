@@ -2,6 +2,7 @@
   "linecode": "L2-1F-DIP-D16",
   "station": "39C0-L2-1F-DIP16-FCT01",
   "componentcode": "L120201091",
+  "traycode": "T02001",
   "barcode": "71202011752609010004567V8083",
   "programname": "TEST-DUT-001",
   "programversion": "V0.0.2",

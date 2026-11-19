@@ -145,7 +145,7 @@ def test_add_device_form_appends_device() -> None:
     at.text_input(key="new_device_id").input("TEST-05")
     at.text_input(key="new_device_name").input("包装检测机")
     at.selectbox(key="new_device_line_id").select("L2")
-    at.selectbox(key="new_device_step_no").select(2)
+    at.selectbox(key="new_device_step_no").select("2")
     at.checkbox(key="new_device_enabled").check()
     at.text_input(key="new_device_remark").input("二线设备")
     at.form_submit_button[1].click().run()
@@ -155,7 +155,7 @@ def test_add_device_form_appends_device() -> None:
         "device_id": "TEST-05",
         "device_name": "包装检测机",
         "line_id": "L2",
-        "step_no": 2,
+        "step_no": "2",
         "enabled": True,
         "remark": "二线设备",
     }
@@ -198,7 +198,7 @@ def test_device_editor_saves_line_step_and_enabled() -> None:
     at = _open_page(_run())
     at.session_state["device_editor"] = {
         "edited_rows": {
-            0: {"所属线体": "L2", "所属工序": 2, "启用": False}
+            0: {"所属线体": "L2", "所属工序": "2", "启用": False}
         }
     }
     at.run()
@@ -206,7 +206,7 @@ def test_device_editor_saves_line_step_and_enabled() -> None:
 
     assert not at.exception, [str(item.value) for item in at.exception]
     assert at.session_state["devices"][0]["line_id"] == "L2"
-    assert at.session_state["devices"][0]["step_no"] == 2
+    assert at.session_state["devices"][0]["step_no"] == "2"
     assert at.session_state["devices"][0]["enabled"] is False
 
 

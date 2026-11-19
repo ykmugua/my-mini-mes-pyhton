@@ -98,7 +98,7 @@ def _render_add_form(editable: bool) -> None:
     if not editable:
         st.info("只读角色不可新增变量。")
         return
-    with st.form("var_create_form", clear_on_submit=False):
+    with st.form("var_create_form", clear_on_submit=False, border=False):
         l1, l2, l3 = _level_inputs("new_var", True)
         c1, c2 = st.columns(2)
         type_name = c1.selectbox("类型", VARIABLE_TYPES, key="new_var_type")

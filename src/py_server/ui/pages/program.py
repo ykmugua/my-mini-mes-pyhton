@@ -162,7 +162,7 @@ def _program_config(
         "程序名": st.column_config.TextColumn("程序名", required=True, width="medium"),
         "所属工序": st.column_config.SelectboxColumn(
             "所属工序",
-            options=[int(step["step_no"]) for step in steps],
+            options=[str(step["step_no"]) for step in steps],
             format_func=lambda step_no: step_label(steps, step_no),
             required=True,
             width="medium",
@@ -264,7 +264,7 @@ def _validate_program_rows(
     str | None,
 ]:
     current_by_id = {int(item["program_id"]): item for item in current}
-    valid_steps = {int(item["step_no"]) for item in steps}
+    valid_steps = {str(item["step_no"]) for item in steps}
     updated: list[dict[str, Any]] = []
     updated_versions = [{**item} for item in program_versions]
     used_names: set[str] = set()
@@ -279,7 +279,7 @@ def _validate_program_rows(
 
         name = _text(row.get("程序名"))
         version = _text(row.get("版本"))
-        step_no = _integer(row.get("所属工序"))
+        step_no = _text(row.get("所属工序"))
         sha_display = _text(row.get("SHA256"))
         if not name or not version:
             return None, None, "程序名和程序版本不能为空"
@@ -314,7 +314,7 @@ def _validate_program_rows(
                 "program_name": name,
                 "program_version": version,
                 "sha256": sha256,
-                "step_no": step_no,
+                "step_no": str(step_no),
                 "version_description": version_description,
             }
         )
@@ -427,107 +427,106 @@ def render_page() -> None:
     # -----------------------------------------------------------------------------
     # 区块 1：上传程序文件
     # -----------------------------------------------------------------------------
-    with st.container(border=True):
-        st.subheader("上传程序文件")
-        if read_only:
-            with st.expander("上传程序文件", expanded=False):
-                st.info("只读角色不可上传程序。")
-        else:
-            with st.expander("上传程序文件", expanded=False):
-                if not active_steps:
-                    st.warning("暂无启用工序，请先在工序注册页启用工序")
-                else:
-                    with st.form("program_upload_form", clear_on_submit=False):
-                        name_col, version_col, step_col = st.columns([2, 1, 2])
-                        program_name = name_col.text_input(
-                            "程序名",
-                            key="upload_program_name",
-                            placeholder="例如 TEST_MAIN",
-                        )
-                        program_version = version_col.text_input(
-                            "程序版本",
-                            key="upload_program_version",
-                            placeholder="例如 v1.2.0",
-                        )
-                        step_no = step_col.selectbox(
-                            "所属工序",
-                            options=[
-                                int(step["step_no"]) for step in active_steps
-                            ],
-                            format_func=lambda value: step_label(active_steps, value),
-                            key="upload_step_no",
-                        )
-                        uploaded_file = st.file_uploader(
-                            "程序文件",
-                            type=["zip", "7z"],
-                            accept_multiple_files=False,
-                            key="upload_program_file",
-                        )
-                        version_description = st.text_input(
-                            "版本说明",
-                            key="upload_version_description",
-                            placeholder="例如：修复型号切换后的参数缓存",
-                        )
-                        submitted = st.form_submit_button("上传并保存")
+    st.subheader("上传程序文件")
+    if read_only:
+        with st.expander("上传程序文件", expanded=False):
+            st.info("只读角色不可上传程序。")
+    else:
+        with st.expander("上传程序文件", expanded=False):
+            if not active_steps:
+                st.warning("暂无启用工序，请先在工序注册页启用工序")
+            else:
+                with st.form("program_upload_form", clear_on_submit=False, border=False):
+                    name_col, version_col, step_col = st.columns([2, 1, 2])
+                    program_name = name_col.text_input(
+                        "程序名",
+                        key="upload_program_name",
+                        placeholder="例如 TEST_MAIN",
+                    )
+                    program_version = version_col.text_input(
+                        "程序版本",
+                        key="upload_program_version",
+                        placeholder="例如 v1.2.0",
+                    )
+                    step_no = step_col.selectbox(
+                        "所属工序",
+                        options=[
+                            str(step["step_no"]) for step in active_steps
+                        ],
+                        format_func=lambda value: step_label(active_steps, value),
+                        key="upload_step_no",
+                    )
+                    uploaded_file = st.file_uploader(
+                        "程序文件",
+                        type=["zip", "7z"],
+                        accept_multiple_files=False,
+                        key="upload_program_file",
+                    )
+                    version_description = st.text_input(
+                        "版本说明",
+                        key="upload_version_description",
+                        placeholder="例如：修复型号切换后的参数缓存",
+                    )
+                    submitted = st.form_submit_button("上传并保存")
 
-                    if submitted:
-                        clean_name = program_name.strip()
-                        clean_version = program_version.strip()
-                        if not clean_name or not clean_version:
-                            st.error("程序名和程序版本不能为空")
-                        elif step_by_no(active_steps, step_no) is None:
-                            st.error("请选择有效的所属工序")
-                        elif uploaded_file is None:
-                            st.error("请选择要上传的程序文件")
+                if submitted:
+                    clean_name = program_name.strip()
+                    clean_version = program_version.strip()
+                    if not clean_name or not clean_version:
+                        st.error("程序名和程序版本不能为空")
+                    elif step_by_no(active_steps, step_no) is None:
+                        st.error("请选择有效的所属工序")
+                    elif uploaded_file is None:
+                        st.error("请选择要上传的程序文件")
+                    else:
+                        suffix = Path(uploaded_file.name).suffix.lower()
+                        if suffix not in {".zip", ".7z"}:
+                            st.error("仅支持 .zip 或 .7z 文件")
+                        elif any(
+                            item["program_name"].casefold() == clean_name.casefold()
+                            for item in programs
+                        ):
+                            st.error("程序名已存在，请使用唯一的程序名")
                         else:
-                            suffix = Path(uploaded_file.name).suffix.lower()
-                            if suffix not in {".zip", ".7z"}:
-                                st.error("仅支持 .zip 或 .7z 文件")
-                            elif any(
-                                item["program_name"].casefold() == clean_name.casefold()
-                                for item in programs
-                            ):
-                                st.error("程序名已存在，请使用唯一的程序名")
-                            else:
-                                digest = hashlib.sha256(
-                                    uploaded_file.getvalue()
-                                ).hexdigest()
-                                program_id = next_program_id(programs)
-                                programs.append(
-                                    {
-                                        "program_id": program_id,
-                                        "program_name": clean_name,
-                                        "program_version": clean_version,
-                                        "version_description": (
-                                            version_description.strip()
-                                        ),
-                                        "sha256": digest,
-                                        "download_url": (
-                                            "http://192.168.1.50:8000/programs/"
-                                            f"{clean_name}_{clean_version}{suffix}"
-                                        ),
-                                        "step_no": int(step_no),
-                                    }
-                                )
-                                st.session_state.programs = programs
-                                master.save_key("programs")
-                                _upsert_version_description(
-                                    program_versions,
-                                    program_id,
-                                    clean_version,
-                                    version_description.strip(),
-                                )
-                                st.session_state.program_versions = program_versions
-                                master.save_key("program_versions")
-                                st.toast(
-                                    "程序已上传（模拟），请前往型号关联区块添加型号"
-                                )
-                                st.rerun()
+                            digest = hashlib.sha256(
+                                uploaded_file.getvalue()
+                            ).hexdigest()
+                            program_id = next_program_id(programs)
+                            programs.append(
+                                {
+                                    "program_id": program_id,
+                                    "program_name": clean_name,
+                                    "program_version": clean_version,
+                                    "version_description": (
+                                        version_description.strip()
+                                    ),
+                                    "sha256": digest,
+                                    "download_url": (
+                                        "http://192.168.1.50:8000/programs/"
+                                        f"{clean_name}_{clean_version}{suffix}"
+                                    ),
+                                    "step_no": str(step_no),
+                                }
+                            )
+                            st.session_state.programs = programs
+                            master.save_key("programs")
+                            _upsert_version_description(
+                                program_versions,
+                                program_id,
+                                clean_version,
+                                version_description.strip(),
+                            )
+                            st.session_state.program_versions = program_versions
+                            master.save_key("program_versions")
+                            st.toast(
+                                "程序已上传（模拟），请前往型号关联区块添加型号"
+                            )
+                            st.rerun()
 
-        st.caption(
-            "仅支持 `.zip` 或 `.7z` 压缩包。工序选项来自工序注册中已启用的工序。"
-            "上传后系统会计算 SHA256 并自动生成下载地址。"
-        )
+    st.caption(
+        "仅支持 `.zip` 或 `.7z` 压缩包。工序选项来自工序注册中已启用的工序。"
+        "上传后系统会计算 SHA256 并自动生成下载地址。"
+    )
 
 
     # -----------------------------------------------------------------------------
@@ -604,102 +603,100 @@ def render_page() -> None:
     # -----------------------------------------------------------------------------
     # 区块 3：型号关联
     # -----------------------------------------------------------------------------
-    with st.container(border=True):
-        st.subheader("型号关联")
-        if not programs:
-            st.info("暂无程序，请先上传程序文件。")
-        else:
-            selected_program_id = st.selectbox(
-                "选择程序",
-                options=[int(item["program_id"]) for item in programs],
-                format_func=lambda item: program_select_label(
-                    next(
-                        program
-                        for program in programs
-                        if int(program["program_id"]) == int(item)
-                    ),
-                    steps,
+    st.subheader("型号关联")
+    if not programs:
+        st.info("暂无程序，请先上传程序文件。")
+    else:
+        selected_program_id = st.selectbox(
+            "选择程序",
+            options=[int(item["program_id"]) for item in programs],
+            format_func=lambda item: program_select_label(
+                next(
+                    program
+                    for program in programs
+                    if int(program["program_id"]) == int(item)
                 ),
-                key="component_program_id",
+                steps,
+            ),
+            key="component_program_id",
+        )
+        selected_components = [
+            str(item["component_no"])
+            for item in program_components
+            if int(item["program_id"]) == int(selected_program_id)
+        ]
+
+        # 新增型号（与列表分离，避免 data_editor 左侧增删行控件）
+        if not read_only:
+            with st.expander("新增型号", expanded=False):
+                with st.form("component_create_form", clear_on_submit=True, border=False):
+                    new_component = st.text_input(
+                        "型号 / 组件号", key="new_component_no",
+                        placeholder="例如 P-1003",
+                    )
+                    add_clicked = st.form_submit_button("添加型号")
+                if add_clicked:
+                    clean = _text(new_component)
+                    if not clean:
+                        st.error("型号不能为空")
+                    elif clean in selected_components:
+                        st.error("该型号已关联")
+                    else:
+                        updated = list(program_components)
+                        updated.append({
+                            "program_id": int(selected_program_id),
+                            "component_no": clean,
+                        })
+                        st.session_state.program_components = updated
+                        master.save_key("program_components")
+                        st.toast("已添加型号")
+                        st.rerun()
+
+        st.session_state["_component_names"] = list(selected_components)
+        component_editor_key = f"component_editor_{selected_program_id}"
+        edited_components: pd.DataFrame | None = None
+        if read_only:
+            st.dataframe(
+                _component_frame(selected_components, include_delete=False),
+                column_config={"component_no": "型号 / 组件号"},
+                hide_index=True,
+                width="stretch",
+                alt="当前程序的型号关联",
             )
-            selected_components = [
-                str(item["component_no"])
-                for item in program_components
-                if int(item["program_id"]) == int(selected_program_id)
+        else:
+            edited_components = st.data_editor(
+                _component_frame(selected_components),
+                column_config={
+                    "component_no": st.column_config.TextColumn(
+                        "型号 / 组件号", required=True, width="medium"
+                    ),
+                    "删除": st.column_config.ButtonColumn(
+                        "删除", type="tertiary", on_click=_request_component_delete,
+                        key=COMPONENT_DELETE_KEY, width="small",
+                    ),
+                },
+                hide_index=True,
+                num_rows="fixed",
+                width="stretch",
+                alt="当前程序的型号关联编辑器",
+                key=component_editor_key,
+            )
+        # 处理删除（立即从当前程序移除该型号，并保存）
+        pending_comp = st.session_state.get("pending_component_delete")
+        if pending_comp is not None:
+            st.session_state.program_components = [
+                item for item in program_components
+                if not (
+                    int(item["program_id"]) == int(selected_program_id)
+                    and item["component_no"] == pending_comp
+                )
             ]
-
-            with st.container(border=True):
-                # 新增型号（与列表分离，避免 data_editor 左侧增删行控件）
-                if not read_only:
-                    with st.expander("新增型号", expanded=False):
-                        with st.form("component_create_form", clear_on_submit=True):
-                            new_component = st.text_input(
-                                "型号 / 组件号", key="new_component_no",
-                                placeholder="例如 P-1003",
-                            )
-                            add_clicked = st.form_submit_button("添加型号")
-                        if add_clicked:
-                            clean = _text(new_component)
-                            if not clean:
-                                st.error("型号不能为空")
-                            elif clean in selected_components:
-                                st.error("该型号已关联")
-                            else:
-                                updated = list(program_components)
-                                updated.append({
-                                    "program_id": int(selected_program_id),
-                                    "component_no": clean,
-                                })
-                                st.session_state.program_components = updated
-                                master.save_key("program_components")
-                                st.toast("已添加型号")
-                                st.rerun()
-
-                st.session_state["_component_names"] = list(selected_components)
-                component_editor_key = f"component_editor_{selected_program_id}"
-                edited_components: pd.DataFrame | None = None
-                if read_only:
-                    st.dataframe(
-                        _component_frame(selected_components, include_delete=False),
-                        column_config={"component_no": "型号 / 组件号"},
-                        hide_index=True,
-                        width="stretch",
-                        alt="当前程序的型号关联",
-                    )
-                else:
-                    edited_components = st.data_editor(
-                        _component_frame(selected_components),
-                        column_config={
-                            "component_no": st.column_config.TextColumn(
-                                "型号 / 组件号", required=True, width="medium"
-                            ),
-                            "删除": st.column_config.ButtonColumn(
-                                "删除", type="tertiary", on_click=_request_component_delete,
-                                key=COMPONENT_DELETE_KEY, width="small",
-                            ),
-                        },
-                        hide_index=True,
-                        num_rows="fixed",
-                        width="stretch",
-                        alt="当前程序的型号关联编辑器",
-                        key=component_editor_key,
-                    )
-                # 处理删除（立即从当前程序移除该型号，并保存）
-                pending_comp = st.session_state.get("pending_component_delete")
-                if pending_comp is not None:
-                    st.session_state.program_components = [
-                        item for item in program_components
-                        if not (
-                            int(item["program_id"]) == int(selected_program_id)
-                            and item["component_no"] == pending_comp
-                        )
-                    ]
-                    master.save_key("program_components")
-                    st.session_state.pop("pending_component_delete", None)
-                    st.toast("已删除该型号关联")
-                    st.rerun()
-                if not selected_components:
-                    st.info("暂无记录")
+            master.save_key("program_components")
+            st.session_state.pop("pending_component_delete", None)
+            st.toast("已删除该型号关联")
+            st.rerun()
+        if not selected_components:
+            st.info("暂无记录")
 
 
 

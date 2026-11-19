@@ -15,6 +15,7 @@
 | 程序下发     | 程序主数据（程序名/版本/说明/SHA256/URL/所属工序）；型号关联；设备拉取记录；版本漂移告警                                      |
 | 工序注册     | 全厂工序主数据：工序号/名称/启用/备注；新增、编辑、删除                                                                       |
 | 设备注册     | 线体管理与设备主数据：设备编号/名称/线体/工序/启停/备注                                                                      |
+| 载具注册     | 载具（托盘）主数据：载具码/名称/载荷数量/启停/备注；新增、直接修改、删除 |
 | 产品管理     | 产品主数据、工序流程（成功/失败下站）、产品-工序-设备分配范围                                                                |
 | 测试数据看板 | 设备页流式卡片 + 工序页按工序统计；折叠容器「监控设备管理」与「设置显示」；时间区间查询、每行卡片数、拖拽排序；1 秒局部刷新 |
 | 开放性变量   | 最多三层组/子组/键层级（JSON 树视图）；变量定义与当前值查看、前缀筛选；新增变量；30 秒自动刷新；设备按完整路径读写接口          |
@@ -145,8 +146,8 @@ py-server/
 | `station_summary`     | 产线看板汇总：设备状态/条码/总数/一次通过/复测通过/失败/持续时间；由 V1.3 上报维护，前端只读 |
 | `station_fail_detail` | 看板失败明细：设备/失败项/条码/时间；由 V1.3 上报维护，前端只读                        |
 | `test_reports`        | V1.3 整单主表（主库）：请求 ID 幂等 + JSON 顶层字段（含 isfinalreport）；每单一行      |
-| `db_<工序号>_<工序名>.db` | 按工序测试库：`report_index` 总览 + 每产品 `SN_<条码>_<hash>` 明细表；明细表 id 从 1 开始 |
-| `ProductFlow.db`      | 产品流转库：`product_overview` 总览 + 每产品 `F_<条码>_<hash>` 流转表；状态 normal/lock/final |
+| `db_<工序号>.db` | 按工序测试库：`report_index` 总览 + 每产品 `SN_<条码>_<hash>` 明细表；明细表 id 从 1 开始；工序名不进入文件名 |
+| `ProductFlow.db`      | 产品流转库：`product_overview` 总览（`barcode`/`componentcode`/`traycode`/状态等） + 每产品 `F_<条码>_<hash>` 流转表；状态 normal/lock/final |
 | `TestReport.db`       | 兼容旧版测试报告库；新上报不再写入                                                     |
 | `unlock_logs`         | 解锁留痕（工件、解锁人、原因、锁定原因、时间）                                               |
 | `variables`           | 开放变量：名称、类型（int/str/bool/float）、当前值、最后写入设备、更新时间                    |
@@ -229,12 +230,13 @@ x-request-id: <32 位 UUID，重试时保持不变>
   "linecode": "L2-1F-DIP-D16",
   "station": "39C0-L2-1F-DIP16-FCT01",
   "componentcode": "L120201091",
+  "traycode": "T02001",
   "barcode": "71202011752609010004567V8083",
   "programname": "TEST-DUT-001",
   "programversion": "V0.0.2",
   "testexecutetime": "2025/4/22 13:55:35.123",
-  "result": "FAIL",
   "testlongtime": "00:00:06.300",
+  "result": "FAIL",
   "details": [
     {"TestItem": "测试温度", "TestStep": "SOC_HW_ID1", "StandardValue": "1.10",
      "UpperValue": "1.20", "LowerValue": "0.90", "MeasureValue": "1.12",

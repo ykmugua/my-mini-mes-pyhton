@@ -428,7 +428,7 @@ def render_page() -> None:
                 st.info("只读角色不可新增产品。")
         else:
             with st.expander("新增产品", expanded=False):
-                with st.form("product_create_form", clear_on_submit=False):
+                with st.form("product_create_form", clear_on_submit=False, border=False):
                     name_col, model_col = st.columns(2)
                     product_name = name_col.text_input(
                         "产品名称",

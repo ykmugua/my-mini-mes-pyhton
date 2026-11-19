@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import os
+import re
 import socket
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -35,9 +36,10 @@ def details_db_path() -> Path:
     return _env_path("MES_DETAILS_DB_PATH", data_dir() / "TestReport.db")
 
 
-def report_db_path(step_no: str | int, step_name: str) -> Path:
-    """按工序报告库：db_<工序号>_<工序名>.db（工序名只允许英文/数字）。"""
-    return data_dir() / f"db_{step_no}_{step_name}.db"
+def report_db_path(step_no: str | int) -> Path:
+    """按工序报告库：db_<工序号>.db（工序号只含字母/数字）。"""
+    safe = re.sub(r"[^A-Za-z0-9]", "_", str(step_no))
+    return data_dir() / f"db_{safe}.db"
 
 
 def product_flow_db_path() -> Path:

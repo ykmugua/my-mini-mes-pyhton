@@ -73,12 +73,10 @@ def ui_report_index(
                 text("SELECT step_name FROM steps WHERE step_no = :sn"), {"sn": step_no}
             ).fetchone()
         if row is not None:
-            engines = [eg.get_report_engine(step_no, row[0])]
+            engines = [eg.get_report_engine(step_no)]
     else:
         for path in sorted(config.data_dir().glob("db_*.db")):
-            parts = path.stem.split("_", 2)
-            if len(parts) == 3:
-                engines.append(eg.get_report_engine(parts[1], parts[2]))
+            engines.append(eg.get_report_engine(path.stem[3:]))
         engines.append(eg.get_details_engine())
 
     rows = []
@@ -111,12 +109,10 @@ def ui_report_details(
                 text("SELECT step_name FROM steps WHERE step_no = :sn"), {"sn": step_no}
             ).fetchone()
         if row is not None:
-            engines = [eg.get_report_engine(step_no, row[0])]
+            engines = [eg.get_report_engine(step_no)]
     else:
         for path in sorted(config.data_dir().glob("db_*.db")):
-            parts = path.stem.split("_", 2)
-            if len(parts) == 3:
-                engines.append(eg.get_report_engine(parts[1], parts[2]))
+            engines.append(eg.get_report_engine(path.stem[3:]))
         engines.append(eg.get_details_engine())
 
     for eng in engines:
@@ -133,6 +129,7 @@ def ui_report_details(
 def ui_product_flow_overview(
     barcode: str | None = Query(default=None),
     componentcode: str | None = Query(default=None),
+    traycode: str | None = Query(default=None),
     device: str | None = Query(default=None),
     board_status: str | None = Query(default=None),
     current_step: str | None = Query(default=None),
@@ -140,7 +137,7 @@ def ui_product_flow_overview(
     from ...repositories import product_flow_store
 
     return product_flow_store.list_overview(
-        barcode=barcode, componentcode=componentcode, device=device,
+        barcode=barcode, componentcode=componentcode, traycode=traycode, device=device,
         board_status=board_status, current_step=current_step,
     )
 

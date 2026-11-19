@@ -87,10 +87,7 @@ def list_workpieces(
     # 合并测试报告总览（跨所有工序库），用于测试工序筛选
     report_by_bc: dict[str, dict] = {}
     for path in sorted(cfg.data_dir().glob("db_*.db")):
-        parts = path.stem.split("_", 2)
-        if len(parts) != 3:
-            continue
-        eng = eg2.get_report_engine(parts[1], parts[2])
+        eng = eg2.get_report_engine(path.stem[3:])
         for rr in report_details_store.list_overview(None, eng):
             bc = rr.get("barcode")
             if bc and bc not in report_by_bc:

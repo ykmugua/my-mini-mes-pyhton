@@ -11,7 +11,7 @@ import streamlit as st
 from .. import client
 
 MASTER_KEYS = (
-    "steps", "lines", "devices", "programs", "program_versions",
+    "steps", "lines", "devices", "trays", "programs", "program_versions",
     "program_components", "products", "product_routes", "product_step_devices",
 )
 # 每个页面只需要自己关心的 key，但 init 时一次性拉全量，避免多次请求

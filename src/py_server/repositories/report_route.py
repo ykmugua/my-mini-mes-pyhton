@@ -34,4 +34,4 @@ def report_engine_for_station(station: str, conn: Conn | None = None):
     info = step_for_station(station, conn)
     if info is None or not info.get("step_name"):
         return eg.get_details_engine()
-    return eg.get_report_engine(info["step_no"], info["step_name"])
+    return eg.get_report_engine(info["step_no"])

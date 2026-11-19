@@ -141,15 +141,19 @@ def execute(
         report_repo.insert_report(conn, report=report, details=detail_rows, report_engine=report_engine)
     # 总览表（details.db）：failed_step = 失败项 TestStep（成功为空）
     failed_steps = [d["TestStep"] for d in details if d["TestResult"] == "false"]
-    report_details_store.insert_overview(report, ",".join(failed_steps), report_engine)
+    overview_report = dict(report)
+    overview_report["traycode"] = str(payload.get("traycode") or "")
+    report_details_store.insert_overview(overview_report, ",".join(failed_steps), report_engine)
 
     # 写产品流转库（当前状态 + 流转记录）
     if step_info:
         current_step = str(step_info["step_no"])
-        next_step = str(int(step_info["step_no"]) + 1) if str(step_info["step_no"]).isdigit() else ""
+        step_value = str(step_info["step_no"])
+        next_step = str(int(step_value) + 1) if step_value.isdigit() else ""
         product_flow_store.upsert_flow(
             barcode=barcode,
             componentcode=payload["componentcode"],
+            traycode=str(payload.get("traycode") or ""),
             board_status="normal" if result == "PASS" else "lock",
             step_no=current_step,
             next_step=next_step,

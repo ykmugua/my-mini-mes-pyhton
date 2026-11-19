@@ -262,6 +262,7 @@ def report_details(table: str, step_no: str | None = None) -> list[dict]:
 def product_flow_overview(
     barcode: str | None = None,
     componentcode: str | None = None,
+    traycode: str | None = None,
     device: str | None = None,
     board_status: str | None = None,
     current_step: str | None = None,
@@ -271,6 +272,8 @@ def product_flow_overview(
         params["barcode"] = barcode
     if componentcode:
         params["componentcode"] = componentcode
+    if traycode:
+        params["traycode"] = traycode
     if device:
         params["device"] = device
     if board_status:

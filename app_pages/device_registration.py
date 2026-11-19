@@ -170,7 +170,7 @@ def _device_frame(
             "设备编号": device["device_id"],
             "设备名称": device["device_name"],
             "所属线体": device["line_id"],
-            "所属工序": int(device["step_no"]),
+            "所属工序": str(device["step_no"]),
             "启用": bool(device["enabled"]),
             "备注": device.get("remark", ""),
         }
@@ -214,7 +214,7 @@ def _device_config(
         ),
         "所属工序": st.column_config.SelectboxColumn(
             "所属工序",
-            options=[int(step["step_no"]) for step in active_steps],
+            options=[str(step["step_no"]) for step in active_steps],
             format_func=lambda step_no: step_label(active_steps, step_no),
             required=True,
             width="medium",
@@ -244,7 +244,7 @@ def _validate_devices(
 ) -> tuple[list[dict[str, Any]] | None, str | None]:
     devices: list[dict[str, Any]] = []
     device_ids: set[str] = set()
-    active_step_nos = {int(step["step_no"]) for step in active_steps}
+    active_step_nos = {str(step["step_no"]) for step in active_steps}
     valid_line_ids = {str(line["line_id"]) for line in lines}
 
     for row in rows:
@@ -270,7 +270,7 @@ def _validate_devices(
         if device_id.casefold() in device_ids:
             return None, "设备编号不能重复"
 
-        step_no = _integer(row.get("所属工序"))
+        step_no = _text(row.get("所属工序"))
         if step_no not in active_step_nos:
             return None, "所属工序必须选择启用中的工序"
 
@@ -280,7 +280,7 @@ def _validate_devices(
                 "device_id": device_id,
                 "device_name": device_name,
                 "line_id": line_id,
-                "step_no": step_no,
+                "step_no": str(step_no),
                 "enabled": (
                     True
                     if raw_enabled is None
@@ -465,7 +465,7 @@ with st.container(border=True):
             st.info("只读角色不可新增设备。")
     else:
         with st.expander("新增设备", expanded=False):
-            active_step_nos = [int(step["step_no"]) for step in active_steps]
+            active_step_nos = [str(step["step_no"]) for step in active_steps]
             with st.form("device_create_form", clear_on_submit=False):
                 id_col, name_col = st.columns([1, 2])
                 new_device_id = id_col.text_input(

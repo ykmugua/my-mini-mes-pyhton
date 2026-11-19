@@ -59,7 +59,7 @@ def test_new_step_form_adds_step() -> None:
 
     assert not at.exception, [str(item.value) for item in at.exception]
     assert at.session_state["steps"][-1] == {
-        "step_no": 5,
+        "step_no": "5",
         "step_name": "包装检查",
         "enabled": True,
         "remark": "出货包装确认",
@@ -76,7 +76,7 @@ def test_step_save_updates_only_enabled() -> None:
 
     assert not at.exception, [str(item.value) for item in at.exception]
     assert at.session_state["steps"][0] == {
-        "step_no": 1,
+        "step_no": "1",
         "step_name": "上电测试",
         "enabled": False,
         "remark": "首站上电与基础安全检查",

@@ -43,7 +43,7 @@ def replace_steps(conn: Conn, rows: list[dict]) -> None:
     _replace(conn, eg.steps, rows, ["step_no"])
 
 
-def delete_step(conn: Conn, step_no: int) -> None:
+def delete_step(conn: Conn, step_no: str | int) -> None:
     conn.execute(delete(eg.steps).where(eg.steps.c.step_no == step_no))
 
 
@@ -72,6 +72,21 @@ def list_devices(conn: Conn | None = None) -> list[dict]:
 
 def replace_devices(conn: Conn, rows: list[dict]) -> None:
     _replace(conn, eg.devices, rows, ["device_id"])
+
+
+# --- trays ---
+def list_trays(conn: Conn | None = None) -> list[dict]:
+    if conn is None:
+        with with_read_conn() as c:
+            return list_trays(c)
+    rows = _rows(conn, eg.trays, eg.trays.c.traycode)
+    for r in rows:
+        r["enabled"] = bool(r["enabled"])
+    return rows
+
+
+def replace_trays(conn: Conn, rows: list[dict]) -> None:
+    _replace(conn, eg.trays, rows, ["traycode"])
 
 
 # --- programs ---
@@ -154,6 +169,7 @@ def snapshot(conn: Conn | None = None) -> dict:
         "steps": list_steps(conn),
         "lines": list_lines(conn),
         "devices": list_devices(conn),
+        "trays": list_trays(conn),
         "programs": list_programs(conn),
         "program_versions": list_program_versions(conn),
         "program_components": list_program_components(conn),

@@ -200,7 +200,7 @@ def _request_route_delete() -> None:
     if 0 <= row_index < len(current_routes):
         st.session_state[PENDING_ROUTE_DELETE_KEY] = {
             "product_model": str(selected_product),
-            "step_no": int(current_routes[row_index]["step_no"]),
+            "step_no": str(current_routes[row_index]["step_no"]),
         }
 
 
@@ -215,7 +215,7 @@ def _clear_pending_route_delete() -> None:
 )
 def _confirm_delete_route(route: dict[str, Any]) -> None:
     product_model = str(route["product_model"])
-    step_no = int(route["step_no"])
+    step_no = str(route["step_no"])
     st.write(
         f"确定从产品 **{product_model}** 的工序流程中删除 "
         f"**{step_label(st.session_state.steps, step_no)}** 吗？"
@@ -235,7 +235,7 @@ def _confirm_delete_route(route: dict[str, Any]) -> None:
                 for item in st.session_state.product_routes
                 if not (
                     item["product_model"] == product_model
-                    and int(item["step_no"]) == step_no
+                    and str(item["step_no"]) == step_no
                 )
             ]
             _clear_pending_route_delete()
@@ -273,7 +273,7 @@ def _route_next_label(value: Any, steps: list[dict[str, Any]]) -> str:
 def _route_config(
     steps: list[dict[str, Any]], *, include_delete: bool
 ) -> dict[str, Any]:
-    step_nos = [int(step["step_no"]) for step in steps]
+    step_nos = [str(step["step_no"]) for step in steps]
     config: dict[str, Any] = {
         "当前工序": st.column_config.SelectboxColumn(
             "当前工序",
@@ -317,13 +317,13 @@ def _validate_routes(
     steps: list[dict[str, Any]],
 ) -> tuple[list[dict[str, Any]] | None, str | None]:
     routes: list[dict[str, Any]] = []
-    current_steps: set[int] = set()
-    active_step_nos = {int(step["step_no"]) for step in steps}
+    current_steps: set[str] = set()
+    active_step_nos = {str(step["step_no"]) for step in steps}
 
     for line_no, row in enumerate(rows, start=1):
-        current = _integer(row.get("当前工序"))
-        success = _integer(row.get("成功下站"))
-        fail = _integer(row.get("失败下站"))
+        current = _text(row.get("当前工序"))
+        success = _text(row.get("成功下站")) if _text(row.get("成功下站")) not in {"END", "LOCK"} else _text(row.get("成功下站"))
+        fail = _text(row.get("失败下站")) if _text(row.get("失败下站")) not in {"END", "LOCK"} else _text(row.get("失败下站"))
         success_raw = _text(row.get("成功下站"))
         fail_raw = _text(row.get("失败下站"))
 
@@ -337,9 +337,9 @@ def _validate_routes(
             return None, "同一产品下当前工序不能重复"
         current_steps.add(current)
 
-        if success_raw not in {"END"} and success is None:
+        if success_raw not in {"END"} and not success:
             return None, f"第 {line_no} 行的成功下站无效"
-        if fail_raw not in {"END", "LOCK"} and fail is None:
+        if fail_raw not in {"END", "LOCK"} and not fail:
             return None, f"第 {line_no} 行的失败下站无效"
         routes.append(
             {
@@ -355,16 +355,17 @@ def _validate_routes(
             }
         )
 
+    special = {"END", "LOCK", ""}
     for line_no, route in enumerate(routes, start=1):
-        success = route["success_next_step"]
-        if isinstance(success, int) and success not in current_steps:
+        success = str(route["success_next_step"])
+        if success not in special and success not in current_steps:
             return (
                 None,
                 f"第 {line_no} 行的成功下站指向工序 {success}，"
                 "但该工序未在当前产品流程中配置",
             )
-        fail = route["fail_next_step"]
-        if isinstance(fail, int) and fail not in current_steps:
+        fail = str(route["fail_next_step"])
+        if fail not in special and fail not in current_steps:
             return (
                 None,
                 f"第 {line_no} 行的失败下站指向工序 {fail}，"
@@ -376,21 +377,21 @@ def _validate_routes(
 
 def _success_route_has_cycle(routes: list[dict[str, Any]]) -> bool:
     graph = {
-        int(route["step_no"]): route["success_next_step"]
+        str(route["step_no"]): str(route["success_next_step"])
         for route in routes
-        if isinstance(route["success_next_step"], int)
+        if str(route["success_next_step"]) not in {"END", "LOCK", ""}
     }
-    visiting: set[int] = set()
-    visited: set[int] = set()
+    visiting: set[str] = set()
+    visited: set[str] = set()
 
-    def visit(step_no: int) -> bool:
+    def visit(step_no: str) -> bool:
         if step_no in visiting:
             return True
         if step_no in visited:
             return False
         visiting.add(step_no)
         next_step = graph.get(step_no)
-        if isinstance(next_step, int) and visit(next_step):
+        if isinstance(next_step, str) and visit(next_step):
             return True
         visiting.remove(step_no)
         visited.add(step_no)
@@ -637,8 +638,8 @@ with st.container(border=True):
                     for item in st.session_state.product_routes
                     if item["product_model"]
                     == pending_route["product_model"]
-                    and int(item["step_no"])
-                    == int(pending_route["step_no"])
+                    and str(item["step_no"])
+                    == str(pending_route["step_no"])
                 ),
                 None,
             )
@@ -683,7 +684,7 @@ with st.container(border=True):
                     selected_step_no = st.selectbox(
                         "选择工序",
                         options=[
-                            int(step["step_no"]) for step in active_steps
+                            str(step["step_no"]) for step in active_steps
                         ],
                         format_func=lambda step_no: step_label(
                             active_steps, step_no
@@ -704,11 +705,11 @@ with st.container(border=True):
             for item in product_step_devices:
                 if item["product_model"] != selected_product:
                     continue
-                assigned_by_step.setdefault(int(item["step_no"]), set()).add(
+                assigned_by_step.setdefault(str(item["step_no"]), set()).add(
                     str(item["device_id"])
                 )
             for route in current_routes:
-                step_no = int(route["step_no"])
+                step_no = str(route["step_no"])
                 assigned_ids = assigned_by_step.get(step_no, set())
                 same_line_assigned = {
                     device_id
@@ -716,7 +717,7 @@ with st.container(border=True):
                     if (
                         (device := devices_by_id.get(device_id)) is not None
                         and device.get("line_id") == selected_line_id
-                        and int(device["step_no"]) == step_no
+                        and str(device["step_no"]) == step_no
                         and bool(device["enabled"])
                     )
                 }
@@ -730,7 +731,7 @@ with st.container(border=True):
                 device
                 for device in devices
                 if bool(device["enabled"])
-                and int(device["step_no"]) == int(selected_step_no)
+                and str(device["step_no"]) == str(selected_step_no)
                 and device.get("line_id") == selected_line_id
             ]
             if not candidates:
@@ -753,7 +754,7 @@ with st.container(border=True):
                     str(item["device_id"])
                     for item in product_step_devices
                     if item["product_model"] == selected_product
-                    and int(item["step_no"]) == int(selected_step_no)
+                    and str(item["step_no"]) == str(selected_step_no)
                 }
                 assignment_key = (
                     f"assign_{selected_product}_{selected_line_id}_"
@@ -791,14 +792,14 @@ with st.container(border=True):
                         for item in product_step_devices
                         if not (
                             item["product_model"] == selected_product
-                            and int(item["step_no"])
-                            == int(selected_step_no)
+                            and str(item["step_no"])
+                            == str(selected_step_no)
                         )
                     ]
                     retained.extend(
                         {
                             "product_model": selected_product,
-                            "step_no": int(selected_step_no),
+                            "step_no": str(selected_step_no),
                             "device_id": device_id,
                         }
                         for device_id in selected_devices

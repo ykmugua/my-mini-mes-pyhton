@@ -12,8 +12,8 @@
       "step_name": "上电测试"
     },
     {
-      "device_id": "TEST-03",
-      "name": "终检机",
+      "device_id": "TEST-03B",
+      "name": "终检机B",
       "ip": "127.0.0.1",
       "port": 6379,
       "enable": true,
@@ -23,8 +23,8 @@
       "step_name": "终检"
     },
     {
-      "device_id": "TEST-03B",
-      "name": "终检机B",
+      "device_id": "TEST-03",
+      "name": "终检机",
       "ip": "127.0.0.1",
       "port": 6379,
       "enable": true,

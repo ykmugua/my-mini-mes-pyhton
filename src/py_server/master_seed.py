@@ -13,6 +13,7 @@ _KEYS = (
     "steps",
     "lines",
     "devices",
+    "trays",
     "programs",
     "program_versions",
     "program_components",
@@ -29,6 +30,7 @@ def seed_master_data() -> None:
         master_data_repo.replace_steps(conn, data["steps"])
         master_data_repo.replace_lines(conn, data["lines"])
         master_data_repo.replace_devices(conn, data["devices"])
+        master_data_repo.replace_trays(conn, data["trays"])
         master_data_repo.replace_programs(conn, data["programs"])
         master_data_repo.replace_program_versions(conn, data["program_versions"])
         master_data_repo.replace_program_components(conn, data["program_components"])

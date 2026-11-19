@@ -81,31 +81,36 @@ x-timestamp = floor(当前毫秒时间戳 / 1000) * 1000     // 结果仍为 13 
   "linecode": "string",
   "station": "string",
   "componentcode": "string",
+  "traycode": "string",
   "barcode": "string",
   "programname": "string",
   "programversion": "string",
   "testexecutetime": "string",
-  "result": "string",
   "testlongtime": "string",
-  "isfinalreport": "string",
-  "details": [ { /* 明细对象 */ } ]
+  "result": "string",
+  "details": [ { /* 明细对象 */ } ],
+  "isfinalreport": "string"
 }
 ```
 
 ### 3.2 顶层字段
 
+字段顺序与 `design_data/MesFormat/mesUploadTestDataFormat.json` 保持一致。
+
 | 字段 | 类型 | 必填 | 示例 | 说明 |
 |---|:---:|:---:|---|---|
+| `linecode` | string | **是** | `L2-1F-DIP-D16` | 产线代码 |
 | `station` | string | **是** | `39C0-L2-1F-DIP16-FCT01` | 工位/测试站编号 |
 | `componentcode` | string | **是** | `L120201091` | 型号码 |
-| `linecode` | string | **是** | `L2-1F-DIP-D16` | 产线代码 |
+| `traycode` | string | 否 | `T02001` | 托盘码；无值时传 `/` 或空串，服务端存空串 |
+| `barcode` | string | **是** | `71202011752609010004567V8083` | 产品条码（被测件唯一标识） |
 | `programname` | string | **是** | `TEST-DUT-001` | 测试程序名称 |
 | `programversion` | string | **是** | `V0.0.2` | 测试程序版本 |
 | `testexecutetime` | string | **是** | `2025/4/22 13:55:35.123` | 测试开始时间，格式 `yyyy/M/d HH:mm:ss.SSS` |
-| `barcode` | string | **是** | `71202011752609010004567V8083` | 产品条码（被测件唯一标识） |
-| `result` | string | **是** | `FAIL` | 整单测试结论，枚举 `PASS` / `FAIL` |
 | `testlongtime` | string | **是** | `00:00:06.300` | 总耗时，格式 `HH:mm:ss.SSS` |
+| `result` | string | **是** | `FAIL` | 整单测试结论，枚举 `PASS` / `FAIL` |
 | `details` | array | **是** | `[...]` | 测试明细列表，不得为 null，至少 1 个元素 |
+| `isfinalreport` | string | **是** | `false` | 是否最终报告，`true` / `false` |
 
 ### 3.3 明细对象（details 元素）
 
@@ -128,12 +133,13 @@ x-timestamp = floor(当前毫秒时间戳 / 1000) * 1000     // 结果仍为 13 
   "linecode": "L2-1F-DIP-D16",
   "station": "39C0-L2-1F-DIP16-FCT01",
   "componentcode": "L120201091",
+  "traycode": "T02001",
   "barcode": "71202011752609010004567V8083",
   "programname": "TEST-DUT-001",
   "programversion": "V0.0.2",
   "testexecutetime": "2025/4/22 13:55:35.123",
-  "result": "FAIL",
   "testlongtime": "00:00:06.300",
+  "result": "FAIL",
   "isfinalreport": "true",
   "details": [
     {
