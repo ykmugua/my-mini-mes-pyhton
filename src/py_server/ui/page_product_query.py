@@ -127,6 +127,10 @@ def _render_results(results: list[dict]) -> None:
             if st.session_state.get("pq_current") != selected:
                 st.session_state["pq_current"] = selected
                 st.rerun()
+        elif st.session_state.get("pq_current"):
+            # 取消勾选：清掉暂存的选中条码，下方的测试履历/追溯不再显示
+            st.session_state.pop("pq_current", None)
+            st.rerun()
 
 
 def _render_test_history(tests: list[dict], barcode: str, step_no: str | None = None) -> None:
@@ -144,7 +148,6 @@ def _render_test_history(tests: list[dict], barcode: str, step_no: str | None = 
 
     # 列顺序严格按 mesUploadTestDataFormat.json 的字段顺序
     ov_frame = pd.DataFrame([{
-        "linecode": r.get("linecode") or "",
         "station": r.get("station") or "",
         "componentcode": r.get("componentcode") or "",
         "traycode": r.get("traycode") or "",

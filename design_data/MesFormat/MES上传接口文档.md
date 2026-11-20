@@ -78,7 +78,6 @@ x-timestamp = floor(当前毫秒时间戳 / 1000) * 1000     // 结果仍为 13 
 
 ```json
 {
-  "linecode": "string",
   "station": "string",
   "componentcode": "string",
   "traycode": "string",
@@ -99,7 +98,6 @@ x-timestamp = floor(当前毫秒时间戳 / 1000) * 1000     // 结果仍为 13 
 
 | 字段 | 类型 | 必填 | 示例 | 说明 |
 |---|:---:|:---:|---|---|
-| `linecode` | string | **是** | `L2-1F-DIP-D16` | 产线代码 |
 | `station` | string | **是** | `39C0-L2-1F-DIP16-FCT01` | 工位/测试站编号 |
 | `componentcode` | string | **是** | `L120201091` | 型号码 |
 | `traycode` | string | 否 | `T02001` | 托盘码；无值时传 `/` 或空串，服务端存空串 |
@@ -130,7 +128,6 @@ x-timestamp = floor(当前毫秒时间戳 / 1000) * 1000     // 结果仍为 13 
 
 ```json
 {
-  "linecode": "L2-1F-DIP-D16",
   "station": "39C0-L2-1F-DIP16-FCT01",
   "componentcode": "L120201091",
   "traycode": "T02001",
@@ -172,7 +169,7 @@ x-timestamp = floor(当前毫秒时间戳 / 1000) * 1000     // 结果仍为 13 
 
 ## 4. 数据校验约定（客户端约束）
 
-1. **禁止 null：** 请求体所有 string 字段（含 `station`、`linecode`、`testexecutetime`、`barcode`、`result`、`testlongtime`、`programname`、`programversion` 及 `details` 内全部字段）禁止 null。
+1. **禁止 null：** 请求体所有 string 字段（含 `station`、`testexecutetime`、`barcode`、`result`、`testlongtime`、`programname`、`programversion` 及 `details` 内全部字段）禁止 null。
 2. **空值用 `/`：** 无值时一律用 `/` 代替。
 3. **服务端不解析：** 服务端对上述字段均按字符串原样接收与存储，不解析为数字、布尔或时间。
 4. **details 非空：** `details` 数组不得为 null，至少包含 1 个明细对象。

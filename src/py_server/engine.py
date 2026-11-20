@@ -181,7 +181,7 @@ Index("idx_variable_logs_time", variable_logs.c.logged_at)
 Index("idx_variable_logs_action", variable_logs.c.action)
 
 # -----------------------------------------------------------------------------
-# 主数据（app_pages 页面接入）：工序 / 线体 / 设备 / 程序 / 产品
+# 主数据（app_pages 页面接入）：工序 / 设备 / 程序 / 产品
 # -----------------------------------------------------------------------------
 steps = Table(
     "steps",
@@ -192,20 +192,13 @@ steps = Table(
     Column("remark", Text, nullable=False, default="", server_default=""),
 )
 
-lines = Table(
-    "lines",
-    metadata,
-    Column("line_id", Text, primary_key=True, nullable=True),
-    Column("line_name", Text, nullable=False),
-)
-
 devices = Table(
     "devices",
     metadata,
     Column("device_id", Text, primary_key=True, nullable=True),
     Column("device_name", Text, nullable=False),
-    Column("line_id", Text, nullable=False),
-    Column("step_no", Text, nullable=False),
+    Column("device_model", Text, nullable=False, default="", server_default=""),
+    Column("step_no", Text, nullable=False, default="", server_default=""),
     Column("enabled", Integer, nullable=False, default=1, server_default="1"),
     Column("remark", Text, nullable=False, default="", server_default=""),
 )
@@ -215,6 +208,7 @@ trays = Table(
     metadata,
     Column("traycode", Text, primary_key=True, nullable=True),
     Column("tray_name", Text, nullable=False),
+    Column("tray_model", Text, nullable=False, default="", server_default=""),
     Column("capacity", Integer, nullable=False, default=1, server_default="1"),
     Column("enabled", Integer, nullable=False, default=1, server_default="1"),
     Column("remark", Text, nullable=False, default="", server_default=""),
@@ -229,7 +223,8 @@ programs = Table(
     Column("version_description", Text, nullable=False, default="", server_default=""),
     Column("sha256", Text, nullable=False),
     Column("download_url", Text, nullable=False),
-    Column("step_no", Text, nullable=False),
+    Column("step_no", Text, nullable=False, default="", server_default=""),
+    Column("enabled", Integer, nullable=False, default=1, server_default="1"),
     sqlite_autoincrement=True,
 )
 
@@ -239,15 +234,9 @@ program_versions = Table(
     Column("program_id", Integer, nullable=False),
     Column("program_version", Text, nullable=False),
     Column("version_description", Text, nullable=False, default="", server_default=""),
+    Column("sha256", Text, nullable=False, default="", server_default=""),
+    Column("download_url", Text, nullable=False, default="", server_default=""),
     UniqueConstraint("program_id", "program_version"),
-)
-
-program_components = Table(
-    "program_components",
-    metadata,
-    Column("program_id", Integer, nullable=False),
-    Column("component_no", Text, nullable=False),
-    UniqueConstraint("program_id", "component_no"),
 )
 
 products = Table(
@@ -258,25 +247,39 @@ products = Table(
     Column("test_program_name", Text, nullable=False, default="", server_default=""),
     Column("test_program_path", Text, nullable=False, default="", server_default=""),
     Column("remark", Text, nullable=False, default="", server_default=""),
+    Column("process_code", Text, nullable=False, default="", server_default=""),
+    Column("enabled", Integer, nullable=False, default=1, server_default="1"),
 )
 
-product_routes = Table(
-    "product_routes",
+processes = Table(
+    "processes",
     metadata,
-    Column("product_model", Text, nullable=False),
+    Column("process_code", Text, primary_key=True, nullable=True),
+    Column("process_name", Text, nullable=False),
+    Column("enabled", Integer, nullable=False, default=1, server_default="1"),
+    Column("remark", Text, nullable=False, default="", server_default=""),
+    Column("source_process_code", Text, nullable=False, default="", server_default=""),
+)
+
+process_routes = Table(
+    "process_routes",
+    metadata,
+    Column("process_code", Text, nullable=False),
     Column("step_no", Text, nullable=False),
     Column("success_next_step", Text, nullable=False),
     Column("fail_next_step", Text, nullable=False),
-    UniqueConstraint("product_model", "step_no"),
+    UniqueConstraint("process_code", "step_no"),
 )
 
-product_step_devices = Table(
-    "product_step_devices",
+process_step_resources = Table(
+    "process_step_resources",
     metadata,
-    Column("product_model", Text, nullable=False),
+    Column("process_code", Text, nullable=False),
     Column("step_no", Text, nullable=False),
-    Column("device_id", Text, nullable=False),
-    UniqueConstraint("product_model", "step_no", "device_id"),
+    Column("program_name", Text, nullable=False, default="", server_default=""),
+    Column("device_models", Text, nullable=False, default="", server_default=""),
+    Column("tray_models", Text, nullable=False, default="", server_default=""),
+    UniqueConstraint("process_code", "step_no"),
 )
 
 
@@ -286,7 +289,6 @@ test_reports = Table(
     metadata,
     Column("id", Integer, primary_key=True, autoincrement=True, nullable=True),
     Column("request_id", Text, nullable=False, unique=True),
-    Column("linecode", Text, nullable=False),
     Column("station", Text, nullable=False),
     Column("componentcode", Text, nullable=False),
     Column("barcode", Text, nullable=False),

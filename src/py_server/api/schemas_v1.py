@@ -24,11 +24,10 @@ class TestDetailIn(BaseModel):
 
 
 class TestResultUploadIn(BaseModel):
-    """整单上报：linecode/station/componentcode/barcode/..."""
+    """整单上报：station/componentcode/barcode/..."""
 
     model_config = ConfigDict(populate_by_name=True)
 
-    linecode: str = Field(min_length=1)
     station: str = Field(min_length=1)
     componentcode: str = Field(min_length=1)
     traycode: str = ""

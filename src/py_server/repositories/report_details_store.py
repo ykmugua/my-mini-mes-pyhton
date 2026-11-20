@@ -103,7 +103,7 @@ def drop_all_tables() -> None:
 
 # 总览表（details.db 内）：每次整单上报一行，指向该产品的明细表
 OVERVIEW_COLUMNS = [
-    "id", "linecode", "station", "componentcode", "traycode", "barcode",
+    "id", "station", "componentcode", "traycode", "barcode",
     "programname", "programversion", "testexecutetime", "testlongtime",
     "result", "isfinalreport", "failed_step", "details_table",
 ]
@@ -111,7 +111,6 @@ OVERVIEW_COLUMNS = [
 
 _NEW_OVERVIEW_DDL = """
     id INTEGER PRIMARY KEY,
-    linecode TEXT NOT NULL,
     station TEXT NOT NULL,
     componentcode TEXT NOT NULL,
     traycode TEXT NOT NULL DEFAULT '',
@@ -148,10 +147,10 @@ def ensure_overview_table(engine=None) -> None:
                 return f"COALESCE({name}, {default})" if name in cols else default
             conn.execute(text(f"""
                 INSERT INTO report_index
-                (id, linecode, station, componentcode, traycode, barcode, programname,
+                (id, station, componentcode, traycode, barcode, programname,
                  programversion, testexecutetime, testlongtime, result,
                  isfinalreport, failed_step, details_table)
-                SELECT id, {col('linecode')}, {col('station')}, {col('componentcode')},
+                SELECT id, {col('station')}, {col('componentcode')},
                        {col('traycode')}, {col('barcode')}, {col('programname')},
                        {col('programversion')}, {col('testexecutetime')}, {col('testlongtime')},
                        {col('result')}, {col('isfinalreport', "'false'")}, {col('failed_step')},
@@ -172,15 +171,14 @@ def insert_overview(report: dict, failed_step: str, engine=None) -> int:
     table = detail_table_name(report["barcode"])
     sql = text("""
         INSERT INTO report_index
-        (linecode, station, componentcode, traycode, barcode, programname, programversion,
+        (station, componentcode, traycode, barcode, programname, programversion,
          testexecutetime, testlongtime, result, isfinalreport, failed_step, details_table)
-        VALUES (:linecode, :station, :componentcode, :traycode, :barcode, :programname,
+        VALUES (:station, :componentcode, :traycode, :barcode, :programname,
                 :programversion, :testexecutetime, :testlongtime, :result,
                 :isfinalreport, :failed_step, :details_table)
     """)
     with _engine_for(engine).begin() as conn:
         conn.execute(sql, {
-            "linecode": report.get("linecode", ""),
             "station": report.get("station", ""),
             "componentcode": report.get("componentcode", ""),
             "traycode": report.get("traycode", ""),

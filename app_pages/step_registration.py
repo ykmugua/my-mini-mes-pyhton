@@ -197,17 +197,17 @@ with st.container(border=True):
                     key="new_step_name",
                     placeholder="例如 包装",
                 )
-                if "new_step_enabled" not in st.session_state:
-                    st.session_state["new_step_enabled"] = True
-                new_step_enabled = st.checkbox(
-                    "启用",
-                    key="new_step_enabled",
-                )
-                new_step_remark = st.text_input(
+                # 第二行：备注 + 启用（文本下拉）
+                remark_col, enabled_col = st.columns([3, 1])
+                new_step_remark = remark_col.text_input(
                     "备注",
                     key="new_step_remark",
                     placeholder="可选，用于填写现场说明",
                 )
+                new_step_enabled_text = enabled_col.selectbox(
+                    "启用", options=["是", "否"], key="new_step_enabled_text",
+                )
+                # 第三行：新增按钮（左侧单独一行）
                 submitted = st.form_submit_button("新增工序")
 
             if submitted:
@@ -218,7 +218,7 @@ with st.container(border=True):
                     {
                         "工序号": new_step_no.strip(),
                         "工序名": new_step_name.strip(),
-                        "启用": bool(new_step_enabled),
+                        "启用": new_step_enabled_text == "是",
                         "备注": new_step_remark.strip(),
                     }
                 )

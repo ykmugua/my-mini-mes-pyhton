@@ -1,4 +1,4 @@
-"""页面：程序下发。"""
+"""页面：程序注册。"""
 
 from __future__ import annotations
 
@@ -258,7 +258,7 @@ curl -X POST "{base}/api/program/status" \\
 
 
 def render() -> None:
-    st.title("📦 程序下发")
+    st.title("📦 程序注册")
     st.caption("设备-产品-程序版本绑定；设备拉取记录与版本漂移告警。保存后设备下次拉取即生效。")
     common.render_flash()
     common.render_readonly_notice()

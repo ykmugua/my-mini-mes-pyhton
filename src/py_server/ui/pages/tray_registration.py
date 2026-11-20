@@ -9,7 +9,7 @@ import streamlit as st
 
 from . import _common as master
 
-TRAY_COLUMNS = ["载具码", "载具名称", "载荷数量", "启用", "备注"]
+TRAY_COLUMNS = ["载具码", "载具名称", "载具型号", "载荷数量", "启用", "备注"]
 DELETE_CLICK_KEY = "tray_delete_click"
 PENDING_DELETE_KEY = "pending_tray_delete"
 
@@ -39,6 +39,7 @@ def _tray_frame(trays: list[dict[str, Any]], *, include_delete: bool) -> pd.Data
         {
             "载具码": tray.get("traycode", ""),
             "载具名称": tray.get("tray_name", ""),
+            "载具型号": tray.get("tray_model", ""),
             "载荷数量": int(tray.get("capacity") or 0),
             "启用": bool(tray.get("enabled")),
             "备注": tray.get("remark", ""),
@@ -57,6 +58,7 @@ def _tray_config(*, include_delete: bool) -> dict[str, Any]:
     config: dict[str, Any] = {
         "载具码": st.column_config.TextColumn("载具码", required=True, width="medium"),
         "载具名称": st.column_config.TextColumn("载具名称", required=True, width="medium"),
+        "载具型号": st.column_config.TextColumn("载具型号", required=True, width="medium"),
         "载荷数量": st.column_config.NumberColumn(
             "载荷数量", min_value=1, step=1, required=True, width="small",
             help="一个托盘可放置的板子数量",
@@ -78,12 +80,13 @@ def _validate_trays(rows: list[dict[str, Any]]) -> tuple[list[dict[str, Any]] | 
     for row in rows:
         code = _text(row.get("载具码"))
         name = _text(row.get("载具名称"))
+        model = _text(row.get("载具型号"))
         remark = _text(row.get("备注"))
         raw_capacity = row.get("载荷数量")
-        if not any((code, name, _text(raw_capacity), remark)):
+        if not any((code, name, model, _text(raw_capacity), remark)):
             continue
-        if not code or not name:
-            return None, "载具码和载具名称不能为空"
+        if not code or not name or not model:
+            return None, "载具码、载具名称和载具型号不能为空"
         capacity = _integer(raw_capacity)
         if capacity is None:
             return None, "载荷数量必须是大于 0 的整数"
@@ -94,6 +97,7 @@ def _validate_trays(rows: list[dict[str, Any]]) -> tuple[list[dict[str, Any]] | 
         trays.append({
             "traycode": code,
             "tray_name": name,
+            "tray_model": model,
             "capacity": capacity,
             "enabled": (
                 True if raw_enabled is None
@@ -121,7 +125,7 @@ def _clear_pending_delete() -> None:
 
 @st.dialog("确认删除载具", icon=":material/delete_forever:", on_dismiss=_clear_pending_delete)
 def _confirm_delete_tray(tray: dict[str, Any]) -> None:
-    st.write(f"确定删除载具 **{tray['traycode']} - {tray.get('tray_name','')}** 吗？")
+    st.write(f"确定删除载具 **{tray['traycode']} - {tray.get('tray_name','')}（{tray.get('tray_model','')}）** 吗？")
     st.caption("删除后，历史数据中的托盘码引用将保留，但不再显示为已注册载具。")
     with st.container(horizontal=True, horizontal_alignment="left"):
         if st.button("取消", key="cancel_delete_tray"):
@@ -154,13 +158,16 @@ def render_page() -> None:
         else:
             with st.expander("新增载具", expanded=False):
                 with st.form("tray_create_form", clear_on_submit=False, border=False):
-                    # 第一行：载具码 + 载具名称 + 载荷数量
-                    code_col, name_col, cap_col = st.columns([1, 2, 1])
+                    # 第一行：载具码 + 载具名称 + 载具型号 + 载荷数量
+                    code_col, name_col, model_col, cap_col = st.columns([1, 1, 1, 1])
                     new_code = code_col.text_input(
                         "载具码", key="new_tray_code", placeholder="例如 T02001",
                     )
                     new_name = name_col.text_input(
                         "载具名称", key="new_tray_name", placeholder="例如 01号载具",
+                    )
+                    new_model = model_col.text_input(
+                        "载具型号", key="new_tray_model", placeholder="例如 TM-A",
                     )
                     new_capacity = cap_col.number_input(
                         "载荷数量", min_value=1, step=1, value=1,
@@ -184,6 +191,7 @@ def render_page() -> None:
                     proposed_rows.append({
                         "载具码": new_code.strip(),
                         "载具名称": new_name.strip(),
+                        "载具型号": new_model.strip(),
                         "载荷数量": int(new_capacity),
                         "启用": new_enabled_text == "是",
                         "备注": new_remark.strip(),

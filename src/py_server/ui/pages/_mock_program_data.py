@@ -1,4 +1,4 @@
-"""程序下发页面的 session-state 占位数据与展示辅助函数。"""
+"""程序注册页面的 session-state 占位数据与展示辅助函数。"""
 
 from __future__ import annotations
 
@@ -127,15 +127,11 @@ def initial_program_state() -> dict[str, list[dict[str, Any]]]:
                 "remark": "当前阶段暂未启用",
             },
         ],
-        "lines": [
-            {"line_id": "L1", "line_name": "一线"},
-            {"line_id": "L2", "line_name": "二线"},
-        ],
         "devices": [
             {
                 "device_id": "TEST-01",
                 "device_name": "上电测试机",
-                "line_id": "L1",
+                "device_model": "DM-101",
                 "step_no": "1",
                 "enabled": True,
                 "remark": "一线上电测试工位",
@@ -143,7 +139,7 @@ def initial_program_state() -> dict[str, list[dict[str, Any]]]:
             {
                 "device_id": "TEST-01B",
                 "device_name": "上电测试机B",
-                "line_id": "L1",
+                "device_model": "DM-102",
                 "step_no": "1",
                 "enabled": True,
                 "remark": "一线上电备用机",
@@ -151,7 +147,7 @@ def initial_program_state() -> dict[str, list[dict[str, Any]]]:
             {
                 "device_id": "TEST-02",
                 "device_name": "功能测试机",
-                "line_id": "L2",
+                "device_model": "DM-103",
                 "step_no": "2",
                 "enabled": True,
                 "remark": "一线功能测试工位",
@@ -159,7 +155,7 @@ def initial_program_state() -> dict[str, list[dict[str, Any]]]:
             {
                 "device_id": "TEST-02B",
                 "device_name": "功能测试机B",
-                "line_id": "L2",
+                "device_model": "DM-104",
                 "step_no": "2",
                 "enabled": True,
                 "remark": "二线功能测试工位",
@@ -167,7 +163,7 @@ def initial_program_state() -> dict[str, list[dict[str, Any]]]:
             {
                 "device_id": "TEST-03",
                 "device_name": "终检机",
-                "line_id": "L2",
+                "device_model": "DM-105",
                 "step_no": "3",
                 "enabled": True,
                 "remark": "一线终检工位",
@@ -175,7 +171,7 @@ def initial_program_state() -> dict[str, list[dict[str, Any]]]:
             {
                 "device_id": "TEST-03B",
                 "device_name": "终检机B",
-                "line_id": "L2",
+                "device_model": "DM-106",
                 "step_no": "3",
                 "enabled": True,
                 "remark": "二线终检工位",
@@ -183,7 +179,7 @@ def initial_program_state() -> dict[str, list[dict[str, Any]]]:
             {
                 "device_id": "TEST-04",
                 "device_name": "备用上电测试机",
-                "line_id": "L1",
+                "device_model": "DM-107",
                 "step_no": "1",
                 "enabled": False,
                 "remark": "备用设备，当前停用",
@@ -232,11 +228,10 @@ def initial_program_state() -> dict[str, list[dict[str, Any]]]:
                 "version_description": "正式终检参数模板",
             },
         ],
-        "program_components": [
-            {"program_id": 1, "component_no": "P-1001"},
-            {"program_id": 2, "component_no": "P-1001"},
-            {"program_id": 2, "component_no": "P-1002"},
-        ],
+        "program_components": [],
+        "product_routes": [],
+        "product_step_devices": [],
+        "product_trays": [],
         "products": [
             {
                 "product_model": "P-1001",
@@ -244,6 +239,7 @@ def initial_program_state() -> dict[str, list[dict[str, Any]]]:
                 "test_program_name": "TEST_MAIN",
                 "test_program_path": "D:/test/P-1001/main.exe",
                 "remark": "",
+                "process_code": "PROC-001",
             },
             {
                 "product_model": "P-1002",
@@ -251,49 +247,28 @@ def initial_program_state() -> dict[str, list[dict[str, Any]]]:
                 "test_program_name": "",
                 "test_program_path": "",
                 "remark": "待配置",
+                "process_code": "PROC-002",
             },
         ],
-        "product_routes": [
-            {
-                "product_model": "P-1001",
-                "step_no": "1",
-                "success_next_step": "2",
-                "fail_next_step": "LOCK",
-            },
-            {
-                "product_model": "P-1001",
-                "step_no": "2",
-                "success_next_step": "3",
-                "fail_next_step": "LOCK",
-            },
-            {
-                "product_model": "P-1001",
-                "step_no": "3",
-                "success_next_step": "END",
-                "fail_next_step": "LOCK",
-            },
+        "processes": [
+            {"process_code": "PROC-001", "process_name": "标准电源板工艺", "enabled": True, "remark": "P-1001 默认工艺", "source_process_code": ""},
+            {"process_code": "PROC-002", "process_name": "控制板工艺", "enabled": True, "remark": "由 PROC-001 派生", "source_process_code": "PROC-001"},
         ],
-        "product_step_devices": [
-            {
-                "product_model": "P-1001",
-                "step_no": "1",
-                "device_id": "TEST-01",
-            },
-            {
-                "product_model": "P-1001",
-                "step_no": "1",
-                "device_id": "TEST-01B",
-            },
-            {
-                "product_model": "P-1001",
-                "step_no": "2",
-                "device_id": "TEST-02",
-            },
-            {
-                "product_model": "P-1001",
-                "step_no": "3",
-                "device_id": "TEST-03",
-            },
+        "process_routes": [
+            {"process_code": "PROC-001", "step_no": "1", "success_next_step": "2", "fail_next_step": "LOCK"},
+            {"process_code": "PROC-001", "step_no": "2", "success_next_step": "3", "fail_next_step": "LOCK"},
+            {"process_code": "PROC-001", "step_no": "3", "success_next_step": "END", "fail_next_step": "LOCK"},
+            {"process_code": "PROC-002", "step_no": "1", "success_next_step": "2", "fail_next_step": "LOCK"},
+            {"process_code": "PROC-002", "step_no": "2", "success_next_step": "3", "fail_next_step": "LOCK"},
+            {"process_code": "PROC-002", "step_no": "3", "success_next_step": "END", "fail_next_step": "LOCK"},
+        ],
+        "process_step_resources": [
+            {"process_code": "PROC-001", "step_no": "1", "program_name": "TEST_MAIN", "device_models": "DM-T01,DM-01B", "tray_models": "TM-A"},
+            {"process_code": "PROC-001", "step_no": "2", "program_name": "FUNC_TEST", "device_models": "DM-T02", "tray_models": "TM-A"},
+            {"process_code": "PROC-001", "step_no": "3", "program_name": "FINAL_CHECK", "device_models": "DM-T03", "tray_models": "TM-B"},
+            {"process_code": "PROC-002", "step_no": "1", "program_name": "TEST_MAIN", "device_models": "DM-T01", "tray_models": "TM-A"},
+            {"process_code": "PROC-002", "step_no": "2", "program_name": "FUNC_TEST", "device_models": "DM-T02", "tray_models": "TM-B"},
+            {"process_code": "PROC-002", "step_no": "3", "program_name": "FINAL_CHECK", "device_models": "DM-T03", "tray_models": "TM-B"},
         ],
         "program_pulls": _mock_program_pulls(programs),
         "program_status_logs": _mock_program_status_logs(programs),
@@ -309,11 +284,6 @@ def initialize_program_state() -> None:
         for key, value in defaults.items():
             if key not in st.session_state:
                 st.session_state[key] = deepcopy(value)
-        for device in st.session_state.get("devices", []):
-            device.setdefault(
-                "line_id",
-                "L1" if str(device["step_no"]) == "1" else "L2",
-            )
         return
 
     if "programs" not in st.session_state:
@@ -333,8 +303,6 @@ def initialize_program_state() -> None:
             ]
         else:
             st.session_state.setdefault("steps", deepcopy(defaults["steps"]))
-        if "program_components" not in st.session_state:
-            st.session_state["program_components"] = []
         if "program_versions" not in st.session_state:
             st.session_state["program_versions"] = deepcopy(
                 defaults["program_versions"]
@@ -389,9 +357,6 @@ def initialize_program_state() -> None:
     st.session_state.pop("program_bindings", None)
     st.session_state.pop("line_steps", None)
 
-    if "lines" not in st.session_state:
-        st.session_state["lines"] = deepcopy(defaults["lines"])
-
     if "devices" not in st.session_state:
         st.session_state["devices"] = deepcopy(defaults["devices"])
     else:
@@ -401,24 +366,21 @@ def initialize_program_state() -> None:
         for device in defaults["devices"]:
             if str(device["device_id"]) not in existing_device_ids:
                 st.session_state["devices"].append(deepcopy(device))
-    for device in st.session_state["devices"]:
-        device.setdefault(
-            "line_id",
-            "L1" if str(device["step_no"]) == "1" else "L2",
-        )
 
     for key in (
         "program_pulls",
         "program_status_logs",
-        "products",
+        "program_components",
         "product_routes",
         "product_step_devices",
+        "product_trays",
+        "products",
+        "processes",
+        "process_routes",
+        "process_step_resources",
     ):
         if key not in st.session_state:
             st.session_state[key] = deepcopy(defaults[key])
-    for route in st.session_state.get("product_routes", []):
-        route.pop("required", None)
-    st.session_state.pop("product_step_configs", None)
     st.session_state["program_data_version"] = STATE_SCHEMA_VERSION
 
 

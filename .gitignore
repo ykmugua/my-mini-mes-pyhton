@@ -16,7 +16,7 @@ data/
 # 工具缓存 / 临时验证脚本
 .uv-cache/
 .pytest_cache/
-.pytest_tmp/
+.pytest_tmp*/
 .streamlit/
 tools/
 tools_*.py

@@ -1,4 +1,4 @@
-"""程序下发前端入口：使用 session state 中的占位数据，不连接后端。"""
+"""程序注册前端入口：使用 session state 中的占位数据，不连接后端。"""
 
 from __future__ import annotations
 
@@ -35,7 +35,7 @@ page = st.navigation(
     [
         st.Page(
             "app_pages/program.py",
-            title="程序下发",
+            title="程序注册",
             icon=":material/inventory_2:",
             help="上传压缩包、维护程序工序信息和型号关联。",
             default=True,
@@ -54,9 +54,15 @@ page = st.navigation(
         ),
         st.Page(
             "app_pages/product_management.py",
-            title="产品管理",
+            title="组件注册",
             icon=":material/inventory:",
             help="维护产品信息、产品工序流程和每道工序可使用的设备范围。",
+        ),
+        st.Page(
+            "app_pages/process_config.py",
+            title="工艺配置",
+            icon=":material/tune:",
+            help="维护产品型号工序流程、设备分配和载具分配。",
         ),
     ],
     position="sidebar",

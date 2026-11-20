@@ -150,13 +150,19 @@ def test_history(workpiece: str, conn: Conn | None = None) -> list[dict]:
 
 
 def product_route(product_model: str, conn: Conn | None = None) -> list[dict]:
+    """按组件绑定的工艺号查工艺路线（一组件一工艺）。"""
     if conn is None:
         with with_read_conn() as c:
             return product_route(product_model, c)
-    pr = eg.product_routes
+    prod = conn.execute(
+        select(eg.products.c.process_code).where(eg.products.c.product_model == product_model)
+    ).fetchone()
+    if prod is None or not prod[0]:
+        return []
+    pr = eg.process_routes
     stmt = (
         select(pr)
-        .where(pr.c.product_model == product_model)
+        .where(pr.c.process_code == prod[0])
         .order_by(pr.c.step_no)
     )
     return rows_to_dicts(conn.execute(stmt).fetchall())

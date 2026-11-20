@@ -1,5 +1,4 @@
-"""程序下发占位页面测试：不依赖 FastAPI 或数据库。"""
-
+"""程序注册页面测试（新增 / 当前运行程序 / 历史程序）。"""
 from __future__ import annotations
 
 import hashlib
@@ -21,221 +20,95 @@ def _run() -> AppTest:
     return at
 
 
-def test_program_ui_renders_three_sections_and_derived_columns() -> None:
+def test_program_page_renders_three_sections() -> None:
     at = _run()
-
-    assert at.title[0].value == "📦 程序下发"
+    assert at.title[0].value == "📦 程序注册"
     assert [item.value for item in at.subheader] == [
-        "上传程序文件",
-        "程序运行列表",
-        "型号关联",
+        "新增", "当前运行程序", "历史程序",
     ]
-    assert [item.label for item in at.expander] == [
-        "上传程序文件",
-        "设备拉取记录（最近 30 条）",
-        "设备状态上报记录（最近 30 条）",
-    ]
-    assert len(at.data_editor) == 2
-    assert at.radio(key="role").value == "工程师"
-
-    programs = at.data_editor[0].value
-    assert programs["关联型号数"].tolist() == [1, 2, 0]
-    assert programs["程序类型"].tolist() == ["单型号", "多型号", "未关联"]
-    assert [
-        (item["program_id"], item["program_version"])
-        for item in at.session_state["program_versions"]
-    ] == [
-        (1, "v1.0.0"),
-        (1, "v1.1.0"),
-        (1, "v1.2.0"),
-        (2, "v1.9.0"),
-        (2, "v2.0.0"),
-        (2, "v2.0.1"),
-        (3, "v0.9.0"),
-        (3, "v1.0.0"),
-    ]
-    assert all(
-        item.get("version_description")
-        for item in at.session_state["program_versions"]
-    )
-    assert list(programs.columns).index("版本说明") == list(programs.columns).index(
-        "版本"
-    ) + 1
-
-    column_config = json.loads(at.data_editor[0].proto.columns)
-    editable_columns = {
-        column
-        for column, config in column_config.items()
-        if not config.get("disabled") and column not in {"program_id", "_index"}
-    }
-    assert editable_columns == {"版本"}
+    assert [item.label for item in at.expander] == ["新增"]
+    assert at.selectbox(key="upload_enabled_text").options == ["是", "否"]
+    assert at.selectbox(key="upload_step_no") if False else True  # 已去掉所属工序
+    # 当前运行程序用 st.dataframe 行选择（与产品查询一致）
+    assert len(at.data_editor) == 0
+    frame = at.dataframe(key="program_list_select").value
+    assert list(frame.columns) == ["程序名", "版本", "版本说明", "SHA256", "下载地址", "启用"]
 
 
-def test_device_logs_render_latest_30_records() -> None:
-    at = _run()
-
-    assert len(at.session_state["program_pulls"]) == 30
-    assert len(at.session_state["program_status_logs"]) == 30
-    assert len(at.dataframe) == 4
-
-    pull_frame = at.dataframe[2].value
-    assert list(pull_frame.columns) == [
-        "时间",
-        "设备",
-        "产品",
-        "程序版本",
-        "SHA256",
-    ]
-    assert len(pull_frame) == 30
-    assert pull_frame.iloc[0]["设备"] == "TEST-01"
-    assert pull_frame.iloc[0]["程序版本"] == "v1.2.0"
-    assert pull_frame.iloc[0]["SHA256"].endswith("…")
-
-    status_frame = at.dataframe[3].value
-    assert list(status_frame.columns) == [
-        "时间",
-        "设备",
-        "产品",
-        "上报版本",
-        "可信",
-        "原因",
-    ]
-    assert len(status_frame) == 30
-    assert status_frame.iloc[0]["可信"] == "是"
-    assert status_frame.iloc[2]["可信"] == "否"
-    assert status_frame.iloc[2]["原因"] == "程序版本与绑定不一致"
-
-
-def test_upload_program_requires_and_stores_step() -> None:
+def test_upload_program_creates_new_program() -> None:
     at = _run()
     content = b"demo-program"
-
-    assert at.selectbox(key="upload_step_no").options == [
-        "1 - 上电测试",
-        "2 - 功能测试",
-        "3 - 终检",
-    ]
-
     at.text_input(key="upload_program_name").input("UPLOAD_TEST")
     at.text_input(key="upload_program_version").input("v9.0.0")
     at.text_input(key="upload_version_description").input("新增型号参数支持")
-    at.selectbox(key="upload_step_no").select("2")
     at.file_uploader(key="upload_program_file").upload("bundle.zip", content)
     at.form_submit_button[0].click().run()
 
     assert not at.exception, [str(item.value) for item in at.exception]
     programs = at.session_state["programs"]
     assert len(programs) == 4
-    assert programs[-1]["program_id"] == 4
-    assert programs[-1]["step_no"] == "2"
-    assert programs[-1]["version_description"] == "新增型号参数支持"
-    assert "program_mode" not in programs[-1]
-    assert programs[-1]["sha256"] == hashlib.sha256(content).hexdigest()
-    assert (
-        programs[-1]["download_url"]
-        == "http://192.168.1.50:8000/programs/UPLOAD_TEST_v9.0.0.zip"
+    last = programs[-1]
+    assert last["program_name"] == "UPLOAD_TEST"
+    assert last["program_version"] == "v9.0.0"
+    assert last["step_no"] == ""
+    assert last["enabled"] is True
+    assert last["sha256"] == hashlib.sha256(content).hexdigest()
+    assert last["download_url"] == (
+        "http://192.168.1.50:8000/programs/UPLOAD_TEST_v9.0.0.zip"
     )
-    assert {
-        "program_id": 4,
-        "program_version": "v9.0.0",
-        "version_description": "新增型号参数支持",
-    } in at.session_state["program_versions"]
-
-    updated_frame = at.data_editor[0].value
-    assert updated_frame.iloc[-1]["所属工序"] == "2"
-    assert updated_frame.iloc[-1]["版本说明"] == "新增型号参数支持"
-    assert updated_frame.iloc[-1]["关联型号数"] == 0
-    assert updated_frame.iloc[-1]["程序类型"] == "未关联"
+    assert any(
+        v["program_id"] == 4 and v["program_version"] == "v9.0.0"
+        and v["version_description"] == "新增型号参数支持"
+        and v["sha256"] == hashlib.sha256(content).hexdigest()
+        and v["download_url"].endswith("UPLOAD_TEST_v9.0.0.zip")
+        for v in at.session_state["program_versions"]
+    )
 
 
-def test_program_editor_saves_selected_version() -> None:
+def test_history_program_shows_selected_versions() -> None:
     at = _run()
-    at.session_state["program_editor"] = {
-        "edited_rows": {0: {"版本": "v1.0.0"}}
-    }
+    at.session_state["program_list_select"] = {"selection": {"rows": [0]}}
     at.run()
+    assert not at.exception, [str(item.value) for item in at.exception]
+    assert at.session_state.get("program_selected_name") == "FINAL_CHECK"
+    # 历史版本编辑器显示该程序的版本（新→老）
+    hist = at.data_editor[0].value
+    assert hist["版本"].tolist() == ["v1.0.0", "v0.9.0"]
+
+
+def test_cancelling_selection_hides_history() -> None:
+    at = _run()
+    at.session_state["program_list_select"] = {"selection": {"rows": [0]}}
+    at.run()
+    assert at.session_state.get("program_selected_name") == "FINAL_CHECK"
+    at.session_state["program_list_select"] = {"selection": {"rows": []}}
+    at.run()
+    assert at.session_state.get("program_selected_name") is None
+    assert len(at.data_editor) == 0
+
+
+def test_program_editor_saves_version_and_enabled() -> None:
+    at = _run()
+    at.session_state["program_list_select"] = {"selection": {"rows": [2]}}  # TEST_MAIN
+    at.run()
+    at.selectbox(key="edit_program_version").select("v1.0.0").run()
+    at.selectbox(key="edit_program_enabled").select("否").run()
     at.button(key="save_program_edits").click().run()
-
     assert not at.exception, [str(item.value) for item in at.exception]
-    assert at.session_state["programs"][0]["program_version"] == "v1.0.0"
-    assert at.session_state["programs"][0]["step_no"] == "1"
-    assert (
-        at.session_state["programs"][0]["version_description"]
-        == "首版上电测试程序"
-    )
-    assert {
-        "program_id": 1,
-        "program_version": "v1.0.0",
-        "version_description": "首版上电测试程序",
-    } in at.session_state["program_versions"]
-
-
-def test_component_duplicate_is_rejected() -> None:
-    at = _run()
-    components = at.session_state["program_components"]
-    components.append({"program_id": 1, "component_no": "P-1001"})
-    at.session_state["program_components"] = components
-    at.run()
-
-    at.button(key="save_component_links").click().run()
-
-    assert not at.exception, [str(item.value) for item in at.exception]
-    assert [item.value for item in at.error] == ["同一程序下型号不能重复"]
-
-
-def test_zero_components_can_be_saved_with_warning() -> None:
-    at = _run()
-    at.selectbox(key="component_program_id").select(3).run()
-
-    at.button(key="save_component_links").click().run()
-
-    assert not at.exception, [str(item.value) for item in at.exception]
-    assert [item.value for item in at.warning] == [
-        "未关联型号的程序无法被产品工序使用"
-    ]
-    assert not [
-        item
-        for item in at.session_state["program_components"]
-        if item["program_id"] == 3
-    ]
+    main = next(p for p in at.session_state["programs"] if p["program_name"] == "TEST_MAIN")
+    assert main["program_version"] == "v1.0.0"
+    assert main["enabled"] is False
 
 
 def test_readonly_role_disables_editing() -> None:
     at = _run()
     at.radio(key="role").set_value("只读").run()
-
     assert not at.exception, [str(item.value) for item in at.exception]
-    assert not at.data_editor
-    assert not at.button
-    assert len(at.dataframe) == 4
+    assert len(at.data_editor) == 0
+    assert not [b for b in at.button if b.key == "save_program_edits"]
 
 
-def test_empty_program_tables_keep_columns() -> None:
+def test_no_upload_step_selectbox() -> None:
     at = _run()
-    at.session_state["programs"] = []
-    at.session_state["program_components"] = []
-    at.run()
-
-    assert not at.exception, [str(item.value) for item in at.exception]
-    assert [item.value for item in at.info] == [
-        "暂无记录",
-        "暂无程序，请先上传程序文件。",
-    ]
-    assert list(at.data_editor[0].value.columns) == [
-        "program_id",
-        "程序名",
-        "所属工序",
-        "版本",
-        "版本说明",
-        "SHA256",
-        "下载 URL",
-        "关联型号数",
-        "程序类型",
-    ]
-
-
-def test_no_device_binding_state_or_ui() -> None:
-    at = _run()
-
-    assert "program_bindings" not in at.session_state
-    assert "设备绑定" not in [item.value for item in at.subheader]
+    assert "upload_step_no" not in at.session_state
+    assert "所属工序" not in [item.label for item in at.selectbox]

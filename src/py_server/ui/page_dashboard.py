@@ -95,7 +95,7 @@ def _save_config_devices(devices: list[dict]) -> None:
 
 
 def _registered_devices() -> list[dict]:
-    """设备注册页的 devices 表（供"新增"下拉选择，保留 line_id/step_no 供筛选）。"""
+    """设备注册页的 devices 表（供"新增"下拉选择）。"""
     from . import client
     try:
         return [d for d in client.master_list("devices") if d.get("enabled")]
@@ -103,14 +103,12 @@ def _registered_devices() -> list[dict]:
         return []
 
 
-def _line_step_names() -> tuple[dict, dict]:
+def _step_names() -> dict:
     from . import client
     try:
-        lines = {d["line_id"]: d.get("line_name") or d["line_id"] for d in client.master_list("lines")}
-        steps = {str(d["step_no"]): d.get("step_name") or str(d["step_no"]) for d in client.master_list("steps")}
+        return {str(d["step_no"]): d.get("step_name") or str(d["step_no"]) for d in client.master_list("steps")}
     except Exception:
-        lines, steps = {}, {}
-    return lines, steps
+        return {}
 
 
 def _read_summary(device_id: str) -> dict | None:
@@ -215,28 +213,24 @@ def _render_device_manager(config_devices: list[dict]) -> list[dict]:
     all_config = list(config_devices)
 
     with st.expander("⚙️ 监控设备管理", expanded=False):
-        line_names, step_names = _line_step_names()
+        step_names = _step_names()
 
         st.subheader("监控设备管理（可直接修改名称，改完点“保存修改”）")
 
-        # 新增：按产线/工序筛选后选择设备
+        # 新增：按工序筛选后选择设备
         registered = _registered_devices()
         shown_ids = [x["device_id"] for x in all_config]
         candidates = [d for d in registered if d["device_id"] not in shown_ids]
 
         if candidates:
-            f1, f2 = st.columns(2)
-            line_opts = ["全部"] + sorted({str(d.get("line_id") or "") for d in candidates if d.get("line_id")})
             step_opts = ["全部"] + sorted({str(d.get("step_no")) for d in candidates if d.get("step_no")})
-            fl = f1.selectbox("产线筛选", line_opts, key="mon_filter_line")
-            fs = f2.selectbox(
+            fs = st.selectbox(
                 "工序筛选", step_opts, key="mon_filter_step",
                 format_func=lambda x: "全部" if x == "全部" else f"{x} - {step_names.get(x, x)}",
             )
             filtered = [
                 d for d in candidates
-                if (fl == "全部" or str(d.get("line_id") or "") == fl)
-                and (fs == "全部" or str(d.get("step_no") or "") == str(fs))
+                if (fs == "全部" or str(d.get("step_no") or "") == str(fs))
             ]
             if filtered:
                 with st.form("mon_device_create_form", clear_on_submit=False):
@@ -245,8 +239,7 @@ def _render_device_manager(config_devices: list[dict]) -> list[dict]:
                         options=[d["device_id"] for d in filtered],
                         format_func=lambda x: (
                             f"{x} - {next((d['device_name'] for d in filtered if d['device_id']==x), x)}"
-                            f"（{line_names.get(str(next((d.get('line_id') for d in filtered if d['device_id']==x), '')), '')} / "
-                            f"{step_names.get(str(next((d.get('step_no') for d in filtered if d['device_id']==x), '')), '')}）"
+                            f"（{step_names.get(str(next((d.get('step_no') for d in filtered if d['device_id']==x), '')), '')}）"
                         ),
                         key="mon_add_select",
                     )
@@ -256,8 +249,6 @@ def _render_device_manager(config_devices: list[dict]) -> list[dict]:
                     all_config.append({
                         "device_id": d["device_id"],
                         "name": d.get("device_name") or d["device_id"],
-                        "line_id": str(d.get("line_id") or ""),
-                        "line_name": line_names.get(str(d.get("line_id") or ""), str(d.get("line_id") or "")),
                         "step_no": str(d.get("step_no") or ""),
                         "step_name": step_names.get(str(d.get("step_no") or ""), str(d.get("step_no") or "")),
                         "ip": d.get("ip", "127.0.0.1"), "port": d.get("port", 6379), "enable": True,
@@ -276,7 +267,6 @@ def _render_device_manager(config_devices: list[dict]) -> list[dict]:
             {
                 "设备编号": d["device_id"],
                 "设备名称": d["name"],
-                "所属线体": (d.get("line_name") or d.get("line_id") or ""),
                 "所属工序": (d.get("step_name") or (f"工序{d['step_no']}" if d.get("step_no") else "")),
                 "删除": "删除",
             }
@@ -289,7 +279,6 @@ def _render_device_manager(config_devices: list[dict]) -> list[dict]:
                 column_config={
                     "设备编号": st.column_config.TextColumn("设备编号", disabled=True, width="medium"),
                     "设备名称": st.column_config.TextColumn("设备名称", required=True, width="medium"),
-                    "所属线体": st.column_config.TextColumn("所属线体", disabled=True, width="medium"),
                     "所属工序": st.column_config.TextColumn("所属工序", disabled=True, width="medium"),
                     "删除": st.column_config.ButtonColumn(
                         "删除", type="tertiary", on_click=_request_mon_delete,

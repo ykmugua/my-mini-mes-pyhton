@@ -1,4 +1,4 @@
-"""主数据接口：工序/线体/设备/程序/产品（供 app_pages 页面使用）。"""
+"""主数据接口：工序/设备/程序/组件/工艺（供页面使用）。"""
 
 from __future__ import annotations
 
@@ -40,15 +40,14 @@ def delete_program_version(program_id: int) -> dict:
 def get_master_key(key: str) -> list[dict]:
     getters = {
         "steps": master_data_repo.list_steps,
-        "lines": master_data_repo.list_lines,
         "devices": master_data_repo.list_devices,
         "trays": master_data_repo.list_trays,
         "programs": master_data_repo.list_programs,
         "program_versions": master_data_repo.list_program_versions,
-        "program_components": master_data_repo.list_program_components,
         "products": master_data_repo.list_products,
-        "product_routes": master_data_repo.list_product_routes,
-        "product_step_devices": master_data_repo.list_product_step_devices,
+        "processes": master_data_repo.list_processes,
+        "process_routes": master_data_repo.list_process_routes,
+        "process_step_resources": master_data_repo.list_process_step_resources,
     }
     if key not in getters:
         from ...services import NotFoundError
@@ -61,15 +60,14 @@ def get_master_key(key: str) -> list[dict]:
 def save_master_key(key: str, payload: MasterDataIn) -> dict:
     setters = {
         "steps": master_data_repo.replace_steps,
-        "lines": master_data_repo.replace_lines,
         "devices": master_data_repo.replace_devices,
         "trays": master_data_repo.replace_trays,
         "programs": master_data_repo.replace_programs,
         "program_versions": master_data_repo.replace_program_versions,
-        "program_components": master_data_repo.replace_program_components,
         "products": master_data_repo.replace_products,
-        "product_routes": master_data_repo.replace_product_routes,
-        "product_step_devices": master_data_repo.replace_product_step_devices,
+        "processes": master_data_repo.replace_processes,
+        "process_routes": master_data_repo.replace_process_routes,
+        "process_step_resources": master_data_repo.replace_process_step_resources,
     }
     if key not in setters:
         from ...services import NotFoundError

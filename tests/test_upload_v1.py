@@ -15,7 +15,6 @@ HEADERS = {
 
 def _payload(*, barcode="SN-V1-001", result="FAIL", step="S1", item="温度"):
     return {
-        "linecode": "L2-1F-DIP-D16",
         "station": "TEST-V1",
         "componentcode": "L120201091",
         "barcode": barcode,

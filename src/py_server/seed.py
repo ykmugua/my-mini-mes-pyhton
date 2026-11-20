@@ -109,7 +109,7 @@ def seed_test_reports() -> None:
         template = json.loads(template_path.read_text(encoding="utf-8"))
     except (FileNotFoundError, ValueError):
         template = {
-            "linecode": "L2-1F-DIP-D16", "station": "39C0-L2-1F-DIP16-FCT01",
+            "station": "39C0-L2-1F-DIP16-FCT01",
             "componentcode": "L120201091", "barcode": "SN202611170001",
             "programname": "TEST-DUT-001", "programversion": "V0.0.2",
             "testexecutetime": "2025/4/22 13:55:35.123",
@@ -143,7 +143,6 @@ def seed_test_reports() -> None:
             data["componentcode"] = componentcode
             data["traycode"] = traycode
             data["station"] = station
-            data["linecode"] = f"L{step_no}"
             data["programname"] = f"TEST-DUT-S{step_no}"
             data["programversion"] = f"V0.0.{i}"
             t = base_time + timedelta(minutes=seq * 3, seconds=i)
@@ -171,7 +170,7 @@ def seed_test_reports() -> None:
             data["isfinalreport"] = "true" if step_no == "3" else "false"
 
             report = {k: data[k] for k in (
-                "linecode", "station", "componentcode", "traycode", "barcode",
+                "station", "componentcode", "traycode", "barcode",
                 "programname", "programversion", "testexecutetime",
                 "result", "testlongtime", "isfinalreport"
             )}
@@ -221,7 +220,6 @@ def seed_test_reports() -> None:
                         if report["isfinalreport"] == "true" else "normal",
                     step_no=str(step_info["step_no"]),
                     next_step=str(step_index + 1) if step_index < len(STEP_STATIONS) else "END",
-                    line_id=step_info.get("line_id") or "",
                     device=report["station"],
                     note=("test pass" if report["result"] == "PASS" else "test fail"),
                     changed_at=report["created_at"],
@@ -243,7 +241,7 @@ def seed_test_reports() -> None:
 
 
 def seed_station_summary() -> None:
-    """演示数据：产线监控看板用的 station_summary 汇总表。"""
+    """演示数据：监控看板用的 station_summary 汇总表。"""
     import time
     now_ts = int(time.time())
     # (name, status, barcode, total, first_pass, retest, fail, 时长秒)
@@ -335,7 +333,7 @@ def seed(reset: bool = False, with_demo: bool = False) -> None:
         ]
     )
 
-    # 主数据（app_pages 页面）：工序/线体/设备/程序/产品
+    # 主数据（app_pages 页面）：工序/设备/程序/产品
     master_seed.seed_master_data()
     seed_station_summary()
     seed_test_reports()

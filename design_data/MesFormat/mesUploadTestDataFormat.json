@@ -1,5 +1,4 @@
 {
-  "linecode": "L2-1F-DIP-D16",
   "station": "39C0-L2-1F-DIP16-FCT01",
   "componentcode": "L120201091",
   "traycode": "T02001",
@@ -9,7 +8,7 @@
   "testexecutetime": "2025/4/22 13:55:35.123",
   "testlongtime": "00:00:06.300",
   "result": "FAIL",
-  "details": [    
+  "details": [
     {
       "TestItem": "测试温度",
       "TestStep": "SOC_HW_ID1",

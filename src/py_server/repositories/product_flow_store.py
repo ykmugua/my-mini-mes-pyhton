@@ -88,7 +88,6 @@ def ensure_flow_table(barcode: str) -> str:
                     board_status TEXT NOT NULL,
                     step_no TEXT NOT NULL,
                     next_step TEXT NOT NULL,
-                    line_id TEXT NOT NULL,
                     device TEXT NOT NULL,
                     note TEXT NOT NULL DEFAULT '',
                     changed_at TEXT NOT NULL
@@ -107,7 +106,6 @@ def upsert_flow(
     board_status: str,
     step_no: str,
     next_step: str,
-    line_id: str,
     device: str,
     note: str = "",
     changed_at: str,
@@ -119,13 +117,12 @@ def upsert_flow(
     with _eng().begin() as conn:
         conn.execute(text(f"""
             INSERT INTO "{table}"
-            (board_status, step_no, next_step, line_id, device, note, changed_at)
-            VALUES (:board_status, :step_no, :next_step, :line_id, :device, :note, :changed_at)
+            (board_status, step_no, next_step, device, note, changed_at)
+            VALUES (:board_status, :step_no, :next_step, :device, :note, :changed_at)
         """), {
             "board_status": board_status,
             "step_no": str(step_no),
             "next_step": str(next_step or ""),
-            "line_id": str(line_id or ""),
             "device": str(device or ""),
             "note": str(note or ""),
             "changed_at": ts,

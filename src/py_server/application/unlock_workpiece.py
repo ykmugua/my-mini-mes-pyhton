@@ -62,7 +62,6 @@ def execute(*, wp_row, operator: str, reason: str, confirmed: bool, now: str, ta
             board_status="normal",
             step_no=str(target_step) if target_step else ((info or {}).get("step_no") or ""),
             next_step="",
-            line_id=(info or {}).get("line_id") or "",
             device="手动解锁",
             note=(note or reason or "unlock"),
             changed_at=now,

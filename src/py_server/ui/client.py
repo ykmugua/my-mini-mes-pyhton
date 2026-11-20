@@ -195,8 +195,8 @@ def update_variable_def(name: str, *, type_name: str, value: Any) -> dict:
 # 主数据（app_pages 页面）
 # -----------------------------------------------------------------------------
 MASTER_KEYS = (
-    "steps", "lines", "devices", "programs", "program_versions",
-    "program_components", "products", "product_routes", "product_step_devices",
+    "steps", "devices", "programs", "program_versions",
+    "products", "processes", "process_routes", "process_step_resources",
 )
 
 

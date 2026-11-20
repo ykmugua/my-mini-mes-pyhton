@@ -235,3 +235,8 @@ SQLAlchemy 2.1.8 中 `Insert.on_conflict_do_update()` 不再接受 `constraint=`
 ## 16. AppTest 行选择与编辑（2026-11-20）
 - AppTest 的 data_editor 不支持 select_row()/set_value()：行选择要给 `st.dataframe(key=...)` 的 key 设置 session_state `{"selection": {"rows": [0]}}`；编辑要给 data_editor 的 key 设置 `{"edited_rows": {0: {"列": 值}}}` 后再 run()。
 - st.dataframe 行选择读到的是 widget 自己的 selection state，不用另存 pq_current 式变量时也可靠；取消勾选 = rows=[]。
+
+## 17. 用户协作偏好（2026-11-20）
+- **特别大的改动前，先执行 `/sync-save` 并上传/提交 git 作为检查点**（用户怕改废了），再动手重构。
+- **上传 git 前先整理文件夹**：删掉 `.pytest_tmp*` 等无用临时目录、检查 .gitignore 覆盖，别把无用文件上传。
+- 已清理 45 个 `.pytest_tmpNN` 目录，`.gitignore` 从 `.pytest_tmp/` 改为 `.pytest_tmp*/`。

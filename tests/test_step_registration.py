@@ -53,7 +53,6 @@ def test_new_step_form_adds_step() -> None:
     at = _open_page(_run())
     at.text_input(key="new_step_no").input("5")
     at.text_input(key="new_step_name").input("包装检查")
-    at.checkbox(key="new_step_enabled").check()
     at.text_input(key="new_step_remark").input("出货包装确认")
     at.form_submit_button[0].click().run()
 

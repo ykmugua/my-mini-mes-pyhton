@@ -1,4 +1,4 @@
-"""程序下发页面：全部读写均使用 st.session_state 占位数据。"""
+"""程序注册页面：维护程序主数据与版本。"""
 
 from __future__ import annotations
 
@@ -310,6 +310,8 @@ def _upsert_version_description(
     program_id: int | str,
     version: str,
     description: str,
+    sha256: str = "",
+    download_url: str = "",
 ) -> None:
     for item in program_versions:
         if (
@@ -317,12 +319,18 @@ def _upsert_version_description(
             and item["program_version"] == version
         ):
             item["version_description"] = description
+            if sha256:
+                item["sha256"] = sha256
+            if download_url:
+                item["download_url"] = download_url
             return
     program_versions.append(
         {
             "program_id": program_id,
             "program_version": version,
             "version_description": description,
+            "sha256": sha256,
+            "download_url": download_url,
         }
     )
 
@@ -345,291 +353,373 @@ program_pulls: list[dict[str, Any]] = st.session_state.program_pulls[:30]
 program_status_logs: list[dict[str, Any]] = st.session_state.program_status_logs[:30]
 version_options = available_program_versions(programs, program_versions)
 
-st.title("📦 程序下发")
-st.caption("程序文件与型号关联。本页面使用 session state 占位数据。")
 
-saved_warning = st.session_state.pop(COMPONENT_WARNING_KEY, None)
-if saved_warning:
-    st.warning(saved_warning)
+def render_page() -> None:
+    """程序注册页：新增 / 当前运行程序 / 历史程序。"""
+    read_only = st.session_state.get("role", "工程师") == "只读"
+    programs: list[dict[str, Any]] = st.session_state.programs
+    program_versions: list[dict[str, Any]] = st.session_state.program_versions
+    program_components: list[dict[str, Any]] = st.session_state.program_components
+    version_options = available_program_versions(programs, program_versions)
 
+    st.title("📦 程序注册")
 
-# -----------------------------------------------------------------------------
-# 区块 1：上传程序文件
-# -----------------------------------------------------------------------------
-with st.container(border=True):
-    st.subheader("上传程序文件")
+    saved_warning = st.session_state.pop(COMPONENT_WARNING_KEY, None)
+    if saved_warning:
+        st.warning(saved_warning)
+
+    # -------------------------------------------------------------------------
+    # 区块 1：新增（风格与组件注册一致）
+    # -------------------------------------------------------------------------
+    st.subheader("新增")
     if read_only:
-        with st.expander("上传程序文件", expanded=False):
+        with st.expander("新增", expanded=False):
             st.info("只读角色不可上传程序。")
     else:
-        with st.expander("上传程序文件", expanded=False):
-            if not active_steps:
-                st.warning("暂无启用工序，请先在工序注册页启用工序")
-            else:
-                with st.form("program_upload_form", clear_on_submit=False):
-                    name_col, version_col, step_col = st.columns([2, 1, 2])
-                    program_name = name_col.text_input(
-                        "程序名",
-                        key="upload_program_name",
-                        placeholder="例如 TEST_MAIN",
-                    )
-                    program_version = version_col.text_input(
-                        "程序版本",
-                        key="upload_program_version",
-                        placeholder="例如 v1.2.0",
-                    )
-                    step_no = step_col.selectbox(
-                        "所属工序",
-                        options=[
-                            str(step["step_no"]) for step in active_steps
-                        ],
-                        format_func=lambda value: step_label(active_steps, value),
-                        key="upload_step_no",
-                    )
-                    uploaded_file = st.file_uploader(
-                        "程序文件",
-                        type=["zip", "7z"],
-                        accept_multiple_files=False,
-                        key="upload_program_file",
-                    )
-                    version_description = st.text_input(
-                        "版本说明",
-                        key="upload_version_description",
-                        placeholder="例如：修复型号切换后的参数缓存",
-                    )
-                    submitted = st.form_submit_button("上传并保存")
+        with st.expander("新增", expanded=False):
+            with st.form("program_upload_form", clear_on_submit=False, border=False):
+                # 第一行：程序名 + 程序版本
+                name_col, version_col = st.columns(2)
+                program_name = name_col.text_input(
+                    "程序名", key="upload_program_name", placeholder="例如 TEST_MAIN",
+                )
+                program_version = version_col.text_input(
+                    "程序版本", key="upload_program_version", placeholder="例如 v1.2.0",
+                )
+                # 第二行：版本说明 + 启用
+                desc_col, enabled_col = st.columns([3, 1])
+                version_description = desc_col.text_input(
+                    "版本说明", key="upload_version_description",
+                    placeholder="例如：修复型号切换后的参数缓存",
+                )
+                enabled_text = enabled_col.selectbox(
+                    "启用", options=["是", "否"], key="upload_enabled_text",
+                )
+                # 程序文件
+                uploaded_file = st.file_uploader(
+                    "程序文件", type=["zip", "7z"], accept_multiple_files=False,
+                    key="upload_program_file",
+                )
+                # 添加按钮
+                submitted = st.form_submit_button("添加程序")
 
-                if submitted:
-                    clean_name = program_name.strip()
-                    clean_version = program_version.strip()
-                    if not clean_name or not clean_version:
-                        st.error("程序名和程序版本不能为空")
-                    elif step_by_no(active_steps, step_no) is None:
-                        st.error("请选择有效的所属工序")
-                    elif uploaded_file is None:
-                        st.error("请选择要上传的程序文件")
+            if submitted:
+                clean_name = program_name.strip()
+                clean_version = program_version.strip()
+                if not clean_name or not clean_version:
+                    st.error("程序名和程序版本不能为空")
+                elif uploaded_file is None:
+                    st.error("请选择要上传的程序文件")
+                else:
+                    suffix = Path(uploaded_file.name).suffix.lower()
+                    if suffix not in {".zip", ".7z"}:
+                        st.error("仅支持 .zip 或 .7z 文件")
+                    elif any(
+                        item["program_name"].casefold() == clean_name.casefold()
+                        for item in programs
+                    ):
+                        st.error("程序名已存在，请使用唯一的程序名")
                     else:
-                        suffix = Path(uploaded_file.name).suffix.lower()
-                        if suffix not in {".zip", ".7z"}:
-                            st.error("仅支持 .zip 或 .7z 文件")
-                        elif any(
-                            item["program_name"].casefold() == clean_name.casefold()
-                            for item in programs
-                        ):
-                            st.error("程序名已存在，请使用唯一的程序名")
-                        else:
-                            digest = hashlib.sha256(
-                                uploaded_file.getvalue()
-                            ).hexdigest()
-                            program_id = next_program_id(programs)
-                            programs.append(
-                                {
-                                    "program_id": program_id,
-                                    "program_name": clean_name,
-                                    "program_version": clean_version,
-                                    "version_description": (
-                                        version_description.strip()
-                                    ),
-                                    "sha256": digest,
-                                    "download_url": (
-                                        "http://192.168.1.50:8000/programs/"
-                                        f"{clean_name}_{clean_version}{suffix}"
-                                    ),
-                                    "step_no": str(step_no),
-                                }
-                            )
-                            st.session_state.programs = programs
-                            _upsert_version_description(
-                                program_versions,
-                                program_id,
-                                clean_version,
-                                version_description.strip(),
-                            )
-                            st.session_state.program_versions = program_versions
-                            st.toast(
-                                "程序已上传（模拟），请前往型号关联区块添加型号"
-                            )
-                            st.rerun()
+                        digest = hashlib.sha256(uploaded_file.getvalue()).hexdigest()
+                        program_id = next_program_id(programs)
+                        programs.append({
+                            "program_id": program_id,
+                            "program_name": clean_name,
+                            "program_version": clean_version,
+                            "version_description": version_description.strip(),
+                            "sha256": digest,
+                            "download_url": (
+                                "http://192.168.1.50:8000/programs/"
+                                f"{clean_name}_{clean_version}{suffix}"
+                            ),
+                            "step_no": "",
+                            "enabled": enabled_text == "是",
+                        })
+                        st.session_state.programs = programs
+                        pass
+                        _upsert_version_description(
+                            program_versions, program_id, clean_version,
+                            version_description.strip(), digest,
+                            f"http://192.168.1.50:8000/programs/{clean_name}_{clean_version}{suffix}",
+                        )
+                        st.session_state.program_versions = program_versions
+                        pass
+                        st.toast("程序已添加")
+                        st.rerun()
+        st.caption("仅支持 `.zip` 或 `.7z` 压缩包；上传后计算 SHA256 并自动生成下载地址。")
 
-    st.caption(
-        "仅支持 `.zip` 或 `.7z` 压缩包。工序选项来自工序注册中已启用的工序。"
-        "上传后系统会计算 SHA256 并自动生成下载地址。"
-    )
+    # -------------------------------------------------------------------------
+    # 区块 2：当前运行程序（每行一个程序名，勾选后查看历史/编辑）
+    # -------------------------------------------------------------------------
+    with st.container(border=True, key="program_list_panel"):
+        st.subheader("当前运行程序")
+        latest_by_name: dict[str, dict[str, Any]] = {}
+        for program in programs:
+            name = program["program_name"]
+            existing = latest_by_name.get(name)
+            if existing is None or str(program["program_version"]) > str(existing["program_version"]):
+                latest_by_name[name] = program
+        latest_programs = sorted(latest_by_name.values(), key=lambda p: p["program_name"])
+        names = [p["program_name"] for p in latest_programs]
+        st.session_state["_program_names"] = names
 
+        def _version_meta(prog: dict[str, Any], version: str) -> tuple[str, str, str]:
+            for v in program_versions:
+                if str(v["program_id"]) == str(prog["program_id"]) and v["program_version"] == version:
+                    return (
+                        v.get("version_description", ""),
+                        str(v.get("sha256") or prog.get("sha256", ""))[:16],
+                        v.get("download_url") or prog.get("download_url", ""),
+                    )
+            return (prog.get("version_description", ""), str(prog.get("sha256", ""))[:16], prog.get("download_url", ""))
 
-# -----------------------------------------------------------------------------
-# 区块 2：程序运行列表
-# -----------------------------------------------------------------------------
-with st.container(border=True, key="program_list_panel"):
-    st.subheader("程序运行列表")
-    save_program_clicked = False
-    if not read_only:
-        with st.container(horizontal=True, horizontal_alignment="right"):
-            save_program_clicked = st.button(
-                "保存程序修改",
-                icon=":material/save:",
-                disabled=not programs,
-                key="save_program_edits",
-            )
-
-    edited_programs: pd.DataFrame | None = None
-    program_frame = _program_frame(programs, program_components)
-    if read_only:
-        st.dataframe(
-            program_frame,
-            column_config=_program_config(steps, version_options),
-            column_order=PROGRAM_COLUMNS[1:],
-            hide_index=True,
-            width="stretch",
-            alt="程序运行列表",
+        frame = pd.DataFrame([{
+            "程序名": p["program_name"],
+            "版本": p["program_version"],
+            "版本说明": _version_meta(p, p["program_version"])[0],
+            "SHA256": _version_meta(p, p["program_version"])[1],
+            "下载地址": _version_meta(p, p["program_version"])[2],
+            "启用": "是" if p.get("enabled", True) else "否",
+        } for p in latest_programs], columns=["程序名", "版本", "版本说明", "SHA256", "下载地址", "启用"])
+        event = st.dataframe(
+            frame, hide_index=True, width="stretch", height=260,
+            alt="当前运行程序列表（点击行查看历史并编辑）",
+            on_select="rerun", selection_mode="single-row",
+            key="program_list_select",
         )
-    else:
-        edited_programs = st.data_editor(
-            program_frame,
-            column_config=_program_config(steps, version_options),
-            column_order=PROGRAM_COLUMNS[1:],
-            disabled=[
-                column for column in PROGRAM_COLUMNS[1:] if column != "版本"
-            ],
-            hide_index=True,
-            num_rows="fixed",
-            width="stretch",
-            alt="程序运行列表编辑器",
-            key="program_editor",
-        )
-    if not programs:
-        st.info("暂无记录")
-
-    st.html(
-        COLUMN_ORDER_LOCK_SCRIPT,
-        unsafe_allow_javascript=True,
-    )
-
-    if save_program_clicked and edited_programs is not None:
-        rows = edited_programs.to_dict("records")
-        updated_programs, updated_versions, error = _validate_program_rows(
-            rows, programs, steps, version_options, program_versions
-        )
-        if error:
-            st.error(error)
-        else:
-            st.session_state.programs = updated_programs
-            st.session_state.program_versions = updated_versions
-            st.toast("已保存")
+        rows = event.selection.rows if hasattr(event, "selection") else []
+        if rows:
+            selected = names[rows[0]]
+            if st.session_state.get("program_selected_name") != selected:
+                st.session_state["program_selected_name"] = selected
+                st.rerun()
+        elif st.session_state.get("program_selected_name"):
+            st.session_state.pop("program_selected_name", None)
             st.rerun()
 
-
-# -----------------------------------------------------------------------------
-# 区块 3：型号关联
-# -----------------------------------------------------------------------------
-with st.container(border=True):
-    st.subheader("型号关联")
-    if not programs:
-        st.info("暂无程序，请先上传程序文件。")
-    else:
-        selected_program_id = st.selectbox(
-            "选择程序",
-            options=[int(item["program_id"]) for item in programs],
-            format_func=lambda item: program_select_label(
-                next(
-                    program
-                    for program in programs
-                    if int(program["program_id"]) == int(item)
-                ),
-                steps,
-            ),
-            key="component_program_id",
-        )
-        selected_components = [
-            str(item["component_no"])
-            for item in program_components
-            if int(item["program_id"]) == int(selected_program_id)
-        ]
-
-        component_editor_key = f"component_editor_{selected_program_id}"
-        edited_components: pd.DataFrame | None = None
-        if read_only:
-            st.dataframe(
-                _component_frame(selected_components),
-                column_config={"component_no": "型号 / 组件号"},
-                hide_index=True,
-                width="stretch",
-                alt="当前程序的型号关联",
-            )
-        else:
-            edited_components = st.data_editor(
-                _component_frame(selected_components),
-                column_config={
-                    "component_no": st.column_config.TextColumn(
-                        "型号 / 组件号",
-                        required=True,
-                        width="medium",
-                    )
-                },
-                hide_index=True,
-                num_rows="dynamic",
-                width="stretch",
-                alt="当前程序的型号关联编辑器",
-                key=component_editor_key,
-            )
-        if not selected_components:
-            st.info("暂无记录")
-
-        if not read_only and st.button(
-            "保存型号关联",
-            icon=":material/save:",
-            key="save_component_links",
-        ):
-            new_components = _read_components(edited_components)
-            if len(new_components) != len(set(new_components)):
-                st.error("同一程序下型号不能重复")
-            else:
-                retained = [
-                    item
-                    for item in program_components
-                    if int(item["program_id"]) != int(selected_program_id)
+        # 选中程序的编辑区
+        selected_prog_name = st.session_state.get("program_selected_name")
+        if selected_prog_name and selected_prog_name in names:
+            prog = latest_by_name[selected_prog_name]
+            st.caption(f"编辑当前运行程序：**{selected_prog_name}**")
+            edit_col1, edit_col2 = st.columns(2)
+            with edit_col1:
+                current_ver = str(prog["program_version"])
+                ver_list = [
+                    v["program_version"] for v in program_versions
+                    if str(v["program_id"]) == str(prog["program_id"])
                 ]
-                retained.extend(
-                    {
-                        "program_id": int(selected_program_id),
-                        "component_no": component_no,
-                    }
-                    for component_no in new_components
+                if current_ver not in ver_list:
+                    ver_list.insert(0, current_ver)
+                chosen_ver = st.selectbox(
+                    "版本", options=ver_list,
+                    index=ver_list.index(current_ver) if current_ver in ver_list else 0,
+                    key="edit_program_version",
                 )
-                st.session_state.program_components = retained
-                if not new_components:
-                    st.session_state[COMPONENT_WARNING_KEY] = (
-                        "未关联型号的程序无法被产品工序使用"
-                    )
-                st.toast("型号关联已保存")
+            with edit_col2:
+                meta_desc, meta_sha, meta_url = _version_meta(prog, chosen_ver)
+                st.text_input("SHA256（当前版本）", value=meta_sha, disabled=True, key="edit_program_sha")
+            edited_desc = st.text_input(
+                "版本说明", value=meta_desc, key="edit_program_desc",
+            )
+            st.markdown(f"**下载地址：** {meta_url}")
+            edit_enabled = st.selectbox(
+                "启用", options=["是", "否"],
+                index=0 if prog.get("enabled", True) else 1,
+                key="edit_program_enabled",
+            )
+            if not read_only:
+                ecol1, ecol2 = st.columns(2)
+                with ecol1:
+                    if st.button("保存程序修改", icon=":material/save:", key="save_program_edits"):
+                        updated = []
+                        for p in programs:
+                            q = dict(p)
+                            if p["program_name"] == selected_prog_name:
+                                q["program_version"] = chosen_ver
+                                q["version_description"] = edited_desc
+                                q["enabled"] = edit_enabled == "是"
+                                meta = next(
+                                    (v for v in program_versions
+                                     if str(v["program_id"]) == str(q["program_id"])
+                                     and v["program_version"] == chosen_ver), None,
+                                )
+                                if meta:
+                                    q["sha256"] = meta.get("sha256") or q["sha256"]
+                                    q["download_url"] = meta.get("download_url") or q["download_url"]
+                            updated.append(q)
+                        st.session_state.programs = updated
+                        pass
+                        st.toast("程序已保存")
+                        st.rerun()
+                with ecol2:
+                    if st.button("删除该程序", icon=":material/delete:", key="delete_program_btn"):
+                        st.session_state["pending_program_delete"] = selected_prog_name
+                        st.rerun()
+            pending = st.session_state.pop("pending_program_delete", None)
+            if pending:
+                remaining = [p for p in st.session_state.programs if p["program_name"] != pending]
+                remaining_ids = {str(p["program_id"]) for p in remaining}
+                st.session_state.programs = remaining
+                st.session_state.program_components = [
+                    c for c in st.session_state.program_components
+                    if str(c["program_id"]) in remaining_ids
+                ]
+                pass
+                pass
+                st.session_state.pop("program_selected_name", None)
+                st.toast(f"已删除程序 {pending}")
                 st.rerun()
 
+        st.html(COLUMN_ORDER_LOCK_SCRIPT, unsafe_allow_javascript=True)
+    # -------------------------------------------------------------------------
+    # 区块 3：历史程序（勾选当前运行程序后显示其所有历史版本，新→老）
+    # -------------------------------------------------------------------------
+    with st.container(border=True):
+        st.subheader("历史程序")
+        selected = st.session_state.get("program_selected_name")
+        if not names:
+            st.info("暂无程序，请先在上方新增")
+        elif not selected or selected not in names:
+            st.info("请勾选上方“当前运行程序”左侧的下发勾选框查看历史程序")
+        else:
+                # 该程序的所有版本（新→老），来自 program_versions（历史版本库）
+                prog_ids = {
+                    str(p["program_id"]) for p in programs if p["program_name"] == selected
+                }
+                version_items = [
+                    v for v in program_versions if str(v["program_id"]) in prog_ids
+                ]
+                versions = sorted(
+                    version_items,
+                    key=lambda v: str(v["program_version"]), reverse=True,
+                )
+                hist_frame = pd.DataFrame([{
+                    "版本": v["program_version"],
+                    "版本说明": v.get("version_description", ""),
+                    "SHA256": str(v.get("sha256", ""))[:16],
+                    "下载地址": v.get("download_url", ""),
+                    "删除": "删除",
+                } for v in versions], columns=["版本", "版本说明", "SHA256", "下载地址", "删除"])
+                hist_config = {
+                    "版本": st.column_config.TextColumn("版本", disabled=True),
+                    "版本说明": st.column_config.TextColumn("版本说明", width="large"),
+                    "SHA256": st.column_config.TextColumn("SHA256", disabled=True),
+                    "下载地址": st.column_config.LinkColumn("下载地址", display_text="下载", disabled=True),
+                    "删除": st.column_config.ButtonColumn(
+                        "删除", type="tertiary", on_click=_request_program_version_delete,
+                        key="program_version_delete_click", width="small",
+                    ),
+                }
+                st.session_state["_program_version_names"] = [p["program_version"] for p in versions]
+                st.session_state["_program_version_program"] = selected
+                if read_only:
+                    st.dataframe(
+                        hist_frame.drop(columns=["删除"]), hide_index=True,
+                        width="stretch", alt="历史程序版本列表",
+                    )
+                else:
+                    edited_hist = st.data_editor(
+                        hist_frame, column_config=hist_config, hide_index=True,
+                        num_rows="fixed", width="stretch", alt="历史程序版本编辑器",
+                        key="program_history_editor",
+                    )
+                    if st.button("保存版本说明", key="save_program_versions"):
+                        descs = dict(zip(edited_hist["版本"], edited_hist["版本说明"]))
+                        for p in programs:
+                            if p["program_name"] == selected and p["program_version"] in descs:
+                                p["version_description"] = descs[p["program_version"]]
+                        st.session_state.programs = programs
+                        pass
+                        for item in program_versions:
+                            pid = next(
+                                (q["program_id"] for q in programs
+                                 if q["program_name"] == selected and q["program_version"] == item["program_version"]),
+                                None,
+                            )
+                            if pid is not None and item["program_version"] in descs:
+                                item["version_description"] = descs[item["program_version"]]
+                        st.session_state.program_versions = program_versions
+                        pass
+                        st.toast("版本说明已保存")
+                        st.rerun()
+                    pending_ver = st.session_state.pop("pending_program_version_delete", None)
+                    if pending_ver:
+                        # 删除该程序名的指定版本
+                        st.session_state.programs = [
+                            p for p in st.session_state.programs
+                            if not (p["program_name"] == selected and p["program_version"] == pending_ver)
+                        ]
+                        st.session_state.program_versions = [
+                            v for v in st.session_state.program_versions
+                            if not (
+                                str(v["program_id"]) in {
+                                    str(p["program_id"]) for p in st.session_state.programs
+                                    if p["program_name"] == selected and p["program_version"] == pending_ver
+                                }
+                            )
+                        ]
+                        pass
+                        pass
+                        st.toast(f"已删除版本 {pending_ver}")
+                        st.rerun()
 
-# -----------------------------------------------------------------------------
-# 区块 4：设备拉取记录
-# -----------------------------------------------------------------------------
-with st.expander("设备拉取记录（最近 30 条）", expanded=False):
-    if program_pulls:
-        st.dataframe(
-            _pull_log_frame(program_pulls),
-            hide_index=True,
-            width="stretch",
-            alt="设备拉取记录",
-        )
-    else:
-        st.caption("暂无拉取记录。")
+
+def _sync_program_selection(edited: pd.DataFrame | None, names: list[str]) -> None:
+    """根据 data_editor 当前“下发”列值同步 program_selected_name。"""
+    if edited is None or "下发" not in edited.columns:
+        return
+    checked = [
+        str(row["程序名"]) for _, row in edited.iterrows() if bool(row.get("下发"))
+    ]
+    current = st.session_state.get("program_selected_name")
+    if checked:
+        if current != checked[0]:
+            st.session_state["program_selected_name"] = checked[0]
+            st.rerun()
+    elif current:
+        st.session_state.pop("program_selected_name", None)
+        st.rerun()
 
 
-# -----------------------------------------------------------------------------
-# 区块 5：设备状态上报记录
-# -----------------------------------------------------------------------------
-with st.expander("设备状态上报记录（最近 30 条）", expanded=False):
-    if program_status_logs:
-        st.dataframe(
-            _status_log_frame(program_status_logs),
-            hide_index=True,
-            width="stretch",
-            alt="设备状态上报记录",
-        )
-    else:
-        st.caption("暂无上报记录。")
+def _on_program_editor_change() -> None:
+    """勾选“下发”列后立即刷新历史程序。"""
+    edited = st.session_state.get("program_editor")
+    if not edited:
+        return
+    edits = edited.get("edited_rows", {}) if isinstance(edited, dict) else {}
+    names = st.session_state.get("_program_names", [])
+    current = st.session_state.get("program_selected_name")
+    for row_idx, changes in edits.items():
+        if "下发" not in changes or not (0 <= int(row_idx) < len(names)):
+            continue
+        name = names[int(row_idx)]
+        if changes["下发"] is True:
+            if current != name:
+                st.session_state["program_selected_name"] = name
+                return
+        elif changes["下发"] is False and current == name:
+            st.session_state.pop("program_selected_name", None)
+            return
+
+
+def _request_program_delete() -> None:
+    click = st.session_state.get("program_delete_click")
+    if click is None:
+        return
+    row = int(click["row"])
+    names = st.session_state.get("_program_names", [])
+    if 0 <= row < len(names):
+        st.session_state["pending_program_delete"] = names[row]
+
+
+def _request_program_version_delete() -> None:
+    click = st.session_state.get("program_version_delete_click")
+    if click is None:
+        return
+    row = int(click["row"])
+    versions = st.session_state.get("_program_version_names", [])
+    if 0 <= row < len(versions):
+        st.session_state["pending_program_version_delete"] = versions[row]
+
+render_page()

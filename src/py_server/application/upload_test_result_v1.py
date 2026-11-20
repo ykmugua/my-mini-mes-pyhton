@@ -111,7 +111,6 @@ def execute(
     # 写主子表
     report = {
         "request_id": request_id,
-        "linecode": payload["linecode"],
         "station": station,
         "componentcode": payload["componentcode"],
         "barcode": barcode,
@@ -157,7 +156,6 @@ def execute(
             board_status="normal" if result == "PASS" else "lock",
             step_no=current_step,
             next_step=next_step,
-            line_id=step_info.get("line_id") or "",
             device=station,
             note="test pass" if result == "PASS" else "test fail",
             changed_at=db.utc_now_iso(),
