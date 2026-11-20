@@ -7,11 +7,13 @@ from typing import Any
 import pandas as pd
 import streamlit as st
 
+
 from app_pages._mock_program_data import enabled_steps, step_label
 
 PRODUCT_COLUMNS = [
     "组件号",
     "组件名称",
+    "绑定工艺",
     "启用",
     "备注",
 ]
@@ -49,6 +51,7 @@ def _product_frame(
         {
             "组件号": product["product_model"],
             "组件名称": product.get("product_name", ""),
+            "绑定工艺": product.get("process_code", ""),
             "启用": bool(product.get("enabled", True)),
             "备注": product.get("remark", ""),
         }
@@ -62,12 +65,13 @@ def _product_frame(
     return pd.DataFrame(records, columns=columns)
 
 
-def _product_config(*, include_delete: bool) -> dict[str, Any]:
+def _product_config(*, include_delete: bool, process_options: list[str]) -> dict[str, Any]:
     config: dict[str, Any] = {
         "组件号": st.column_config.TextColumn(
             "组件号", required=True, disabled=True, width="medium"
         ),
         "组件名称": st.column_config.TextColumn("组件名称", required=True, width="medium"),
+        "绑定工艺": st.column_config.SelectboxColumn("绑定工艺", options=process_options, width="medium"),
         "启用": st.column_config.CheckboxColumn("启用", default=True, width="small"),
         "备注": st.column_config.TextColumn("备注", width="medium"),
     }
@@ -90,6 +94,7 @@ def _validate_products(
     for row in rows:
         product_model = _text(row.get("组件号"))
         product_name = _text(row.get("组件名称"))
+        process_code = _text(row.get("绑定工艺"))
         remark = _text(row.get("备注"))
         if not any((product_model, product_name, remark)):
             continue
@@ -102,6 +107,7 @@ def _validate_products(
             {
                 "product_model": product_model,
                 "product_name": product_name,
+                "process_code": process_code,
                 "enabled": (
                     True if row.get("启用") is None
                     or (isinstance(row.get("启用"), float) and pd.isna(row.get("启用")))
@@ -140,7 +146,7 @@ def _confirm_delete_product(product: dict[str, Any]) -> None:
         f"{product.get('product_name', '')}** 吗？"
     )
     st.caption("删除组件将同时删除其工序流程和设备分配。")
-    with st.container(horizontal=True, horizontal_alignment="right"):
+    with st.container(horizontal=True, horizontal_alignment="left"):
         if st.button("取消", key="cancel_delete_product"):
             _clear_pending_product_delete()
             st.rerun()
@@ -155,235 +161,9 @@ def _confirm_delete_product(product: dict[str, Any]) -> None:
                 for item in st.session_state.products
                 if item["product_model"] != model
             ]
-            st.session_state.product_routes = [
-                item
-                for item in st.session_state.product_routes
-                if item["product_model"] != model
-            ]
-            st.session_state.product_step_devices = [
-                item
-                for item in st.session_state.product_step_devices
-                if item["product_model"] != model
-            ]
             _clear_pending_product_delete()
             st.toast("组件已删除")
             st.rerun()
-
-
-def _request_route_delete() -> None:
-    click = st.session_state.get(ROUTE_DELETE_CLICK_KEY)
-    if click is None:
-        return
-    selected_product = st.session_state.get("selected_product")
-    if selected_product is None:
-        return
-    current_routes = [
-        route
-        for route in st.session_state.get("product_routes", [])
-        if route["product_model"] == selected_product
-    ]
-    row_index = int(click["row"])
-    if 0 <= row_index < len(current_routes):
-        st.session_state[PENDING_ROUTE_DELETE_KEY] = {
-            "product_model": str(selected_product),
-            "step_no": str(current_routes[row_index]["step_no"]),
-        }
-
-
-def _clear_pending_route_delete() -> None:
-    st.session_state.pop(PENDING_ROUTE_DELETE_KEY, None)
-
-
-@st.dialog(
-    "确认删除工序节点",
-    icon=":material/delete_forever:",
-    on_dismiss=_clear_pending_route_delete,
-)
-def _confirm_delete_route(route: dict[str, Any]) -> None:
-    product_model = str(route["product_model"])
-    step_no = str(route["step_no"])
-    st.write(
-        f"确定从组件 **{product_model}** 的工序流程中删除 "
-        f"**{step_label(st.session_state.steps, step_no)}** 吗？"
-    )
-    st.caption("如有其他工序仍指向该工序，保存流程时需要重新配置下站。")
-    with st.container(horizontal=True, horizontal_alignment="right"):
-        if st.button("取消", key="cancel_delete_route"):
-            _clear_pending_route_delete()
-            st.rerun()
-        if st.button(
-            "确认删除",
-            type="primary",
-            key="confirm_delete_route",
-        ):
-            st.session_state.product_routes = [
-                item
-                for item in st.session_state.product_routes
-                if not (
-                    item["product_model"] == product_model
-                    and str(item["step_no"]) == step_no
-                )
-            ]
-            _clear_pending_route_delete()
-            st.toast("工序节点已删除")
-            st.rerun()
-
-
-def _route_frame(
-    routes: list[dict[str, Any]], *, include_delete: bool
-) -> pd.DataFrame:
-    records = [
-        {
-            "当前工序": route["step_no"],
-            "成功下站": str(route["success_next_step"]),
-            "失败下站": str(route["fail_next_step"]),
-        }
-        for route in routes
-    ]
-    columns = list(ROUTE_COLUMNS)
-    if include_delete:
-        for record in records:
-            record["删除"] = "删除"
-        columns.append("删除")
-    return pd.DataFrame(records, columns=columns)
-
-
-def _route_next_label(value: Any, steps: list[dict[str, Any]]) -> str:
-    if value == "END":
-        return "结束"
-    if value == "LOCK":
-        return "锁定"
-    return step_label(steps, value)
-
-
-def _route_config(
-    steps: list[dict[str, Any]], *, include_delete: bool
-) -> dict[str, Any]:
-    step_nos = [str(step["step_no"]) for step in steps]
-    config: dict[str, Any] = {
-        "当前工序": st.column_config.SelectboxColumn(
-            "当前工序",
-            options=step_nos,
-            format_func=lambda value: step_label(steps, value),
-            required=True,
-            width="medium",
-        ),
-        "成功下站": st.column_config.SelectboxColumn(
-            "成功下站",
-            options=["END", *(str(step_no) for step_no in step_nos)],
-            format_func=lambda value: _route_next_label(value, steps),
-            required=True,
-            width="medium",
-        ),
-        "失败下站": st.column_config.SelectboxColumn(
-            "失败下站",
-            options=[
-                "END",
-                "LOCK",
-                *(str(step_no) for step_no in step_nos),
-            ],
-            format_func=lambda value: _route_next_label(value, steps),
-            required=True,
-            width="medium",
-        ),
-    }
-    if include_delete:
-        config["删除"] = st.column_config.ButtonColumn(
-            "删除",
-            type="tertiary",
-            on_click=_request_route_delete,
-            key=ROUTE_DELETE_CLICK_KEY,
-            width="small",
-        )
-    return config
-
-
-def _validate_routes(
-    rows: list[dict[str, Any]],
-    steps: list[dict[str, Any]],
-) -> tuple[list[dict[str, Any]] | None, str | None]:
-    routes: list[dict[str, Any]] = []
-    current_steps: set[str] = set()
-    active_step_nos = {str(step["step_no"]) for step in steps}
-
-    for line_no, row in enumerate(rows, start=1):
-        current = _text(row.get("当前工序"))
-        success = _text(row.get("成功下站")) if _text(row.get("成功下站")) not in {"END", "LOCK"} else _text(row.get("成功下站"))
-        fail = _text(row.get("失败下站")) if _text(row.get("失败下站")) not in {"END", "LOCK"} else _text(row.get("失败下站"))
-        success_raw = _text(row.get("成功下站"))
-        fail_raw = _text(row.get("失败下站"))
-
-        if current is None and not success_raw and not fail_raw:
-            continue
-        if current is None:
-            return None, f"第 {line_no} 行当前工序不能为空"
-        if current not in active_step_nos:
-            return None, f"第 {line_no} 行当前工序不属于启用工序"
-        if current in current_steps:
-            return None, "同一组件下当前工序不能重复"
-        current_steps.add(current)
-
-        if success_raw not in {"END"} and not success:
-            return None, f"第 {line_no} 行的成功下站无效"
-        if fail_raw not in {"END", "LOCK"} and not fail:
-            return None, f"第 {line_no} 行的失败下站无效"
-        routes.append(
-            {
-                "step_no": current,
-                "success_next_step": (
-                    "END" if success_raw == "END" else success
-                ),
-                "fail_next_step": (
-                    fail_raw
-                    if fail_raw in {"END", "LOCK"}
-                    else fail
-                ),
-            }
-        )
-
-    special = {"END", "LOCK", ""}
-    for line_no, route in enumerate(routes, start=1):
-        success = str(route["success_next_step"])
-        if success not in special and success not in current_steps:
-            return (
-                None,
-                f"第 {line_no} 行的成功下站指向工序 {success}，"
-                "但该工序未在当前组件流程中配置",
-            )
-        fail = str(route["fail_next_step"])
-        if fail not in special and fail not in current_steps:
-            return (
-                None,
-                f"第 {line_no} 行的失败下站指向工序 {fail}，"
-                "但该工序未在当前组件流程中配置",
-            )
-
-    return routes, None
-
-
-def _success_route_has_cycle(routes: list[dict[str, Any]]) -> bool:
-    graph = {
-        str(route["step_no"]): str(route["success_next_step"])
-        for route in routes
-        if str(route["success_next_step"]) not in {"END", "LOCK", ""}
-    }
-    visiting: set[str] = set()
-    visited: set[str] = set()
-
-    def visit(step_no: str) -> bool:
-        if step_no in visiting:
-            return True
-        if step_no in visited:
-            return False
-        visiting.add(step_no)
-        next_step = graph.get(step_no)
-        if isinstance(next_step, str) and visit(next_step):
-            return True
-        visiting.remove(step_no)
-        visited.add(step_no)
-        return False
-
-    return any(visit(step_no) for step_no in graph)
 
 
 read_only = st.session_state.get("role", "工程师") == "只读"
@@ -391,8 +171,7 @@ steps: list[dict[str, Any]] = st.session_state.steps
 active_steps = enabled_steps(steps)
 devices: list[dict[str, Any]] = st.session_state.devices
 products: list[dict[str, Any]] = st.session_state.products
-product_routes: list[dict[str, Any]] = st.session_state.product_routes
-product_step_devices: list[dict[str, Any]] = st.session_state.product_step_devices
+process_options: list[str] = [x["process_code"] for x in st.session_state.get("processes", [])]
 trays: list[dict[str, Any]] = st.session_state.get("trays", [])
 product_trays: list[dict[str, Any]] = st.session_state.get("product_trays", [])
 
@@ -409,36 +188,39 @@ with st.container(border=True):
             st.info("只读角色不可新增组件。")
     else:
         with st.expander("新增组件", expanded=False):
-            with st.form("product_create_form", clear_on_submit=False):
-                    # 第一行：组件名称 + 组件号
-                    name_col, model_col = st.columns(2)
-                    product_name = name_col.text_input(
-                        "组件名称",
-                        key="new_product_name",
-                        placeholder="例如 电源模块",
-                    )
-                    product_model = model_col.text_input(
-                        "组件号",
-                        key="new_product_model",
-                        placeholder="例如 P-1003",
-                    )
-                    # 第二行：备注 + 启用（下拉）
-                    remark_col, enabled_col = st.columns([3, 1])
-                    remark = remark_col.text_input(
-                        "备注",
-                        key="new_product_remark",
-                        placeholder="可选",
-                    )
-                    enabled_text = enabled_col.selectbox(
-                        "启用", options=["是", "否"], key="new_product_enabled_text",
-                    )
-                    # 第三行：添加按钮
-                    submitted = st.form_submit_button("添加组件")
+            with st.form("product_create_form", clear_on_submit=False, border=False):
+# 第一行：组件名称 + 组件号
+                name_col, model_col, proc_col = st.columns(3)
+                product_name = name_col.text_input(
+                    "组件名称",
+                    key="new_product_name",
+                    placeholder="例如 电源模块",
+                )
+                product_model = model_col.text_input(
+                    "组件号",
+                    key="new_product_model",
+                    placeholder="例如 P-1003",
+                )
+                new_process_code = proc_col.selectbox(
+                    "绑定工艺", options=process_options, key="new_product_process_code",
+                )
+                # 第二行：备注 + 启用（下拉）
+                remark_col, enabled_col = st.columns([3, 1])
+                remark = remark_col.text_input(
+                    "备注",
+                    key="new_product_remark",
+                    placeholder="可选",
+                )
+                enabled_text = enabled_col.selectbox(
+                    "启用", options=["是", "否"], key="new_product_enabled_text",
+                )
+                # 第三行：添加按钮
+                submitted = st.form_submit_button("添加组件")
 
             if submitted:
                 clean_model = product_model.strip()
                 if not clean_model:
-                    st.error("组件号不能为空")
+                    st.error("组件不能为空")
                 elif any(
                     item["product_model"].casefold() == clean_model.casefold()
                     for item in products
@@ -449,11 +231,13 @@ with st.container(border=True):
                         {
                             "product_model": clean_model,
                             "product_name": product_name.strip(),
+                            "process_code": new_process_code,
                             "enabled": enabled_text == "是",
                             "remark": remark.strip(),
                         }
                     )
                     st.session_state.products = products
+                    pass
                     st.toast("组件已添加")
                     st.rerun()
 
@@ -463,20 +247,11 @@ with st.container(border=True):
 # -----------------------------------------------------------------------------
 with st.container(border=True):
     st.subheader("组件列表")
-    save_products_clicked = False
-    if not read_only:
-        with st.container(horizontal=True, horizontal_alignment="right"):
-            save_products_clicked = st.button(
-                "保存组件修改",
-                icon=":material/save:",
-                key="save_products",
-            )
-
     edited_products: pd.DataFrame | None = None
     if read_only:
         st.dataframe(
             _product_frame(products, include_delete=False),
-            column_config=_product_config(include_delete=False),
+            column_config=_product_config(include_delete=False, process_options=process_options),
             hide_index=True,
             width="stretch",
             alt="组件列表",
@@ -484,7 +259,7 @@ with st.container(border=True):
     else:
         edited_products = st.data_editor(
             _product_frame(products, include_delete=True),
-            column_config=_product_config(include_delete=True),
+            column_config=_product_config(include_delete=True, process_options=process_options),
             disabled=["组件"],
             hide_index=True,
             num_rows="fixed",
@@ -492,6 +267,15 @@ with st.container(border=True):
             alt="组件列表编辑器",
             key="product_editor",
         )
+
+    save_products_clicked = False
+    if not read_only:
+        with st.container(horizontal=True, horizontal_alignment="left"):
+            save_products_clicked = st.button(
+                "保存组件修改",
+                icon=":material/save:",
+                key="save_products",
+            )
 
     if not products:
         st.info("暂无组件，请新增")
@@ -504,6 +288,7 @@ with st.container(border=True):
             st.error(error)
         else:
             st.session_state.products = updated_products
+            pass
             st.toast("组件已保存")
             st.rerun()
 

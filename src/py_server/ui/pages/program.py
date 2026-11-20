@@ -16,28 +16,13 @@ from ._mock_program_data import (
     available_program_versions,
     enabled_steps,
     next_program_id,
-    program_component_count,
-    program_select_label,
-    program_type,
     program_version_description,
     step_by_no,
     step_label,
 )
 
-PROGRAM_COLUMNS = [
-    "program_id",
-    "程序名",
-    "所属工序",
-    "版本",
-    "版本说明",
-    "SHA256",
-    "下载 URL",
-    "关联型号数",
-    "程序类型",
-]
 PULL_LOG_COLUMNS = ["时间", "设备", "产品", "程序版本", "SHA256"]
 STATUS_LOG_COLUMNS = ["时间", "设备", "产品", "上报版本", "可信", "原因"]
-COMPONENT_WARNING_KEY = "program_components_warning"
 COLUMN_ORDER_LOCK_SCRIPT = """
 <script>
 (() => {
@@ -129,78 +114,6 @@ def _integer(value: Any) -> int | None:
         return None
 
 
-def _program_frame(
-    programs: list[dict[str, Any]],
-    program_components: list[dict[str, Any]],
-) -> pd.DataFrame:
-    records = []
-    for program in programs:
-        component_count = program_component_count(
-            program["program_id"], program_components
-        )
-        records.append(
-            {
-                "program_id": program["program_id"],
-                "程序名": program["program_name"],
-                "所属工序": program["step_no"],
-                "版本": program["program_version"],
-                "版本说明": program.get("version_description", ""),
-                "SHA256": program["sha256"][:16],
-                "下载 URL": program["download_url"],
-                "关联型号数": component_count,
-                "程序类型": program_type(component_count),
-            }
-        )
-    return pd.DataFrame(records, columns=PROGRAM_COLUMNS)
-
-
-def _program_config(
-    steps: list[dict[str, Any]], version_options: list[str]
-) -> dict[str, Any]:
-    return {
-        "program_id": None,
-        "程序名": st.column_config.TextColumn("程序名", required=True, width="medium"),
-        "所属工序": st.column_config.SelectboxColumn(
-            "所属工序",
-            options=[str(step["step_no"]) for step in steps],
-            format_func=lambda step_no: step_label(steps, step_no),
-            required=True,
-            width="medium",
-        ),
-        "版本": st.column_config.SelectboxColumn(
-            "版本",
-            options=version_options,
-            required=True,
-            width="small",
-        ),
-        "版本说明": st.column_config.TextColumn(
-            "版本说明", width="large"
-        ),
-        "SHA256": st.column_config.TextColumn(
-            "SHA256",
-            help="列表显示 SHA256 的前 16 位。",
-            required=True,
-            width="medium",
-        ),
-        "下载 URL": st.column_config.LinkColumn(
-            "下载 URL",
-            display_text="下载程序",
-            disabled=True,
-            width=110,
-        ),
-        "关联型号数": st.column_config.NumberColumn(
-            "关联型号数",
-            disabled=True,
-            format="%d",
-            width=70,
-        ),
-        "程序类型": st.column_config.TextColumn(
-            "程序类型", disabled=True, width="small"
-        ),
-    }
-
-
-COMPONENT_DELETE_KEY = "component_delete_click"
 
 
 def _component_frame(component_nos: list[str], *, include_delete: bool = True) -> pd.DataFrame:
@@ -417,14 +330,10 @@ def render_page() -> None:
     read_only = st.session_state.get("role", "工程师") == "只读"
     programs: list[dict[str, Any]] = st.session_state.programs
     program_versions: list[dict[str, Any]] = st.session_state.program_versions
-    program_components: list[dict[str, Any]] = st.session_state.program_components
     version_options = available_program_versions(programs, program_versions)
 
     st.title("📦 程序注册")
 
-    saved_warning = st.session_state.pop(COMPONENT_WARNING_KEY, None)
-    if saved_warning:
-        st.warning(saved_warning)
 
     # -------------------------------------------------------------------------
     # 区块 1：新增（风格与组件注册一致）
@@ -619,12 +528,7 @@ def render_page() -> None:
                 remaining = [p for p in st.session_state.programs if p["program_name"] != pending]
                 remaining_ids = {str(p["program_id"]) for p in remaining}
                 st.session_state.programs = remaining
-                st.session_state.program_components = [
-                    c for c in st.session_state.program_components
-                    if str(c["program_id"]) in remaining_ids
-                ]
                 master.save_key("programs")
-                master.save_key("program_components")
                 st.session_state.pop("program_selected_name", None)
                 st.toast(f"已删除程序 {pending}")
                 st.rerun()

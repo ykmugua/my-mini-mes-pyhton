@@ -228,10 +228,6 @@ def initial_program_state() -> dict[str, list[dict[str, Any]]]:
                 "version_description": "正式终检参数模板",
             },
         ],
-        "program_components": [],
-        "product_routes": [],
-        "product_step_devices": [],
-        "product_trays": [],
         "products": [
             {
                 "product_model": "P-1001",
@@ -370,10 +366,6 @@ def initialize_program_state() -> None:
     for key in (
         "program_pulls",
         "program_status_logs",
-        "program_components",
-        "product_routes",
-        "product_step_devices",
-        "product_trays",
         "products",
         "processes",
         "process_routes",

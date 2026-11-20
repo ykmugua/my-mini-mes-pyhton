@@ -570,3 +570,10 @@
 - 工艺配置「为型号分配设备」重写：去掉选择线体+按线体过滤，候选=全部启用设备，multiselect key 改为 assign_<产品>_<工序>；测试断言同步。
 - 看板：去掉产线筛选、所属线体列、_line_step_names→_step_names，config 里不再存 line_id/line_name。
 - 数据库全部删除重建（seed --reset --demo）。139 passed。
+
+## 33. 工艺配置重构完成（2026-11-20）
+- 新表 `processes`（工艺号/名称/启用/备注/来源工艺号）、`process_routes`、`process_step_resources`（每工序：program_name / device_models 逗号分隔 / tray_models 逗号分隔，按**型号**而非实例）；删 `product_routes/product_step_devices/product_trays/program_components`。
+- `products` 加 `process_code`（一组件一工艺）；`product_query_repo.product_route` 改为按组件 process_code 查 process_routes。
+- 工艺配置页重写三块：①新增工艺（空白/从已有工艺**深拷贝**派生，source_process_code 仅溯源）②工艺列表（st.dataframe 行选择，含来源工艺/引用组件数）③工艺详情（工序路线编辑器 + 工序资源表：程序下拉/设备型号 MultiselectColumn/载具型号 MultiselectColumn）；被组件引用的工艺禁止删除；删掉设备读写记录区块。
+- 组件注册页加「绑定工艺」列/表单/校验；程序注册页清掉 program_components 残留；两套 mock data 换用新 key。
+- 新文档 `design_data/DatabaseConventions/工艺配置数据库约定.md`；数据库全量重建；127 passed。
