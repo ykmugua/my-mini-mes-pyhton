@@ -36,9 +36,8 @@ def test_product_page_renders_sections() -> None:
     assert at.title[0].value == "📋 组件注册"
     assert [x.value for x in at.subheader] == ["新增组件", "组件列表"]
     frame = at.data_editor[0].value
-    assert list(frame.columns) == ["组件号", "组件名称", "绑定工艺", "启用", "备注", "删除"]
+    assert list(frame.columns) == ["组件号", "组件名称", "启用", "备注", "删除"]
     assert set(frame["组件号"]) >= {"P-1001", "P-1002"}
-    assert set(frame["绑定工艺"]) >= {"PROC-001", "PROC-002"}
 
 
 def test_add_product_form_appends_product() -> None:
@@ -50,7 +49,7 @@ def test_add_product_form_appends_product() -> None:
     last = at.session_state["products"][-1]
     assert last["product_model"] == "P-1003"
     assert last["product_name"] == "显示面板"
-    assert "process_code" in last
+    assert "process_code" not in last
 
 
 def test_add_product_rejects_duplicate() -> None:
@@ -67,7 +66,7 @@ def test_process_page_renders_list() -> None:
     assert at.title[0].value == "⚙️ 工艺配置"
     editor = at.data_editor(key="process_editor")
     frame = editor.value
-    assert list(frame.columns) == ["选择", "工艺号", "工艺名称", "启用", "来源工艺", "引用组件数", "备注", "删除"]
+    assert list(frame.columns) == ["选择", "工艺号", "工艺名称", "绑定组件", "启用", "来源工艺", "备注", "删除"]
     assert set(frame["工艺号"]) >= {"PROC-001", "PROC-002"}
     cfg = json.loads(editor.proto.columns)
     assert cfg["选择"]["type_config"]["type"] == "checkbox"

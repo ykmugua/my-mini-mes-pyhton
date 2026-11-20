@@ -98,6 +98,7 @@ def render_page() -> None:
     device_models = sorted({str(d.get("device_model", "")) for d in devices if d.get("device_model")})
     tray_models = sorted({str(t.get("tray_model", "")) for t in trays if t.get("tray_model")})
     step_nos = [str(s["step_no"]) for s in active_steps]
+    component_options = [""] + [str(q["product_model"]) for q in products]
 
     st.title("⚙️ 工艺配置")
 
@@ -117,9 +118,10 @@ def render_page() -> None:
                     "派生自", options=["空白新增"] + [p["process_code"] for p in processes],
                     key="new_process_source",
                 )
-                c4, c5 = st.columns([3, 1])
+                c4, c5, c6 = st.columns([2, 2, 1])
                 new_remark = c4.text_input("备注", key="new_process_remark", placeholder="可选")
-                enabled_text = c5.selectbox("启用", options=["是", "否"], key="new_process_enabled")
+                new_component = c5.selectbox("绑定组件", options=component_options, key="new_process_component")
+                enabled_text = c6.selectbox("启用", options=["是", "否"], key="new_process_enabled")
                 submitted = st.form_submit_button("添加工艺")
             if submitted:
                 code = new_code.strip()
@@ -132,6 +134,7 @@ def render_page() -> None:
                         "process_code": code, "process_name": new_name.strip() or code,
                         "enabled": enabled_text == "是", "remark": new_remark.strip(),
                         "source_process_code": "" if source == "空白新增" else source,
+                        "component_no": new_component,
                     }]
                     new_routes = list(routes)
                     new_resources = list(resources)
@@ -157,10 +160,10 @@ def render_page() -> None:
             "工艺名称": p.get("process_name", ""),
             "启用": bool(p.get("enabled", True)),
             "来源工艺": p.get("source_process_code", "") or "—",
-            "引用组件数": sum(1 for q in products if q.get("process_code") == p["process_code"]),
+            "绑定组件": p.get("component_no", ""),
             "备注": p.get("remark", ""),
             "删除": "删除",
-        } for p in processes], columns=["选择", "工艺号", "工艺名称", "启用", "来源工艺", "引用组件数", "备注", "删除"])
+        } for p in processes], columns=["选择", "工艺号", "工艺名称", "绑定组件", "启用", "来源工艺", "备注", "删除"])
         config = {
             "选择": st.column_config.CheckboxColumn("选择", default=False, width="small",
                                                    help="勾选后在下方查看该工艺详情"),
@@ -168,7 +171,7 @@ def render_page() -> None:
             "工艺名称": st.column_config.TextColumn("工艺名称", required=True, width="medium"),
             "启用": st.column_config.CheckboxColumn("启用", default=True, width="small"),
             "来源工艺": st.column_config.TextColumn("来源工艺", disabled=True, width="medium"),
-            "引用组件数": st.column_config.NumberColumn("引用组件数", disabled=True, width="small"),
+            "绑定组件": st.column_config.SelectboxColumn("绑定组件", options=component_options, width="medium"),
             "备注": st.column_config.TextColumn("备注", width="large"),
             "删除": st.column_config.ButtonColumn(
                 "删除", type="tertiary", on_click=_request_process_delete,
@@ -215,6 +218,7 @@ def render_page() -> None:
                     "process_code": code, "process_name": _text(row["工艺名称"]),
                     "enabled": bool(row["启用"]), "remark": _text(row["备注"]),
                     "source_process_code": "" if _text(row["来源工艺"]) == "—" else _text(row["来源工艺"]),
+                    "component_no": _text(row["绑定组件"]),
                 })
             if err:
                 st.error(err)
@@ -222,19 +226,13 @@ def render_page() -> None:
                 _save("processes", new_processes)
                 st.toast("工艺已保存")
                 st.rerun()
-        pending = st.session_state.pop("pending_process_delete", None)
+        pending = st.session_state.get("pending_process_delete")
         if pending:
-            refs = [q["product_model"] for q in products if q.get("process_code") == pending]
-            if refs:
-                st.error(f"工艺 {pending} 被组件 {', '.join(refs)} 引用，不能删除")
+            target = next((x for x in processes if x["process_code"] == pending), None)
+            if target is None:
+                _clear_pending_process_delete()
             else:
-                _save("processes", [p for p in processes if p["process_code"] != pending])
-                _save("process_routes", [r for r in routes if r["process_code"] != pending])
-                _save("process_step_resources", [r for r in resources if r["process_code"] != pending])
-                if st.session_state.get("process_selected") == pending:
-                    st.session_state.pop("process_selected", None)
-                st.toast(f"工艺 {pending} 已删除")
-                st.rerun()
+                _confirm_delete_process(target)
 
     # -------------------------------------------------------------------------
     # 区块 3：工艺详情（勾选工艺列表后显示）
@@ -314,3 +312,27 @@ def render_page() -> None:
                 st.rerun()
     elif codes:
         st.info("请勾选上方工艺列表前面的勾选框查看工艺详情")
+
+
+def _clear_pending_process_delete() -> None:
+    st.session_state.pop("pending_process_delete", None)
+
+
+@st.dialog("确认删除工艺", icon=":material/delete_forever:", on_dismiss=_clear_pending_process_delete)
+def _confirm_delete_process(proc: dict[str, Any]) -> None:
+    code = proc["process_code"]
+    st.write(f"确定删除工艺 **{code} - {proc.get('process_name','')}** 吗？")
+    st.caption("删除后其工序路线与工序资源会一并删除，绑定的组件将不再有工艺配置。")
+    with st.container(horizontal=True, horizontal_alignment="left"):
+        if st.button("取消", key="cancel_delete_process"):
+            _clear_pending_process_delete()
+            st.rerun()
+        if st.button("确认删除", type="primary", key="confirm_delete_process"):
+            _save("processes", [p for p in st.session_state.processes if p["process_code"] != code])
+            _save("process_routes", [r for r in st.session_state.process_routes if r["process_code"] != code])
+            _save("process_step_resources", [r for r in st.session_state.process_step_resources if r["process_code"] != code])
+            if st.session_state.get("process_selected") == code:
+                st.session_state.pop("process_selected", None)
+            _clear_pending_process_delete()
+            st.toast(f"工艺 {code} 已删除")
+            st.rerun()

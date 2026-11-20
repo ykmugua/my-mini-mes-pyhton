@@ -235,7 +235,6 @@ def initial_program_state() -> dict[str, list[dict[str, Any]]]:
                 "test_program_name": "TEST_MAIN",
                 "test_program_path": "D:/test/P-1001/main.exe",
                 "remark": "",
-                "process_code": "PROC-001",
             },
             {
                 "product_model": "P-1002",
@@ -243,12 +242,11 @@ def initial_program_state() -> dict[str, list[dict[str, Any]]]:
                 "test_program_name": "",
                 "test_program_path": "",
                 "remark": "待配置",
-                "process_code": "PROC-002",
             },
         ],
         "processes": [
-            {"process_code": "PROC-001", "process_name": "标准电源板工艺", "enabled": True, "remark": "P-1001 默认工艺", "source_process_code": ""},
-            {"process_code": "PROC-002", "process_name": "控制板工艺", "enabled": True, "remark": "由 PROC-001 派生", "source_process_code": "PROC-001"},
+            {"process_code": "PROC-001", "process_name": "标准电源板工艺", "enabled": True, "remark": "P-1001 默认工艺", "source_process_code": "", "component_no": "P-1001"},
+            {"process_code": "PROC-002", "process_name": "控制板工艺", "enabled": True, "remark": "由 PROC-001 派生", "source_process_code": "PROC-001", "component_no": "P-1002"},
         ],
         "process_routes": [
             {"process_code": "PROC-001", "step_no": "1", "success_next_step": "2", "fail_next_step": "LOCK"},

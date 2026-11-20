@@ -481,14 +481,14 @@ def render_page() -> None:
             elif not checked and cur:
                 st.session_state.pop("program_selected_name", None)
                 st.rerun()
-        # 删除程序（最后一列按钮触发）
-        pending = st.session_state.pop("pending_program_delete", None)
+        # 删除程序（最后一列按钮触发，弹框确认）
+        pending = st.session_state.get("pending_program_delete")
         if pending:
-            st.session_state.programs = [q for q in st.session_state.programs if q["program_name"] != pending]
-            master.save_key("programs")
-            st.session_state.pop("program_selected_name", None)
-            st.toast(f"已删除程序 {pending}")
-            st.rerun()
+            target = next((q for q in programs if q["program_name"] == pending), None)
+            if target is None:
+                _clear_pending_program_delete()
+            else:
+                _confirm_delete_program(target)
 
         # 选中程序的编辑区
         selected_prog_name = st.session_state.get("program_selected_name")
@@ -693,3 +693,30 @@ def _request_program_version_delete() -> None:
     versions = st.session_state.get("_program_version_names", [])
     if 0 <= row < len(versions):
         st.session_state["pending_program_version_delete"] = versions[row]
+
+
+def _clear_pending_program_delete() -> None:
+    st.session_state.pop("pending_program_delete", None)
+
+
+@st.dialog("确认删除程序", icon=":material/delete_forever:", on_dismiss=_clear_pending_program_delete)
+def _confirm_delete_program(prog: dict[str, Any]) -> None:
+    name = prog["program_name"]
+    st.write(f"确定删除程序 **{name}** 及其所有版本吗？")
+    st.caption("删除后该程序的版本记录将一并移除。")
+    with st.container(horizontal=True, horizontal_alignment="left"):
+        if st.button("取消", key="cancel_delete_program"):
+            _clear_pending_program_delete()
+            st.rerun()
+        if st.button("确认删除", type="primary", key="confirm_delete_program"):
+            st.session_state.programs = [q for q in st.session_state.programs if q["program_name"] != name]
+            master.save_key("programs")
+            st.session_state.program_versions = [
+                v for v in st.session_state.get("program_versions", [])
+                if str(v["program_id"]) != str(prog["program_id"])
+            ]
+            master.save_key("program_versions")
+            st.session_state.pop("program_selected_name", None)
+            _clear_pending_program_delete()
+            st.toast(f"已删除程序 {name}")
+            st.rerun()

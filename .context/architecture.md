@@ -577,3 +577,11 @@
 - 工艺配置页重写三块：①新增工艺（空白/从已有工艺**深拷贝**派生，source_process_code 仅溯源）②工艺列表（st.dataframe 行选择，含来源工艺/引用组件数）③工艺详情（工序路线编辑器 + 工序资源表：程序下拉/设备型号 MultiselectColumn/载具型号 MultiselectColumn）；被组件引用的工艺禁止删除；删掉设备读写记录区块。
 - 组件注册页加「绑定工艺」列/表单/校验；程序注册页清掉 program_components 残留；两套 mock data 换用新 key。
 - 新文档 `design_data/DatabaseConventions/工艺配置数据库约定.md`；数据库全量重建；127 passed。
+
+## 34. 工艺绑定组件方向反转 + 删除弹框（2026-11-20）
+- 组件注册页彻底去掉「绑定工艺」列/表单/校验；products 表删 process_code 列。
+- 改为工艺侧绑定：`processes` 加 `component_no`（一工艺绑一个组件号），工艺配置页新增表单可选、工艺列表加「绑定组件」SelectboxColumn 可改；`product_query_repo.product_route` 改为按 `processes.component_no == product_model` 反查工艺路线。
+- 工艺删除：不再因「被组件引用」拦截；改为 @st.dialog 确认弹框（与设备/组件列表一致），弹框确认后一并删 processes/process_routes/process_step_resources。
+- 程序注册列表最后一列删除按钮也改为 @st.dialog 确认弹框（cancel_delete_program / confirm_delete_program），删除时同步清 program_versions。
+- app_pages 镜像改用「保留 render_page 函数包装 + 末尾 render_page()」的生成方式，避免模块级 dialog/回调定义顺序导致 NameError；app_pages/program.py 里遗留的 `from .. import client` 用 _StubClient 替代（新 UI 不调用）。
+- 数据库全量重建；文档《工艺配置数据库约定》/README 同步；127 passed。

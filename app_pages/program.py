@@ -9,6 +9,13 @@ from typing import Any
 import pandas as pd
 import streamlit as st
 
+class _StubClient:
+    def program_history(self, name):
+        return []
+    def delete_program_version(self, pid):
+        return {}
+client = _StubClient()
+
 from app_pages._mock_program_data import (
     available_program_versions,
     enabled_steps,
@@ -113,8 +120,21 @@ def _integer(value: Any) -> int | None:
 
 
 
-def _component_frame(component_nos: list[str]) -> pd.DataFrame:
-    return pd.DataFrame({"component_no": pd.Series(component_nos, dtype="string")})
+def _component_frame(component_nos: list[str], *, include_delete: bool = True) -> pd.DataFrame:
+    frame = pd.DataFrame({"component_no": pd.Series(component_nos, dtype="string")})
+    if include_delete:
+        frame["删除"] = "删除"
+    return frame
+
+
+def _request_component_delete() -> None:
+    click = st.session_state.get(COMPONENT_DELETE_KEY)
+    if click is None:
+        return
+    names = st.session_state.get("_component_names", [])
+    row = int(click["row"])
+    if 0 <= row < len(names):
+        st.session_state["pending_component_delete"] = names[row]
 
 
 def _pull_log_frame(records: list[dict[str, Any]]) -> pd.DataFrame:
@@ -259,14 +279,53 @@ def _read_components(edited: pd.DataFrame) -> list[str]:
     ]
 
 
-read_only = st.session_state.get("role", "工程师") == "只读"
-steps: list[dict[str, Any]] = st.session_state.steps
-active_steps = enabled_steps(steps)
-programs: list[dict[str, Any]] = st.session_state.programs
-program_versions: list[dict[str, Any]] = st.session_state.program_versions
-program_pulls: list[dict[str, Any]] = st.session_state.program_pulls[:30]
-program_status_logs: list[dict[str, Any]] = st.session_state.program_status_logs[:30]
-version_options = available_program_versions(programs, program_versions)
+
+
+
+def _render_program_history(read_only: bool, programs: list[dict]) -> None:
+    """程序历史管理：选择程序名，列表按新→老展示版本，可删除指定版本。"""
+    st.subheader("程序历史管理")
+    names = sorted({p["program_name"] for p in programs})
+    if not names:
+        st.info("暂无程序，请先上传程序")
+        return
+    selected = st.selectbox("选择程序名", names, key="history_program_name")
+    history = client.program_history(selected)
+    if not history:
+        st.info("该程序暂无版本记录")
+        return
+    frame = pd.DataFrame([
+        {
+            "版本": item["program_version"],
+            "版本说明": item.get("version_description") or "",
+            "SHA256": (item.get("sha256") or "")[:16] + "…",
+            "所属工序": str(item.get("step_no") or ""),
+            "下载地址": item.get("download_url") or "",
+        }
+        for item in history
+    ])
+    st.dataframe(frame, hide_index=True, width="stretch", alt="程序历史版本列表")
+    if read_only:
+        return
+    ids = [item["program_id"] for item in history]
+    versions = [item["program_version"] for item in history]
+    choice = st.selectbox(
+        "选择要删除的版本",
+        options=ids,
+        format_func=lambda pid: next(
+            (f"{v}（ID {pid}）" for p, v in zip(ids, versions) if p == pid),
+            str(pid),
+        ),
+        key="history_delete_choice",
+    )
+    if st.button("删除该版本", type="secondary", icon=":material/delete:", key="history_delete_btn"):
+        try:
+            client.delete_program_version(choice)
+        except Exception as exc:
+            st.error(f"删除失败：{exc}")
+        else:
+            st.toast("已删除该版本程序")
+            st.rerun()
 
 
 def render_page() -> None:
@@ -425,14 +484,14 @@ def render_page() -> None:
             elif not checked and cur:
                 st.session_state.pop("program_selected_name", None)
                 st.rerun()
-        # 删除程序（最后一列按钮触发）
-        pending = st.session_state.pop("pending_program_delete", None)
+        # 删除程序（最后一列按钮触发，弹框确认）
+        pending = st.session_state.get("pending_program_delete")
         if pending:
-            st.session_state.programs = [q for q in st.session_state.programs if q["program_name"] != pending]
-            master.save_key("programs")
-            st.session_state.pop("program_selected_name", None)
-            st.toast(f"已删除程序 {pending}")
-            st.rerun()
+            target = next((q for q in programs if q["program_name"] == pending), None)
+            if target is None:
+                _clear_pending_program_delete()
+            else:
+                _confirm_delete_program(target)
 
         # 选中程序的编辑区
         selected_prog_name = st.session_state.get("program_selected_name")
@@ -483,6 +542,7 @@ def render_page() -> None:
                             q["download_url"] = meta.get("download_url") or q["download_url"]
                     updated.append(q)
                 st.session_state.programs = updated
+                pass
                 st.toast("程序已保存")
                 st.rerun()
 
@@ -636,5 +696,32 @@ def _request_program_version_delete() -> None:
     versions = st.session_state.get("_program_version_names", [])
     if 0 <= row < len(versions):
         st.session_state["pending_program_version_delete"] = versions[row]
+
+
+def _clear_pending_program_delete() -> None:
+    st.session_state.pop("pending_program_delete", None)
+
+
+@st.dialog("确认删除程序", icon=":material/delete_forever:", on_dismiss=_clear_pending_program_delete)
+def _confirm_delete_program(prog: dict[str, Any]) -> None:
+    name = prog["program_name"]
+    st.write(f"确定删除程序 **{name}** 及其所有版本吗？")
+    st.caption("删除后该程序的版本记录将一并移除。")
+    with st.container(horizontal=True, horizontal_alignment="left"):
+        if st.button("取消", key="cancel_delete_program"):
+            _clear_pending_program_delete()
+            st.rerun()
+        if st.button("确认删除", type="primary", key="confirm_delete_program"):
+            st.session_state.programs = [q for q in st.session_state.programs if q["program_name"] != name]
+            pass
+            st.session_state.program_versions = [
+                v for v in st.session_state.get("program_versions", [])
+                if str(v["program_id"]) != str(prog["program_id"])
+            ]
+            pass
+            st.session_state.pop("program_selected_name", None)
+            _clear_pending_program_delete()
+            st.toast(f"已删除程序 {name}")
+            st.rerun()
 
 render_page()

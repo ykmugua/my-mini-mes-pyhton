@@ -247,7 +247,6 @@ products = Table(
     Column("test_program_name", Text, nullable=False, default="", server_default=""),
     Column("test_program_path", Text, nullable=False, default="", server_default=""),
     Column("remark", Text, nullable=False, default="", server_default=""),
-    Column("process_code", Text, nullable=False, default="", server_default=""),
     Column("enabled", Integer, nullable=False, default=1, server_default="1"),
 )
 
@@ -259,6 +258,7 @@ processes = Table(
     Column("enabled", Integer, nullable=False, default=1, server_default="1"),
     Column("remark", Text, nullable=False, default="", server_default=""),
     Column("source_process_code", Text, nullable=False, default="", server_default=""),
+    Column("component_no", Text, nullable=False, default="", server_default=""),
 )
 
 process_routes = Table(

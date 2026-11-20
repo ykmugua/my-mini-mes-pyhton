@@ -14,7 +14,6 @@ from ._mock_program_data import enabled_steps, step_label
 PRODUCT_COLUMNS = [
     "组件号",
     "组件名称",
-    "绑定工艺",
     "启用",
     "备注",
 ]
@@ -52,7 +51,6 @@ def _product_frame(
         {
             "组件号": product["product_model"],
             "组件名称": product.get("product_name", ""),
-            "绑定工艺": product.get("process_code", ""),
             "启用": bool(product.get("enabled", True)),
             "备注": product.get("remark", ""),
         }
@@ -66,13 +64,12 @@ def _product_frame(
     return pd.DataFrame(records, columns=columns)
 
 
-def _product_config(*, include_delete: bool, process_options: list[str]) -> dict[str, Any]:
+def _product_config(*, include_delete: bool) -> dict[str, Any]:
     config: dict[str, Any] = {
         "组件号": st.column_config.TextColumn(
             "组件号", required=True, disabled=True, width="medium"
         ),
         "组件名称": st.column_config.TextColumn("组件名称", required=True, width="medium"),
-        "绑定工艺": st.column_config.SelectboxColumn("绑定工艺", options=process_options, width="medium"),
         "启用": st.column_config.CheckboxColumn("启用", default=True, width="small"),
         "备注": st.column_config.TextColumn("备注", width="medium"),
     }
@@ -95,7 +92,6 @@ def _validate_products(
     for row in rows:
         product_model = _text(row.get("组件号"))
         product_name = _text(row.get("组件名称"))
-        process_code = _text(row.get("绑定工艺"))
         remark = _text(row.get("备注"))
         if not any((product_model, product_name, remark)):
             continue
@@ -108,7 +104,6 @@ def _validate_products(
             {
                 "product_model": product_model,
                 "product_name": product_name,
-                "process_code": process_code,
                 "enabled": (
                     True if row.get("启用") is None
                     or (isinstance(row.get("启用"), float) and pd.isna(row.get("启用")))
@@ -175,7 +170,6 @@ def render_page() -> None:
     active_steps = enabled_steps(steps)
     devices: list[dict[str, Any]] = st.session_state.devices
     products: list[dict[str, Any]] = st.session_state.products
-    process_options: list[str] = [x["process_code"] for x in st.session_state.get("processes", [])]
     trays: list[dict[str, Any]] = st.session_state.get("trays", [])
     product_trays: list[dict[str, Any]] = st.session_state.get("product_trays", [])
 
@@ -194,7 +188,7 @@ def render_page() -> None:
             with st.expander("新增组件", expanded=False):
                 with st.form("product_create_form", clear_on_submit=False, border=False):
     # 第一行：组件名称 + 组件号
-                    name_col, model_col, proc_col = st.columns(3)
+                    name_col, model_col = st.columns(2)
                     product_name = name_col.text_input(
                         "组件名称",
                         key="new_product_name",
@@ -204,9 +198,6 @@ def render_page() -> None:
                         "组件号",
                         key="new_product_model",
                         placeholder="例如 P-1003",
-                    )
-                    new_process_code = proc_col.selectbox(
-                        "绑定工艺", options=process_options, key="new_product_process_code",
                     )
                     # 第二行：备注 + 启用（下拉）
                     remark_col, enabled_col = st.columns([3, 1])
@@ -235,7 +226,6 @@ def render_page() -> None:
                             {
                                 "product_model": clean_model,
                                 "product_name": product_name.strip(),
-                                "process_code": new_process_code,
                                 "enabled": enabled_text == "是",
                                 "remark": remark.strip(),
                             }
@@ -255,7 +245,7 @@ def render_page() -> None:
         if read_only:
             st.dataframe(
                 _product_frame(products, include_delete=False),
-                column_config=_product_config(include_delete=False, process_options=process_options),
+                column_config=_product_config(include_delete=False),
                 hide_index=True,
                 width="stretch",
                 alt="组件列表",
@@ -263,7 +253,7 @@ def render_page() -> None:
         else:
             edited_products = st.data_editor(
                 _product_frame(products, include_delete=True),
-                column_config=_product_config(include_delete=True, process_options=process_options),
+                column_config=_product_config(include_delete=True),
                 disabled=["组件"],
                 hide_index=True,
                 num_rows="fixed",
