@@ -231,3 +231,7 @@ SQLAlchemy 2.1.8 中 `Insert.on_conflict_do_update()` 不再接受 `constraint=`
 ## 15. seed 重建分库数据（2026-11-19）
 - `report_details_store.drop_all_tables()` 只清默认 details engine（TestReport.db），不会清 `db_<工序号>.db` 分库；seed --reset 重建演示数据时若只调它，分库的 report_index 旧行会残留（出现 id 1-10 旧空值 + 11-20 新数据）。已在 seed_test_reports() 中遍历 `config.data_dir().glob("db_*.db")` 逐个 DROP report_index/SN_表 修复。
 - seed 的 report dict 加了 traycode 后，直接传给 report_repo.insert_report 会报 `CompileError: Unconsumed column names: traycode`（主表 test_reports 无该列）；需先用 dict comprehension 剔除 traycode 再写主表。
+
+## 16. AppTest 行选择与编辑（2026-11-20）
+- AppTest 的 data_editor 不支持 select_row()/set_value()：行选择要给 `st.dataframe(key=...)` 的 key 设置 session_state `{"selection": {"rows": [0]}}`；编辑要给 data_editor 的 key 设置 `{"edited_rows": {0: {"列": 值}}}` 后再 run()。
+- st.dataframe 行选择读到的是 widget 自己的 selection state，不用另存 pq_current 式变量时也可靠；取消勾选 = rows=[]。

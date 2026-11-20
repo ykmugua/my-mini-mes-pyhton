@@ -526,3 +526,47 @@
 - 新增主数据 `trays`（载具/托盘）：字段 traycode(PK)/tray_name/capacity(载荷数量=一个托盘放几块板)/enabled/remark；定义在 `engine.py`，读写在 `master_data_repo.list_trays/replace_trays` 并纳入 `snapshot()`，master API(`/api/ui/master/{key}`) 与 `_common.MASTER_KEYS` 同步加 key。
 - 新页面 `src/py_server/ui/pages/tray_registration.py`：导航注册在设备注册下方（url_path=trays）；风格同设备注册的设备管理（外层 container + 新增载具 expander + form border=False + data_editor 列表带删除列 + 左下保存按钮 + 删除确认 dialog）。
 - 演示数据：master_data.json 加 trays（T02001~T02003），master_seed.seed_master_data 整体替换写入。
+
+## 25. 产品型号-载具分配（2026-11-20）
+- 新增主数据 `product_trays`：`product_model + traycode`（唯一约束），定义在 engine.py，读写 repo/master API/_common.MASTER_KEYS/master_seed 全链路接入；演示数据 P-1001→T02001/T02002，P-1002→T02003。
+- 产品型号注册页新增区块5“为型号分配载具”：复用上方已选产品型号，多选启用载具（显示 载具码-载具名（型号）），保存写 product_trays；页面生产版+app_pages 镜像同步，测试区块断言更新为 5 个。
+
+## 26. 产品型号注册拆分为两页（2026-11-20）
+- 原 product_management.py 拆成两页：①`型号注册页`（product_management.py，url_path=products）保留区块1新增产品型号+区块2产品型号列表；②`工艺配置页`（process_config.py，url_path=process_config）含区块3产品型号工序流程+区块4为型号分配设备+区块5为型号分配载具，自带"选择产品型号"下拉框。
+- 生产版(src/py_server/ui/pages/)与测试镜像(app_pages/)都同步拆分；根 streamlit_app.py 与生产 streamlit_app.py 导航都注册了 process_config 页（测试 AppTest 需 switch_page 能找到）。
+- 测试同步：test_product_management.py 拆成2个渲染测试 + 新增 _open_process_page helper，route/device 测试全部改用 process 页；共 153 passed。
+
+## 27. 组件注册表单改造（2026-11-20）
+- 组件注册页（原产品型号注册）新增表单改为4字段：第一行 组件名称+组件号，第二行 备注+启用(文本下拉是/否)，第三行 添加组件按钮；去掉了测试程序名/测试程序路径。
+- 组件列表列改为：组件号(disabled)/组件名称/启用(CheckboxColumn)/备注；主库 products 表加 enabled 列（Integer default 1），master_data.json 演示数据同步；数据库已重建。
+- 注意：工艺配置页仍沿用 product_model/product_name 作为底层字段；启用字段影响后续工艺配置可选性（当前未过滤，后续可按需加）。
+
+## 28. 程序下发页重构 + 工艺配置页扩展（2026-11-20）
+- 程序下发页改为3块：①新增（程序名/版本/版本说明/文件/启用，去掉所属工序，风格同组件注册三行布局）②当前运行程序（每程序名一行 data_editor：版本/版本说明/启用/删除列；删除=删整个程序及型号关联）③历史程序（st.dataframe row selection 勾选程序→显示该程序所有版本，新→老，来自 program_versions；历史表可改版本说明/删版本）。
+- 型号关联+设备读写记录从程序页移到工艺配置页（区块6/7）。
+- 主库 programs 加 enabled 列（step_no 保留兼容但新增不再填写）；数据库已重建。
+- 两套页面(src/py_server/ui/pages + app_pages)同步重写；test_program_ui.py 整体重写覆盖新UI（AppTest 用 session_state 设置 dataframe selection / data_editor edited_rows，不支持 set_value/select_row）。test_product_management.py 工艺配置区块断言更新为5块。151 passed。
+
+## 29. 程序下发：勾选驱动历史 + hash/url（2026-11-20）
+- 当前运行程序表加列：下发(CheckboxColumn)/程序名/版本/版本说明/SHA256/下载地址/启用/删除；勾选“下发”列后立即在下方历史程序显示该程序的所有版本（用 _sync_program_selection 每次 rerun 从 data_editor 当前值同步 program_selected_name，同时保留 on_change 回调 _on_program_editor_change 用于交互即时响应）。
+- program_versions 表加 sha256/download_url 列（每个版本独立），master_data.json/engine/seed 同步；_upsert_version_description 增加 sha256/url 参数。切换版本后点保存，对应记录的 hash/下载地址/说明按版本记录刷新。
+- 历史程序表去掉内置程序选择 dataframe，完全由上方勾选驱动；每行 hash/下载地址取各自版本记录。数据库已重建。151 passed。
+
+## 30. 程序页勾选改为产品查询式 + 版本切换即时同步（2026-11-20）
+- 当前运行程序列表改为 `st.dataframe(on_select="rerun", selection_mode="single-row", key="program_list_select")`，与产品查询一致；勾选行→program_selected_name→下方历史程序显示该程序版本。去掉了 data_editor 的"下发"勾选列/回调方案（data_editor 不支持行选择、on_change 回调在测试中不触发）。
+- 选中程序后显示编辑区：版本 selectbox(edit_program_version)/SHA256 只读/下载地址/版本说明/启用/保存/删除；版本切换触发 rerun，SHA256/下载地址从 program_versions 对应版本记录即时刷新（_version_meta）。
+- 当前运行程序 dataframe 列：程序名/版本/版本说明/SHA256/下载地址/启用。151 passed。
+
+## 31. 设备注册：删所属工序、加设备型号（2026-11-20）
+- 设备注册页列改为：设备编号/设备名称/设备型号/所属线体/启用/备注（去掉所属工序）；新增表单第一行4个文本框（编号/名称/型号/线体），第二行备注+启用下拉，第三行按钮；_validate_devices 不再校验 step_no，设备型号必填。
+- engine.devices 加 device_model 列；step_no 列保留（工艺配置页仍按设备 step_no 过滤候选设备），新增设备不再写 step_no（为空），DB 已重建。
+- master_data.json + 两套 _mock_program_data.py 初始设备都补 device_model；_mock_program_data.initialize_program_state 里 device["step_no"] 改成 .get() 以免新增设备缺列时报错。150 passed。
+
+## 32. 全工程去掉线体（单线运行，2026-11-20）
+- 删除 `lines` 主数据表/API/repo/master_seed/_common.KEYS/master_data.json/两套 _mock_program_data 的 lines 初始化；`config/device_config.json` 去 line_id/line_name。
+- `devices` 去 line_id（列改为 device_id/device_name/device_model/step_no/enabled/remark）；设备注册页删「线体管理」整块、所属线体列/表单，页面重写为「设备管理 + 设备列表」两块。
+- V1.3 上报彻底去 `linecode`：schemas_v1、upload_test_result_v1、engine.test_reports、seed 模板/报告 dict、report_details_store 的 report_index（DDL+迁移+insert SQL）、page_product_query 显示、MES上传接口文档、mesUploadTestDataFormat.json、README、test_upload_v1 全同步。
+- ProductFlow 流转表 F_ 去 line_id 列；product_flow_store.upsert_flow 签名去 line_id；unlock/upload 调用去该参数；产品流转约定文档同步。
+- 工艺配置「为型号分配设备」重写：去掉选择线体+按线体过滤，候选=全部启用设备，multiselect key 改为 assign_<产品>_<工序>；测试断言同步。
+- 看板：去掉产线筛选、所属线体列、_line_step_names→_step_names，config 里不再存 line_id/line_name。
+- 数据库全部删除重建（seed --reset --demo）。139 passed。
