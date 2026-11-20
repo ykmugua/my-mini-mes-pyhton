@@ -65,10 +65,16 @@ def test_add_product_rejects_duplicate() -> None:
 def test_process_page_renders_list() -> None:
     at = _open_process(_run())
     assert at.title[0].value == "⚙️ 工艺配置"
-    assert [x.value for x in at.subheader] == ["新增工艺", "工艺列表"]
-    frame = at.dataframe(key="process_list_select").value
-    assert list(frame.columns) == ["工艺号", "工艺名称", "启用", "来源工艺", "引用组件数", "备注"]
+    editor = at.data_editor(key="process_editor")
+    frame = editor.value
+    assert list(frame.columns) == ["选择", "工艺号", "工艺名称", "启用", "来源工艺", "引用组件数", "备注", "删除"]
     assert set(frame["工艺号"]) >= {"PROC-001", "PROC-002"}
+    cfg = json.loads(editor.proto.columns)
+    assert cfg["选择"]["type_config"]["type"] == "checkbox"
+    assert cfg["启用"]["type_config"]["type"] == "checkbox"
+    assert any(b.key == "save_processes" for b in at.button)
+    assert not any(b.key == "delete_process_btn" for b in at.button)
+    assert not any("编辑当前工艺" in e.label for e in at.expander)
 
 
 def test_process_derive_deep_copies_routes_and_resources() -> None:
@@ -91,17 +97,17 @@ def test_process_derive_deep_copies_routes_and_resources() -> None:
 
 def test_process_detail_shows_on_selection() -> None:
     at = _open_process(_run())
-    at.session_state["process_list_select"] = {"selection": {"rows": [0]}}
+    at.session_state["process_editor"] = {"edited_rows": {0: {"选择": True}}}
     at.run()
     assert not at.exception, [str(item.value) for item in at.exception]
-    assert any("工艺详情" in x.value for x in at.subheader)
+    assert any("工艺详情：PROC-001" in x.value for x in at.subheader)
     assert any(e.key == "route_editor_PROC-001" for e in at.data_editor)
     assert any(e.key == "res_editor_PROC-001" for e in at.data_editor)
 
 
 def test_process_resources_use_models() -> None:
     at = _open_process(_run())
-    at.session_state["process_list_select"] = {"selection": {"rows": [0]}}
+    at.session_state["process_editor"] = {"edited_rows": {0: {"选择": True}}}
     at.run()
     res = next(e for e in at.data_editor if e.key == "res_editor_PROC-001")
     assert list(res.value.columns) == ["工序", "程序", "可执行设备型号", "转运载具型号", "删除"]

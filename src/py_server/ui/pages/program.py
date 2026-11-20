@@ -441,27 +441,53 @@ def render_page() -> None:
             return (prog.get("version_description", ""), str(prog.get("sha256", ""))[:16], prog.get("download_url", ""))
 
         frame = pd.DataFrame([{
+            "选择": p["program_name"] == st.session_state.get("program_selected_name"),
             "程序名": p["program_name"],
             "版本": p["program_version"],
+            "启用": bool(p.get("enabled", True)),
             "版本说明": _version_meta(p, p["program_version"])[0],
             "SHA256": _version_meta(p, p["program_version"])[1],
             "下载地址": _version_meta(p, p["program_version"])[2],
-            "启用": "是" if p.get("enabled", True) else "否",
-        } for p in latest_programs], columns=["程序名", "版本", "版本说明", "SHA256", "下载地址", "启用"])
-        event = st.dataframe(
-            frame, hide_index=True, width="stretch", height=260,
-            alt="当前运行程序列表（点击行查看历史并编辑）",
-            on_select="rerun", selection_mode="single-row",
-            key="program_list_select",
-        )
-        rows = event.selection.rows if hasattr(event, "selection") else []
-        if rows:
-            selected = names[rows[0]]
-            if st.session_state.get("program_selected_name") != selected:
-                st.session_state["program_selected_name"] = selected
+            "删除": "删除",
+        } for p in latest_programs], columns=["选择", "程序名", "版本", "启用", "版本说明", "SHA256", "下载地址", "删除"])
+        column_config = {
+            "选择": st.column_config.CheckboxColumn("选择", default=False, width="small",
+                                                   help="勾选后查看该程序历史版本并编辑"),
+            "程序名": st.column_config.TextColumn("程序名", disabled=True, width="medium"),
+            "版本": st.column_config.SelectboxColumn("版本", options=version_options, required=True, width="small"),
+            "启用": st.column_config.CheckboxColumn("启用", default=True, width="small"),
+            "版本说明": st.column_config.TextColumn("版本说明", width="large"),
+            "SHA256": st.column_config.TextColumn("SHA256", disabled=True, width="medium"),
+            "下载地址": st.column_config.LinkColumn("下载地址", display_text="下载", disabled=True, width="small"),
+            "删除": st.column_config.ButtonColumn(
+                "删除", type="tertiary", on_click=_request_program_delete,
+                key="program_delete_click", width="small",
+            ),
+        }
+        edited_programs: pd.DataFrame | None = None
+        if read_only:
+            st.dataframe(frame.drop(columns=["删除"]), column_config=column_config,
+                         hide_index=True, width="stretch", alt="当前运行程序列表")
+        else:
+            edited_programs = st.data_editor(
+                frame, column_config=column_config, hide_index=True, num_rows="fixed",
+                width="stretch", alt="当前运行程序编辑器", key="program_editor",
+            )
+            checked = [str(row["程序名"]) for _, row in edited_programs.iterrows() if bool(row.get("选择"))]
+            cur = st.session_state.get("program_selected_name")
+            if checked and cur != checked[0]:
+                st.session_state["program_selected_name"] = checked[0]
                 st.rerun()
-        elif st.session_state.get("program_selected_name"):
+            elif not checked and cur:
+                st.session_state.pop("program_selected_name", None)
+                st.rerun()
+        # 删除程序（最后一列按钮触发）
+        pending = st.session_state.pop("pending_program_delete", None)
+        if pending:
+            st.session_state.programs = [q for q in st.session_state.programs if q["program_name"] != pending]
+            master.save_key("programs")
             st.session_state.pop("program_selected_name", None)
+            st.toast(f"已删除程序 {pending}")
             st.rerun()
 
         # 选中程序的编辑区
@@ -495,42 +521,26 @@ def render_page() -> None:
                 index=0 if prog.get("enabled", True) else 1,
                 key="edit_program_enabled",
             )
-            if not read_only:
-                ecol1, ecol2 = st.columns(2)
-                with ecol1:
-                    if st.button("保存程序修改", icon=":material/save:", key="save_program_edits"):
-                        updated = []
-                        for p in programs:
-                            q = dict(p)
-                            if p["program_name"] == selected_prog_name:
-                                q["program_version"] = chosen_ver
-                                q["version_description"] = edited_desc
-                                q["enabled"] = edit_enabled == "是"
-                                meta = next(
-                                    (v for v in program_versions
-                                     if str(v["program_id"]) == str(q["program_id"])
-                                     and v["program_version"] == chosen_ver), None,
-                                )
-                                if meta:
-                                    q["sha256"] = meta.get("sha256") or q["sha256"]
-                                    q["download_url"] = meta.get("download_url") or q["download_url"]
-                            updated.append(q)
-                        st.session_state.programs = updated
-                        master.save_key("programs")
-                        st.toast("程序已保存")
-                        st.rerun()
-                with ecol2:
-                    if st.button("删除该程序", icon=":material/delete:", key="delete_program_btn"):
-                        st.session_state["pending_program_delete"] = selected_prog_name
-                        st.rerun()
-            pending = st.session_state.pop("pending_program_delete", None)
-            if pending:
-                remaining = [p for p in st.session_state.programs if p["program_name"] != pending]
-                remaining_ids = {str(p["program_id"]) for p in remaining}
-                st.session_state.programs = remaining
+            if not read_only and st.button("保存程序修改", icon=":material/save:", key="save_program_edits"):
+                updated = []
+                for p in programs:
+                    q = dict(p)
+                    if p["program_name"] == selected_prog_name:
+                        q["program_version"] = chosen_ver
+                        q["version_description"] = edited_desc
+                        q["enabled"] = edit_enabled == "是"
+                        meta = next(
+                            (v for v in program_versions
+                             if str(v["program_id"]) == str(q["program_id"])
+                             and v["program_version"] == chosen_ver), None,
+                        )
+                        if meta:
+                            q["sha256"] = meta.get("sha256") or q["sha256"]
+                            q["download_url"] = meta.get("download_url") or q["download_url"]
+                    updated.append(q)
+                st.session_state.programs = updated
                 master.save_key("programs")
-                st.session_state.pop("program_selected_name", None)
-                st.toast(f"已删除程序 {pending}")
+                st.toast("程序已保存")
                 st.rerun()
 
         st.html(COLUMN_ORDER_LOCK_SCRIPT, unsafe_allow_javascript=True)

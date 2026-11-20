@@ -29,10 +29,13 @@ def test_program_page_renders_three_sections() -> None:
     assert [item.label for item in at.expander] == ["新增"]
     assert at.selectbox(key="upload_enabled_text").options == ["是", "否"]
     assert at.selectbox(key="upload_step_no") if False else True  # 已去掉所属工序
-    # 当前运行程序用 st.dataframe 行选择（与产品查询一致）
-    assert len(at.data_editor) == 0
-    frame = at.dataframe(key="program_list_select").value
-    assert list(frame.columns) == ["程序名", "版本", "版本说明", "SHA256", "下载地址", "启用"]
+    # 当前运行程序：可编辑表格，第一列选择勾选、启用勾选框、最后一列删除按钮
+    editor = at.data_editor(key="program_editor")
+    frame = editor.value
+    assert list(frame.columns) == ["选择", "程序名", "版本", "启用", "版本说明", "SHA256", "下载地址", "删除"]
+    cfg = json.loads(editor.proto.columns)
+    assert cfg["启用"]["type_config"]["type"] == "checkbox"
+    assert cfg["删除"]["type_config"]["type"] == "button"
 
 
 def test_upload_program_creates_new_program() -> None:
@@ -67,29 +70,27 @@ def test_upload_program_creates_new_program() -> None:
 
 def test_history_program_shows_selected_versions() -> None:
     at = _run()
-    at.session_state["program_list_select"] = {"selection": {"rows": [0]}}
+    at.session_state["program_editor"] = {"edited_rows": {0: {"选择": True}}}
     at.run()
     assert not at.exception, [str(item.value) for item in at.exception]
     assert at.session_state.get("program_selected_name") == "FINAL_CHECK"
-    # 历史版本编辑器显示该程序的版本（新→老）
-    hist = at.data_editor[0].value
+    hist = next(e for e in at.data_editor if e.key.startswith("program_history_editor")).value
     assert hist["版本"].tolist() == ["v1.0.0", "v0.9.0"]
 
 
 def test_cancelling_selection_hides_history() -> None:
     at = _run()
-    at.session_state["program_list_select"] = {"selection": {"rows": [0]}}
+    at.session_state["program_editor"] = {"edited_rows": {0: {"选择": True}}}
     at.run()
     assert at.session_state.get("program_selected_name") == "FINAL_CHECK"
-    at.session_state["program_list_select"] = {"selection": {"rows": []}}
+    at.session_state["program_editor"] = {"edited_rows": {0: {"选择": False}}}
     at.run()
     assert at.session_state.get("program_selected_name") is None
-    assert len(at.data_editor) == 0
 
 
 def test_program_editor_saves_version_and_enabled() -> None:
     at = _run()
-    at.session_state["program_list_select"] = {"selection": {"rows": [2]}}  # TEST_MAIN
+    at.session_state["program_editor"] = {"edited_rows": {2: {"选择": True}}}
     at.run()
     at.selectbox(key="edit_program_version").select("v1.0.0").run()
     at.selectbox(key="edit_program_enabled").select("否").run()
@@ -104,7 +105,7 @@ def test_readonly_role_disables_editing() -> None:
     at = _run()
     at.radio(key="role").set_value("只读").run()
     assert not at.exception, [str(item.value) for item in at.exception]
-    assert len(at.data_editor) == 0
+    assert not [e for e in at.data_editor if e.key == "program_editor"]
     assert not [b for b in at.button if b.key == "save_program_edits"]
 
 

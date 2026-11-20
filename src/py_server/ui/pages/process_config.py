@@ -1,4 +1,4 @@
-"""工艺配置页面：新增（可派生）/ 工艺列表 / 工艺详情（路线 + 工序资源）。"""
+"""工艺配置页面：新增（可派生）/ 工艺列表（可编辑 + 勾选）/ 工艺详情。"""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ import pandas as pd
 import streamlit as st
 
 from . import _common as master
-from ._mock_program_data import enabled_steps, step_label
+from ._mock_program_data import enabled_steps
 
 
 def _text(value: Any) -> str:
@@ -35,6 +35,50 @@ def _join(items: Any) -> str:
 def _save(key: str, rows: list[dict[str, Any]]) -> None:
     st.session_state[key] = rows
     master.save_key(key)
+
+
+def _request_process_delete() -> None:
+    click = st.session_state.get("process_delete_click")
+    if click is None:
+        return
+    row = int(click["row"])
+    codes = st.session_state.get("_process_codes", [])
+    if 0 <= row < len(codes):
+        st.session_state["pending_process_delete"] = codes[row]
+
+
+def _del_route() -> None:
+    click = st.session_state.get("route_delete_click")
+    if click is None:
+        return
+    row = int(click["row"])
+    selected = st.session_state.get("process_selected")
+    if not selected:
+        return
+    cur = [r for r in st.session_state.get("process_routes", []) if r["process_code"] == selected]
+    if 0 <= row < len(cur):
+        target = cur[row]
+        st.session_state["process_routes"] = [
+            r for r in st.session_state["process_routes"]
+            if not (r["process_code"] == selected and r["step_no"] == target["step_no"])
+        ]
+
+
+def _del_resource() -> None:
+    click = st.session_state.get("res_delete_click")
+    if click is None:
+        return
+    row = int(click["row"])
+    selected = st.session_state.get("process_selected")
+    if not selected:
+        return
+    cur = [r for r in st.session_state.get("process_step_resources", []) if r["process_code"] == selected]
+    if 0 <= row < len(cur):
+        target = cur[row]
+        st.session_state["process_step_resources"] = [
+            r for r in st.session_state["process_step_resources"]
+            if not (r["process_code"] == selected and r["step_no"] == target["step_no"])
+        ]
 
 
 def render_page() -> None:
@@ -85,24 +129,15 @@ def render_page() -> None:
                     st.error("工艺号已存在")
                 else:
                     new_processes = list(processes) + [{
-                        "process_code": code,
-                        "process_name": new_name.strip() or code,
-                        "enabled": enabled_text == "是",
-                        "remark": new_remark.strip(),
+                        "process_code": code, "process_name": new_name.strip() or code,
+                        "enabled": enabled_text == "是", "remark": new_remark.strip(),
                         "source_process_code": "" if source == "空白新增" else source,
                     }]
                     new_routes = list(routes)
                     new_resources = list(resources)
                     if source != "空白新增":
-                        # 深拷贝：路线与资源完全独立
-                        new_routes += [
-                            {**r, "process_code": code}
-                            for r in routes if r["process_code"] == source
-                        ]
-                        new_resources += [
-                            {**r, "process_code": code}
-                            for r in resources if r["process_code"] == source
-                        ]
+                        new_routes += [{**r, "process_code": code} for r in routes if r["process_code"] == source]
+                        new_resources += [{**r, "process_code": code} for r in resources if r["process_code"] == source]
                     _save("processes", new_processes)
                     _save("process_routes", new_routes)
                     _save("process_step_resources", new_resources)
@@ -110,36 +145,99 @@ def render_page() -> None:
                     st.rerun()
 
     # -------------------------------------------------------------------------
-    # 区块 2：工艺列表（行选择，勾选后展开详情）
+    # 区块 2：工艺列表（前面勾选框 + 可直接改 + 启用勾选框 + 删除按钮）
     # -------------------------------------------------------------------------
-    with st.container(border=True):
+    with st.container(border=True, key="process_list_panel"):
         st.subheader("工艺列表")
         codes = [p["process_code"] for p in processes]
+        st.session_state["_process_codes"] = codes
         frame = pd.DataFrame([{
+            "选择": p["process_code"] == st.session_state.get("process_selected"),
             "工艺号": p["process_code"],
             "工艺名称": p.get("process_name", ""),
-            "启用": "是" if p.get("enabled", True) else "否",
+            "启用": bool(p.get("enabled", True)),
             "来源工艺": p.get("source_process_code", "") or "—",
             "引用组件数": sum(1 for q in products if q.get("process_code") == p["process_code"]),
             "备注": p.get("remark", ""),
-        } for p in processes], columns=["工艺号", "工艺名称", "启用", "来源工艺", "引用组件数", "备注"])
-        event = st.dataframe(
-            frame, hide_index=True, width="stretch", height=220,
-            alt="工艺列表（点击行查看详情）",
-            on_select="rerun", selection_mode="single-row", key="process_list_select",
-        )
-        sel_rows = event.selection.rows if hasattr(event, "selection") else []
-        if sel_rows:
-            selected = codes[sel_rows[0]]
-            if st.session_state.get("process_selected") != selected:
-                st.session_state["process_selected"] = selected
+            "删除": "删除",
+        } for p in processes], columns=["选择", "工艺号", "工艺名称", "启用", "来源工艺", "引用组件数", "备注", "删除"])
+        config = {
+            "选择": st.column_config.CheckboxColumn("选择", default=False, width="small",
+                                                   help="勾选后在下方查看该工艺详情"),
+            "工艺号": st.column_config.TextColumn("工艺号", required=True, disabled=True, width="medium"),
+            "工艺名称": st.column_config.TextColumn("工艺名称", required=True, width="medium"),
+            "启用": st.column_config.CheckboxColumn("启用", default=True, width="small"),
+            "来源工艺": st.column_config.TextColumn("来源工艺", disabled=True, width="medium"),
+            "引用组件数": st.column_config.NumberColumn("引用组件数", disabled=True, width="small"),
+            "备注": st.column_config.TextColumn("备注", width="large"),
+            "删除": st.column_config.ButtonColumn(
+                "删除", type="tertiary", on_click=_request_process_delete,
+                key="process_delete_click", width="small",
+            ),
+        }
+        edited: pd.DataFrame | None = None
+        if read_only:
+            st.dataframe(frame.drop(columns=["删除"]), column_config=config, hide_index=True,
+                         width="stretch", alt="工艺列表")
+        else:
+            edited = st.data_editor(
+                frame, column_config=config, hide_index=True, num_rows="fixed",
+                width="stretch", alt="工艺列表编辑器", key="process_editor",
+            )
+            # 前面的勾选框驱动详情
+            checked = [str(row["工艺号"]) for _, row in edited.iterrows() if bool(row.get("选择"))]
+            cur = st.session_state.get("process_selected")
+            if checked and cur != checked[0]:
+                st.session_state["process_selected"] = checked[0]
                 st.rerun()
-        elif st.session_state.get("process_selected"):
-            st.session_state.pop("process_selected", None)
-            st.rerun()
+            elif not checked and cur:
+                st.session_state.pop("process_selected", None)
+                st.rerun()
+
+        save_clicked = False
+        if not read_only:
+            with st.container(horizontal=True, horizontal_alignment="left"):
+                save_clicked = st.button("保存工艺修改", icon=":material/save:", key="save_processes")
+        if not processes:
+            st.info("暂无工艺，请新增")
+        if save_clicked and edited is not None:
+            new_processes, err = [], None
+            seen = set()
+            for _, row in edited.iterrows():
+                code = _text(row["工艺号"])
+                if not code:
+                    continue
+                if code in seen:
+                    err = "工艺号不能重复"
+                    break
+                seen.add(code)
+                new_processes.append({
+                    "process_code": code, "process_name": _text(row["工艺名称"]),
+                    "enabled": bool(row["启用"]), "remark": _text(row["备注"]),
+                    "source_process_code": "" if _text(row["来源工艺"]) == "—" else _text(row["来源工艺"]),
+                })
+            if err:
+                st.error(err)
+            else:
+                _save("processes", new_processes)
+                st.toast("工艺已保存")
+                st.rerun()
+        pending = st.session_state.pop("pending_process_delete", None)
+        if pending:
+            refs = [q["product_model"] for q in products if q.get("process_code") == pending]
+            if refs:
+                st.error(f"工艺 {pending} 被组件 {', '.join(refs)} 引用，不能删除")
+            else:
+                _save("processes", [p for p in processes if p["process_code"] != pending])
+                _save("process_routes", [r for r in routes if r["process_code"] != pending])
+                _save("process_step_resources", [r for r in resources if r["process_code"] != pending])
+                if st.session_state.get("process_selected") == pending:
+                    st.session_state.pop("process_selected", None)
+                st.toast(f"工艺 {pending} 已删除")
+                st.rerun()
 
     # -------------------------------------------------------------------------
-    # 区块 3：工艺详情（工序路线 + 工序资源）
+    # 区块 3：工艺详情（勾选工艺列表后显示）
     # -------------------------------------------------------------------------
     selected = st.session_state.get("process_selected")
     if selected and selected in codes:
@@ -147,13 +245,11 @@ def render_page() -> None:
             st.subheader(f"工艺详情：{selected}")
             cur_routes = [r for r in routes if r["process_code"] == selected]
 
-            # 3.1 工序路线
+            # 3.1 工序路线（删除按钮）
             st.markdown("**工序路线**")
             route_frame = pd.DataFrame([{
-                "工序号": r["step_no"],
-                "成功下站": r["success_next_step"],
-                "失败下站": r["fail_next_step"],
-                "删除": "删除",
+                "工序号": r["step_no"], "成功下站": r["success_next_step"],
+                "失败下站": r["fail_next_step"], "删除": "删除",
             } for r in cur_routes], columns=["工序号", "成功下站", "失败下站", "删除"])
             next_opts = step_nos + ["END", "LOCK"]
             edited_routes = st.data_editor(
@@ -163,7 +259,10 @@ def render_page() -> None:
                     "工序号": st.column_config.SelectboxColumn("工序号", options=step_nos, required=True),
                     "成功下站": st.column_config.SelectboxColumn("成功下站", options=next_opts, required=True),
                     "失败下站": st.column_config.SelectboxColumn("失败下站", options=next_opts, required=True),
-                    "删除": st.column_config.ButtonColumn("删除", type="tertiary", width="small"),
+                    "删除": st.column_config.ButtonColumn(
+                        "删除", type="tertiary", on_click=_del_route,
+                        key="route_delete_click", width="small",
+                    ),
                 },
             )
             if not read_only and st.button("保存工序路线", key="save_process_routes"):
@@ -177,7 +276,7 @@ def render_page() -> None:
                 st.toast("工序路线已保存")
                 st.rerun()
 
-            # 3.2 工序资源（程序 / 设备型号多选 / 载具型号多选）
+            # 3.2 工序资源（删除按钮）
             st.markdown("**工序资源**")
             res_by_step = {str(r["step_no"]): r for r in resources if r["process_code"] == selected}
             resource_frame = pd.DataFrame([{
@@ -195,7 +294,10 @@ def render_page() -> None:
                     "程序": st.column_config.SelectboxColumn("程序", options=program_names),
                     "可执行设备型号": st.column_config.MultiselectColumn("可执行设备型号", options=device_models),
                     "转运载具型号": st.column_config.MultiselectColumn("转运载具型号", options=tray_models),
-                    "删除": st.column_config.ButtonColumn("删除", type="tertiary", width="small"),
+                    "删除": st.column_config.ButtonColumn(
+                        "删除", type="tertiary", on_click=_del_resource,
+                        key="res_delete_click", width="small",
+                    ),
                 },
             )
             if not read_only and st.button("保存工序资源", key="save_process_resources"):
@@ -210,18 +312,5 @@ def render_page() -> None:
                 _save("process_step_resources", others + new_res)
                 st.toast("工序资源已保存")
                 st.rerun()
-
-            # 3.3 删除工艺（被组件引用则禁止）
-            if not read_only and st.button("删除该工艺", icon=":material/delete:", key="delete_process_btn"):
-                refs = [q["product_model"] for q in products if q.get("process_code") == selected]
-                if refs:
-                    st.error(f"该工艺被组件 {', '.join(refs)} 引用，不能删除")
-                else:
-                    _save("processes", [p for p in processes if p["process_code"] != selected])
-                    _save("process_routes", [r for r in routes if r["process_code"] != selected])
-                    _save("process_step_resources", [r for r in resources if r["process_code"] != selected])
-                    st.session_state.pop("process_selected", None)
-                    st.toast("工艺已删除")
-                    st.rerun()
     elif codes:
-        st.info("请勾选上方工艺列表中的一行查看工艺详情")
+        st.info("请勾选上方工艺列表前面的勾选框查看工艺详情")
