@@ -1,8 +1,4 @@
-"""Streamlit 页面入口（st.navigation）。
-
-6 个页面：程序注册 / 工序注册 / 设备注册 / 产品型号注册（app_pages 接入，数据走 HTTP）
-+ 测试数据看板 / 开放性变量（原有页面）。
-"""
+"""Streamlit 页面入口（st.navigation）。"""
 
 from __future__ import annotations
 
@@ -10,9 +6,17 @@ import streamlit as st
 
 from py_server.ui import common
 from py_server.ui.page_dashboard import render as render_dashboard
-from py_server.ui.page_variables import render as render_variables
 from py_server.ui.page_product_query import render as render_product_query
-from py_server.ui.pages import device_registration, tray_registration, product_management, process_config, program, step_registration
+from py_server.ui.page_variables import render as render_variables
+from py_server.ui.page_workbench import render as render_workbench
+from py_server.ui.pages import (
+    device_registration,
+    process_config,
+    product_management,
+    program,
+    step_registration,
+    tray_registration,
+)
 
 st.set_page_config(
     page_title="旁路 MES · 产线测试数据",
@@ -29,6 +33,7 @@ common.render_sidebar()
 navigation = st.navigation(
     [
         st.Page(render_dashboard, title="测试数据看板", icon="📊", url_path="dashboard", default=True),
+        st.Page(render_workbench, title="工位操作台", icon="🛠️", url_path="workbench"),
         st.Page(render_product_query, title="产品查询", icon="🔎", url_path="product_query"),
         st.Page(program.render_page, title="程序注册", icon="📦", url_path="program"),
         st.Page(step_registration.render_page, title="工序注册", icon="🧱", url_path="steps"),

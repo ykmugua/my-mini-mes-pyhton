@@ -92,6 +92,20 @@ class MasterDataIn(BaseModel):
     rows: list[dict] = Field(default_factory=list)
 
 
+class WorkbenchInboundIn(BaseModel):
+    product: str = Field(min_length=1)
+    step_no: str = Field(min_length=1)
+    traycode: str = Field(min_length=1)
+    barcodes: list[str] = Field(default_factory=list)
+    operator: str = Field(min_length=1)
+
+
+class WorkbenchTrayUnbindIn(BaseModel):
+    traycode: str = Field(min_length=1)
+    operator: str = Field(min_length=1)
+    confirmed: bool = False
+
+
 class VariableRenameIn(BaseModel):
     name: str = Field(min_length=1)
 

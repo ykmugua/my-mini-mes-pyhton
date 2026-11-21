@@ -18,6 +18,7 @@
 | 载具注册     | 载具（托盘）主数据：载具码/名称/载荷数量/启停/备注；新增、直接修改、删除 |
 | 组件注册     | 产品主数据、工序流程（成功/失败下站）、产品-工序-设备分配范围                                                                |
 | 工艺配置     | 新增工艺（空白/从已有工艺深拷贝派生）、工艺列表、工艺详情（工序路线 + 工序资源：程序/可执行设备型号/转运载具型号） |
+| 工位操作台   | 四个标签页：手动入站、入线状态、托盘解绑、产品解锁；入站按“产品型号 + 工序”校验允许的载具型号，入线状态按托盘一行聚合展示 |
 | 测试数据看板 | 设备页流式卡片 + 工序页按工序统计；折叠容器「监控设备管理」与「设置显示」；时间区间查询、每行卡片数、拖拽排序；1 秒局部刷新 |
 | 开放性变量   | 最多三层组/子组/键层级（JSON 树视图）；变量定义与当前值查看、前缀筛选；新增变量；30 秒自动刷新；设备按完整路径读写接口          |
 | 产品查询     | 按产品流转总览字段筛选；测试履历按工序分 tab + details 列表；产品流转与工序解绑                                          |
@@ -27,7 +28,7 @@
 
 ```
                     ┌──────────────────────────────────┐
-   浏览器 ─────────▶│ Streamlit :8501（7 个页面）      │
+   浏览器 ─────────▶│ Streamlit :8501（8 个页面）      │
                     │  Repository 读写 / HTTP（可选）   │
                     └───┬──────────────────────┬───────┘
                         │ Repository 读写      │ HTTP/JSON（可选）
@@ -49,7 +50,7 @@
 ### 三条取舍（本次改造明确保持）
 
 1. **FastAPI 主要给机台使用**：机台经 HTTP 访问；Streamlit 是内部工具，可直接通过 Repository 读写数据库（不写 SQL、不感知 SQLAlchemy），也可经 HTTP 调 FastAPI。
-2. **薄应用层 4 个用例**：`report_test_result`、`unlock_workpiece`、`report_program_status`、`upload_test_result_v1`（MES V1.3 整单上传）持有事务边界；其余 CRUD 路由直接调 repo，不配空壳用例。
+2. **薄应用层用例**：`report_test_result`、`unlock_workpiece`、`report_program_status`、`upload_test_result_v1`（MES V1.3 整单上传）以及工位操作台的入站/托盘解绑持有事务边界；其余 CRUD 路由直接调 repo，不配空壳用例。
 3. **聚合不写库，事务由用例持有**：`domain/` 方法只做状态判定并返回领域结果（如 `UnlockOutcome`、`TrustVerdict`），日志与落盘由 application 用例在同一事务内完成。
 
 ---
@@ -100,7 +101,7 @@ py-server/
 │  │  ├─ trust/            # ProgramTrustPolicy / Binding / TrustVerdict
 │  │  ├─ workpiece/        # Workpiece 聚合 / UnlockOutcome / LockReason
 │  │  └─ interlock/        # InterlockPolicy 五步判定
-│  ├─ application/         # 薄应用层：4 个用例，持有事务边界（含 upload_test_result_v1）
+│  ├─ application/         # 薄应用层：业务用例，持有事务边界
 │  ├─ repositories/        # 唯一写 SQL 的层（含 station_repo / upload_repo 幂等）
 │  ├─ api/                 # FastAPI 实例 / schemas(.py/.v1) / deps / routers/
 │  ├─ services.py          # 兼容入口：输入校验 + 委托各层
@@ -346,6 +347,7 @@ POST /api/variable/line_mode
 | 📦 程序注册     | 顶部漂移告警；绑定关系可编辑表格（新增/修改/删除行后保存）；上传程序文件自动算 SHA256；拉取记录、状态上报记录；接口调用示例                                                                                     |
 | 📊 测试数据看板 | 「设备页」卡片监控 + 「工序页」按工序统计；设备卡片有统计/失败详计/设备控制页签；两个同级折叠容器：监控设备管理、设置显示（顺序/每行卡片数/统计时间区间）；两页均 1 秒局部刷新且共用查询生效区间 |
 | 🔎 产品查询     | 查询结果直接显示 ProductFlow 产品流转总览；测试履历按工序分 tab、下方显示对应 details；产品流转与工序解绑顺序排列；解绑可任意切换工序并填备注                                             |
+| 🛠️ 工位操作台   | 四个标签页：手动入站、入线状态、托盘解绑、产品解锁；产品型号后选择工序，按两者卡载具型号；同一流转托盘的多条码在一行展示 |
 | 🔧 开放性变量   | 前缀筛选；变量表；新增变量表单；30 秒自动刷新；接口示例                                                                                                                                                         |
 
 页面可直接通过 Repository 读写数据库（不写 SQL、不感知 SQLAlchemy），也可经 `ui/client.py` 以 HTTP 访问 FastAPI；两条路径复用同一套 domain/application/repositories，因此页面里的“放行状态自检”、看板统计与设备接口结果完全一致。
@@ -394,7 +396,7 @@ uv run python examples/device_client.py --device TEST-01 --product P-1001 demo
 uv run pytest
 ```
 
-当前结果：**152 passed**，包括：
+当前结果：**133 passed**，包括：
 
 * 7 条验收标准 + V1.3 上传 6 条自动化用例；
 * 接口边界（404/400/422、多产品歧义、静态文件下载、类型校验、变量前缀筛选）；

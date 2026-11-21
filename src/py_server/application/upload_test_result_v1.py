@@ -56,6 +56,11 @@ def execute(
     result = payload["result"].strip().upper()
     if result not in ("PASS", "FAIL"):
         raise UploadValidationError("result 只能是 PASS 或 FAIL")
+    is_final_report = str(
+        payload.get("isfinalreport") or "false"
+    ).strip().lower()
+    if is_final_report not in ("true", "false"):
+        raise UploadValidationError("isfinalreport 只能是 true 或 false")
     details = payload["details"]
     if not details:
         raise UploadValidationError("details 不得为空")
@@ -119,7 +124,7 @@ def execute(
         "testexecutetime": payload["testexecutetime"],
         "result": result,
         "testlongtime": payload["testlongtime"],
-        "isfinalreport": str(payload.get("isfinalreport", "false")),
+        "isfinalreport": is_final_report,
         "created_at": db.utc_now_iso(),
     }
     detail_rows = [
@@ -148,12 +153,24 @@ def execute(
     if step_info:
         current_step = str(step_info["step_no"])
         step_value = str(step_info["step_no"])
-        next_step = str(int(step_value) + 1) if step_value.isdigit() else ""
+        if result == "FAIL":
+            next_step = "LOCK"
+        elif is_final_report == "true":
+            next_step = "END"
+        else:
+            next_step = str(int(step_value) + 1) if step_value.isdigit() else ""
+        board_status = (
+            "lock"
+            if result == "FAIL"
+            else "final"
+            if is_final_report == "true"
+            else "normal"
+        )
         product_flow_store.upsert_flow(
             barcode=barcode,
             componentcode=payload["componentcode"],
             traycode=str(payload.get("traycode") or ""),
-            board_status="normal" if result == "PASS" else "lock",
+            board_status=board_status,
             step_no=current_step,
             next_step=next_step,
             device=station,

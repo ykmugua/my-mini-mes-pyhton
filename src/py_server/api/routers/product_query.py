@@ -1,10 +1,11 @@
-"""产品查询与追溯接口（只读查询；解绑复用 interlock 的 unlock）。"""
+"""产品查询、追溯与工位操作台接口。"""
 
 from __future__ import annotations
 
 from fastapi import APIRouter, Query
 
 from ... import services
+from ..schemas import WorkbenchInboundIn, WorkbenchTrayUnbindIn
 
 router = APIRouter(tags=["product_query"])
 
@@ -149,8 +150,43 @@ def ui_product_flow_details(flow_table: str = Query(min_length=3)) -> list[dict]
     return product_flow_store.list_flow(flow_table)
 
 
+@router.delete("/api/ui/product/flow")
+def ui_delete_product_flow(barcode: str = Query(min_length=1)) -> dict:
+    return services.delete_product_flow(barcode=barcode)
+
+
+@router.delete("/api/ui/product/tray-flow")
+def ui_delete_tray_flow(traycode: str = Query(min_length=1)) -> dict:
+    return services.delete_tray_flow(traycode=traycode)
+
+
 @router.get("/api/ui/product/step-options")
 def ui_step_options() -> list[dict]:
     from ...repositories import master_data_repo
 
     return master_data_repo.list_steps()
+
+
+@router.get("/api/ui/workbench/recipe")
+def ui_workbench_recipe(product: str = Query(min_length=1)) -> dict:
+    return services.workbench_recipe(product)
+
+
+@router.post("/api/ui/workbench/inbound")
+def ui_workbench_inbound(payload: WorkbenchInboundIn) -> dict:
+    return services.manual_inbound(
+        product=payload.product,
+        step_no=payload.step_no,
+        traycode=payload.traycode,
+        barcodes=payload.barcodes,
+        operator=payload.operator,
+    )
+
+
+@router.post("/api/ui/workbench/tray-unbind")
+def ui_workbench_tray_unbind(payload: WorkbenchTrayUnbindIn) -> dict:
+    return services.unbind_tray(
+        traycode=payload.traycode,
+        operator=payload.operator,
+        confirmed=payload.confirmed,
+    )

@@ -17,6 +17,7 @@ from typing import Any, Iterable
 from . import config, db
 from .application import report_program_status as _report_program_status_uc
 from .application import report_test_result as _report_test_result_uc
+from .application import station_workbench as _station_workbench_uc
 from .application import unlock_workpiece as _unlock_workpiece_uc
 from .domain import ConflictError as DomainConflictError
 from .domain import DomainError, InvariantViolation
@@ -28,7 +29,9 @@ from .repositories import (
     binding_repo,
     dashboard_repo,
     log_repo,
+    master_data_repo,
     program_files,
+    product_flow_store,
     upstream_repo,
     variable_repo,
     product_query_repo,
@@ -814,3 +817,257 @@ def product_route_detail(product_model: str) -> dict:
 
 def distinct_products() -> list[str]:
     return product_query_repo.distinct_products()
+
+
+# -----------------------------------------------------------------------------
+# 工位操作台：产品 -> 工艺 -> 载具 -> 条码入站
+# -----------------------------------------------------------------------------
+def _split_csv(value: Any) -> list[str]:
+    return [item.strip() for item in str(value or "").split(",") if item.strip()]
+
+
+def _route_sort_key(route: dict) -> tuple[int, int | str]:
+    step_no = str(route.get("step_no") or "")
+    return (0, int(step_no)) if step_no.isdigit() else (1, step_no)
+
+
+def _workbench_recipe(conn: Conn, product_model: str) -> dict:
+    product = next(
+        (
+            item
+            for item in master_data_repo.list_products(conn)
+            if str(item.get("product_model")) == product_model
+        ),
+        None,
+    )
+    if product is None:
+        raise NotFoundError(f"产品型号 {product_model} 不存在")
+    if not bool(product.get("enabled")):
+        raise ValidationError(f"产品型号 {product_model} 已停用")
+
+    processes = [
+        item
+        for item in master_data_repo.list_processes(conn)
+        if str(item.get("component_no") or "") == product_model
+        and bool(item.get("enabled"))
+    ]
+    if not processes:
+        raise ValidationError(f"产品型号 {product_model} 未绑定启用工艺")
+    if len(processes) > 1:
+        codes = "、".join(str(item["process_code"]) for item in processes)
+        raise ConflictError(f"产品型号 {product_model} 绑定了多个启用工艺：{codes}")
+
+    process = processes[0]
+    process_code = str(process["process_code"])
+    routes = sorted(
+        [
+            row
+            for row in master_data_repo.list_process_routes(conn)
+            if str(row.get("process_code")) == process_code
+        ],
+        key=_route_sort_key,
+    )
+    if not routes:
+        raise ValidationError(f"工艺 {process_code} 未配置工序路线")
+
+    resources = [
+        row
+        for row in master_data_repo.list_process_step_resources(conn)
+        if str(row.get("process_code")) == process_code
+    ]
+    tray_models_by_step: dict[str, list[str]] = {}
+    for resource in resources:
+        step_no = str(resource.get("step_no") or "")
+        for model in _split_csv(resource.get("tray_models")):
+            tray_models_by_step.setdefault(step_no, [])
+            if model not in tray_models_by_step[step_no]:
+                tray_models_by_step[step_no].append(model)
+    tray_models: list[str] = []
+    for resource in resources:
+        for model in _split_csv(resource.get("tray_models")):
+            if model not in tray_models:
+                tray_models.append(model)
+    if not tray_models:
+        raise ValidationError(f"工艺 {process_code} 未配置转运载具型号")
+
+    step_names = {
+        str(step["step_no"]): str(step.get("step_name") or "")
+        for step in master_data_repo.list_steps(conn)
+    }
+    route_details = [
+        {
+            **route,
+            "step_name": step_names.get(str(route.get("step_no")), ""),
+            "tray_models": tray_models_by_step.get(
+                str(route.get("step_no")), []
+            ),
+        }
+        for route in routes
+    ]
+    return {
+        "product": product,
+        "process": process,
+        "routes": route_details,
+        "steps": route_details,
+        "tray_models": tray_models,
+        "first_step": str(routes[0]["step_no"]),
+        "first_success_next_step": str(routes[0]["success_next_step"]),
+    }
+
+
+def workbench_recipe(product_model: str) -> dict:
+    """按产品型号倒查启用工艺、路线和允许的载具型号。"""
+    product_model = _clean_text(product_model, "产品型号")
+    with _read() as conn:
+        return _workbench_recipe(conn, product_model)
+
+
+def manual_inbound(
+    *,
+    product: str,
+    step_no: str,
+    traycode: str,
+    barcodes: Iterable[str],
+    operator: str,
+) -> dict:
+    """手动入站：产品、载具与载具载荷内的一批条码同时建档。"""
+    product = _clean_text(product, "产品型号")
+    step_no = _clean_text(step_no, "工序")
+    traycode = _clean_text(traycode, "载具号")
+    operator = _clean_text(operator, "操作员", max_len=64)
+    cleaned_barcodes = [
+        _clean_text(value, f"第 {index} 个条码")
+        for index, value in enumerate(barcodes, start=1)
+    ]
+    if not cleaned_barcodes:
+        raise ValidationError("入站条码不能为空")
+    folded = [code.casefold() for code in cleaned_barcodes]
+    if len(set(folded)) != len(folded):
+        raise ValidationError("同一载具内的条码不能重复")
+
+    with _read() as conn:
+        recipe = _workbench_recipe(conn, product)
+        route = next(
+            (
+                item
+                for item in recipe["steps"]
+                if str(item.get("step_no")) == step_no
+            ),
+            None,
+        )
+        if route is None:
+            raise ValidationError(
+                f"工序 {step_no} 不属于产品 {product} 的工艺 "
+                f"{recipe['process']['process_code']}"
+            )
+        allowed_models = {
+            model.casefold() for model in route["tray_models"]
+        }
+        if not allowed_models:
+            raise ValidationError(
+                f"产品 {product} 的工序 {step_no} 未配置允许的载具型号"
+            )
+        tray = next(
+            (
+                item
+                for item in master_data_repo.list_trays(conn)
+                if str(item.get("traycode")) == traycode
+            ),
+            None,
+        )
+        if tray is None:
+            raise NotFoundError(f"载具 {traycode} 不存在")
+        if not bool(tray.get("enabled")):
+            raise ValidationError(f"载具 {traycode} 已停用")
+        if str(tray.get("tray_model") or "").casefold() not in allowed_models:
+            raise ValidationError(
+                f"载具 {traycode} 的型号 {tray.get('tray_model')} 不符合"
+                f"产品 {product}、工序 {step_no} 的允许范围"
+            )
+        capacity = int(tray.get("capacity") or 0)
+        if capacity <= 0:
+            raise ValidationError(f"载具 {traycode} 未配置有效载荷数量")
+        if product_flow_store.list_overview(traycode=traycode):
+            raise ConflictError(
+                f"载具 {traycode} 当前已绑定产品，请先解除托盘绑定"
+            )
+        if len(cleaned_barcodes) > capacity:
+            raise ValidationError(
+                f"载具 {traycode} 最多可填写 {capacity} 个条码"
+            )
+        for barcode in cleaned_barcodes:
+            if workpiece_repo.get_workpiece(conn, barcode) is not None:
+                raise ConflictError(f"条码 {barcode} 已存在，不能重复入站")
+
+    for barcode in cleaned_barcodes:
+        if product_flow_store.get_overview_by_barcode(barcode) is not None:
+            raise ConflictError(f"条码 {barcode} 已存在，不能重复入站")
+
+    now = db.utc_now_iso()
+    rows = [
+        {
+            "barcode": barcode,
+            "componentcode": product,
+            "traycode": traycode,
+            "board_status": "normal",
+            "step_no": step_no,
+            "next_step": str(route["success_next_step"]),
+            "device": "手动入站",
+            "note": f"手动入站（操作员：{operator}）",
+        }
+        for barcode in cleaned_barcodes
+    ]
+    _station_workbench_uc.manual_inbound(rows=rows, now=now)
+    return {
+        "product": product,
+        "traycode": traycode,
+        "process_code": str(recipe["process"]["process_code"]),
+        "current_step": step_no,
+        "next_step": str(route["success_next_step"]),
+        "count": len(cleaned_barcodes),
+        "barcodes": cleaned_barcodes,
+    }
+
+
+def unbind_tray(*, traycode: str, operator: str, confirmed: bool) -> dict:
+    """解除托盘与产品的当前绑定，并为每个产品写明操作留痕。"""
+    traycode = _clean_text(traycode, "载具号")
+    operator = _clean_text(operator, "操作员", max_len=64)
+    if not confirmed:
+        raise ValidationError("必须勾选确认后才能解绑托盘")
+    if not product_flow_store.list_overview(traycode=traycode):
+        raise NotFoundError(f"载具 {traycode} 当前未绑定产品")
+    affected = _station_workbench_uc.unbind_tray(
+        traycode=traycode,
+        operator=operator,
+        now=db.utc_now_iso(),
+    )
+    if not affected:
+        raise NotFoundError(f"载具 {traycode} 当前未绑定产品")
+    return {
+        "traycode": traycode,
+        "count": len(affected),
+        "barcodes": [str(item["barcode"]) for item in affected],
+    }
+
+
+def delete_product_flow(*, barcode: str) -> dict:
+    """删除指定产品的入线状态及 ProductFlow 历史。"""
+    barcode = _clean_text(barcode, "产品条码")
+    deleted = _station_workbench_uc.delete_product_flow(barcode=barcode)
+    if deleted is None:
+        raise NotFoundError(f"产品 {barcode} 当前没有入线状态")
+    return {"barcode": barcode}
+
+
+def delete_tray_flow(*, traycode: str) -> dict:
+    """删除指定托盘当前全部在制产品状态。"""
+    traycode = _clean_text(traycode, "载具号")
+    deleted = _station_workbench_uc.delete_tray_flow(traycode=traycode)
+    if not deleted:
+        raise NotFoundError(f"载具 {traycode} 当前没有在制产品")
+    return {
+        "traycode": traycode,
+        "count": len(deleted),
+        "barcodes": [str(item["barcode"]) for item in deleted],
+    }

@@ -26,3 +26,5 @@ tools_*.py
 
 # runtime logs
 logs/
+/.api-runtime.*.log
+/.streamlit-ui.*.log

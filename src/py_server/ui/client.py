@@ -287,9 +287,64 @@ def product_flow_details(flow_table: str) -> list[dict]:
     return _request("GET", "/api/ui/product/flow-details", params={"flow_table": flow_table})
 
 
+def delete_product_flow(barcode: str) -> dict:
+    return _request("DELETE", "/api/ui/product/flow", params={"barcode": barcode})
+
+
+def delete_tray_flow(traycode: str) -> dict:
+    return _request(
+        "DELETE",
+        "/api/ui/product/tray-flow",
+        params={"traycode": traycode},
+    )
+
+
 def workpiece_history(workpiece: str) -> dict:
     return _request("GET", f"/api/ui/product/workpiece/{workpiece}/history")
 
 
 def product_route(product_model: str) -> dict:
     return _request("GET", f"/api/ui/product/route/{product_model}")
+
+
+# -----------------------------------------------------------------------------
+# 工位操作台
+# -----------------------------------------------------------------------------
+def workbench_recipe(product_model: str) -> dict:
+    return _request(
+        "GET",
+        "/api/ui/workbench/recipe",
+        params={"product": product_model},
+    )
+
+
+def manual_inbound(
+    product: str,
+    step_no: str,
+    traycode: str,
+    barcodes: list[str],
+    operator: str,
+) -> dict:
+    return _request(
+        "POST",
+        "/api/ui/workbench/inbound",
+        json={
+            "product": product,
+            "step_no": step_no,
+            "traycode": traycode,
+            "barcodes": barcodes,
+            "operator": operator,
+        },
+    )
+
+
+def unbind_tray(traycode: str, operator: str, confirmed: bool) -> dict:
+    return _request(
+        "POST",
+        "/api/ui/workbench/tray-unbind",
+        json={
+            "traycode": traycode,
+            "operator": operator,
+            "confirmed": confirmed,
+        },
+    )
