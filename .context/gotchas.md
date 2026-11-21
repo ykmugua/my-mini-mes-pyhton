@@ -240,3 +240,6 @@ SQLAlchemy 2.1.8 中 `Insert.on_conflict_do_update()` 不再接受 `constraint=`
 - **特别大的改动前，先执行 `/sync-save` 并上传/提交 git 作为检查点**（用户怕改废了），再动手重构。
 - **上传 git 前先整理文件夹**：删掉 `.pytest_tmp*` 等无用临时目录、检查 .gitignore 覆盖，别把无用文件上传。
 - 已清理 45 个 `.pytest_tmpNN` 目录，`.gitignore` 从 `.pytest_tmp/` 改为 `.pytest_tmp*/`。
+
+- Streamlit ButtonColumn 删除必须走 pending state + st.dialog 确认。工艺配置里「工序路线/工序资源」曾直接改 session_state，导致点击无弹窗；程序历史列表的 ButtonColumn 也需同样处理。AppTest 中 dialog 标题需要从 `at.caption` 或按钮 key 检查，不总是出现在 markdown。
+- 程序注册页当前运行程序列表删除历史版本时，不能只从当前激活版本元数据取 program_id；历史版本可能不是激活版本，必须从该程序名对应的全部程序记录收集 program_id，再按 (program_id, version) 删除 program_versions，避免历史版本删不掉。
