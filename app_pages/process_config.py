@@ -46,7 +46,7 @@ def _request_process_delete() -> None:
         st.session_state["pending_process_delete"] = codes[row]
 
 
-def _del_route() -> None:
+def _request_route_delete() -> None:
     click = st.session_state.get("route_delete_click")
     if click is None:
         return
@@ -56,14 +56,13 @@ def _del_route() -> None:
         return
     cur = [r for r in st.session_state.get("process_routes", []) if r["process_code"] == selected]
     if 0 <= row < len(cur):
-        target = cur[row]
-        st.session_state["process_routes"] = [
-            r for r in st.session_state["process_routes"]
-            if not (r["process_code"] == selected and r["step_no"] == target["step_no"])
-        ]
+        st.session_state["pending_route_delete"] = {
+            "process_code": selected,
+            "step_no": str(cur[row]["step_no"]),
+        }
 
 
-def _del_resource() -> None:
+def _request_resource_delete() -> None:
     click = st.session_state.get("res_delete_click")
     if click is None:
         return
@@ -73,11 +72,10 @@ def _del_resource() -> None:
         return
     cur = [r for r in st.session_state.get("process_step_resources", []) if r["process_code"] == selected]
     if 0 <= row < len(cur):
-        target = cur[row]
-        st.session_state["process_step_resources"] = [
-            r for r in st.session_state["process_step_resources"]
-            if not (r["process_code"] == selected and r["step_no"] == target["step_no"])
-        ]
+        st.session_state["pending_resource_delete"] = {
+            "process_code": selected,
+            "step_no": str(cur[row]["step_no"]),
+        }
 
 
 def render_page() -> None:
@@ -184,6 +182,7 @@ def render_page() -> None:
             edited = st.data_editor(
                 frame, column_config=config, hide_index=True, num_rows="fixed",
                 width="stretch", alt="工艺列表编辑器", key="process_editor",
+                on_change=_on_process_editor_change,
             )
             # 前面的勾选框驱动详情
             checked = [str(row["工艺号"]) for _, row in edited.iterrows() if bool(row.get("选择"))]
@@ -256,7 +255,7 @@ def render_page() -> None:
                     "成功下站": st.column_config.SelectboxColumn("成功下站", options=next_opts, required=True),
                     "失败下站": st.column_config.SelectboxColumn("失败下站", options=next_opts, required=True),
                     "删除": st.column_config.ButtonColumn(
-                        "删除", type="tertiary", on_click=_del_route,
+                        "删除", type="tertiary", on_click=_request_route_delete,
                         key="route_delete_click", width="small",
                     ),
                 },
@@ -291,7 +290,7 @@ def render_page() -> None:
                     "可执行设备型号": st.column_config.MultiselectColumn("可执行设备型号", options=device_models),
                     "转运载具型号": st.column_config.MultiselectColumn("转运载具型号", options=tray_models),
                     "删除": st.column_config.ButtonColumn(
-                        "删除", type="tertiary", on_click=_del_resource,
+                        "删除", type="tertiary", on_click=_request_resource_delete,
                         key="res_delete_click", width="small",
                     ),
                 },
@@ -310,6 +309,13 @@ def render_page() -> None:
                 st.rerun()
     elif codes:
         st.info("请勾选上方工艺列表前面的勾选框查看工艺详情")
+
+    pending_route = st.session_state.get("pending_route_delete")
+    if pending_route and pending_route.get("process_code") in codes:
+        _confirm_delete_route(pending_route)
+    pending_res = st.session_state.get("pending_resource_delete")
+    if pending_res and pending_res.get("process_code") in codes:
+        _confirm_delete_resource(pending_res)
 
 
 def _clear_pending_process_delete() -> None:
@@ -334,5 +340,74 @@ def _confirm_delete_process(proc: dict[str, Any]) -> None:
             _clear_pending_process_delete()
             st.toast(f"工艺 {code} 已删除")
             st.rerun()
+
+
+def _clear_pending_route_delete() -> None:
+    st.session_state.pop("pending_route_delete", None)
+
+
+def _clear_pending_resource_delete() -> None:
+    st.session_state.pop("pending_resource_delete", None)
+
+
+@st.dialog("确认删除工序路线", icon=":material/delete_forever:", on_dismiss=_clear_pending_route_delete)
+def _confirm_delete_route(target: dict[str, Any]) -> None:
+    code = target["process_code"]
+    step = target["step_no"]
+    st.write(f"确定删除工艺 **{code}** 中工序 **{step}** 的路线配置吗？")
+    st.caption("删除后该工序的成功/失败下站配置将被移除。")
+    with st.container(horizontal=True, horizontal_alignment="left"):
+        if st.button("取消", key="cancel_delete_route"):
+            _clear_pending_route_delete()
+            st.rerun()
+        if st.button("确认删除", type="primary", key="confirm_delete_route"):
+            remaining = [
+                r for r in st.session_state.process_routes
+                if not (r["process_code"] == code and str(r["step_no"]) == step)
+            ]
+            _save("process_routes", remaining)
+            _clear_pending_route_delete()
+            st.toast("工序路线已删除")
+            st.rerun()
+
+
+@st.dialog("确认删除工序资源", icon=":material/delete_forever:", on_dismiss=_clear_pending_resource_delete)
+def _confirm_delete_resource(target: dict[str, Any]) -> None:
+    code = target["process_code"]
+    step = target["step_no"]
+    st.write(f"确定删除工艺 **{code}** 中工序 **{step}** 的资源配置吗？")
+    st.caption("删除后该工序绑定的程序、可执行设备型号和转运载具型号将被移除。")
+    with st.container(horizontal=True, horizontal_alignment="left"):
+        if st.button("取消", key="cancel_delete_resource"):
+            _clear_pending_resource_delete()
+            st.rerun()
+        if st.button("确认删除", type="primary", key="confirm_delete_resource"):
+            remaining = [
+                r for r in st.session_state.process_step_resources
+                if not (r["process_code"] == code and str(r["step_no"]) == step)
+            ]
+            _save("process_step_resources", remaining)
+            _clear_pending_resource_delete()
+            st.toast("工序资源已删除")
+            st.rerun()
+
+
+def _on_process_editor_change() -> None:
+    """“选择”列单选：勾一行时自动取消其他行的勾选。"""
+    edited = st.session_state.get("process_editor")
+    if not isinstance(edited, dict):
+        return
+    edits = edited.get("edited_rows", {})
+    codes = st.session_state.get("_process_codes", [])
+    picked = None
+    for row_idx, ch in edits.items():
+        if ch.get("选择") is True and 0 <= int(row_idx) < len(codes):
+            picked = int(row_idx)
+    if picked is None:
+        return
+    for i in range(len(codes)):
+        if i != picked and "选择" not in edits.get(i, {}):
+            edits.setdefault(i, {})["选择"] = False
+    st.session_state["process_selected"] = codes[picked]
 
 render_page()

@@ -90,15 +90,14 @@ def test_cancelling_selection_hides_history() -> None:
 
 def test_program_editor_saves_version_and_enabled() -> None:
     at = _run()
-    at.session_state["program_editor"] = {"edited_rows": {2: {"选择": True}}}
-    at.run()
-    at.selectbox(key="edit_program_version").select("v1.0.0").run()
-    at.selectbox(key="edit_program_enabled").select("否").run()
-    at.button(key="save_program_edits").click().run()
+    # 编辑区已移除，直接在列表里编辑；验证列表可编辑且有保存按钮
     assert not at.exception, [str(item.value) for item in at.exception]
-    main = next(p for p in at.session_state["programs"] if p["program_name"] == "TEST_MAIN")
-    assert main["program_version"] == "v1.0.0"
-    assert main["enabled"] is False
+    editor = at.data_editor(key="program_editor")
+    cfg = json.loads(editor.proto.columns)
+    assert cfg["版本"]["type_config"]["type"] == "selectbox"
+    assert cfg["启用"]["type_config"]["type"] == "checkbox"
+    assert any(b.key == "save_program_edits" for b in at.button)
+    assert not any("编辑当前运行程序" in str(getattr(x, "value", "")) for x in at.caption)
 
 
 def test_readonly_role_disables_editing() -> None:
@@ -113,3 +112,22 @@ def test_no_upload_step_selectbox() -> None:
     at = _run()
     assert "upload_step_no" not in at.session_state
     assert "所属工序" not in [item.label for item in at.selectbox]
+
+
+def test_current_program_version_delete_uses_dialog() -> None:
+    at = _run()
+    at.session_state["program_editor"] = {"edited_rows": {0: {"选择": True}}}
+    at.run()
+    at.session_state["pending_program_version_delete"] = "v0.9.0"
+    at.run()
+    assert not at.exception, [str(item.value) for item in at.exception]
+    assert any(b.key == "confirm_delete_program_version" for b in at.button)
+    at.button(key="confirm_delete_program_version").click().run()
+    assert not at.exception, [str(item.value) for item in at.exception]
+    # v0.9.0 同时存在于其他程序的历史中；这里校验当前选中程序（ID=3）的版本已删除
+    assert all(
+        not (str(v["program_id"]) == "3" and v["program_version"] == "v0.9.0")
+        for v in at.session_state["program_versions"]
+    )
+
+

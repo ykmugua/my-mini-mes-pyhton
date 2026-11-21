@@ -120,3 +120,35 @@ def test_readonly_disables_process_editing() -> None:
     at.radio(key="role").set_value("只读").run()
     assert not at.exception, [str(item.value) for item in at.exception]
     assert not [b for b in at.button if b.key == "save_process_routes"]
+
+
+def test_process_detail_delete_route_and_resource_use_dialogs() -> None:
+    at = _open_process(_run())
+    at.session_state["process_editor"] = {"edited_rows": {0: {"选择": True}}}
+    at.run()
+    assert not at.exception, [str(item.value) for item in at.exception]
+
+    at.session_state["pending_route_delete"] = {
+        "process_code": "PROC-001",
+        "step_no": at.session_state["process_routes"][0]["step_no"],
+    }
+    at.run()
+    assert any(b.key == "confirm_delete_route" for b in at.button)
+    assert any(b.key == "confirm_delete_route" for b in at.button)
+    at.button(key="confirm_delete_route").click().run()
+    assert not at.exception, [str(item.value) for item in at.exception]
+    assert all(
+        not (r["process_code"] == "PROC-001" and r["step_no"] == "S1")
+        for r in at.session_state["process_routes"]
+    )
+
+    at.session_state["pending_resource_delete"] = {
+        "process_code": "PROC-001",
+        "step_no": at.session_state["process_step_resources"][0]["step_no"],
+    }
+    at.run()
+    assert any(b.key == "confirm_delete_resource" for b in at.button)
+    before = len(at.session_state["process_step_resources"])
+    at.button(key="confirm_delete_resource").click().run()
+    assert not at.exception, [str(item.value) for item in at.exception]
+    assert len(at.session_state["process_step_resources"]) == before - 1
