@@ -585,3 +585,65 @@
 - 程序注册列表最后一列删除按钮也改为 @st.dialog 确认弹框（cancel_delete_program / confirm_delete_program），删除时同步清 program_versions。
 - app_pages 镜像改用「保留 render_page 函数包装 + 末尾 render_page()」的生成方式，避免模块级 dialog/回调定义顺序导致 NameError；app_pages/program.py 里遗留的 `from .. import client` 用 _StubClient 替代（新 UI 不调用）。
 - 数据库全量重建；文档《工艺配置数据库约定》/README 同步；127 passed。
+
+## 35. 工位操作台（2026-11-21）
+- 产品型号通过 `processes.component_no` 倒查唯一启用工艺；工序路线首站作为入站 `current_step`，`tray_models` 取工艺资源中允许的载具型号。
+- 载具载荷来自 `trays.capacity`；入站要求条码数量恰好等于载荷数量，并同时写 `workpieces` 与 ProductFlow `product_overview/flow_table`。
+- 托盘解绑按 `traycode` 批量清空 `product_overview.traycode`，并为每个产品追加 `device=托盘解绑` 的流转留痕。
+- 新接口：`GET /api/ui/workbench/recipe`、`POST /api/ui/workbench/inbound`、`POST /api/ui/workbench/tray-unbind`；页面入口 `ui/page_workbench.py`，导航 `url_path=workbench`。
+
+## 36. 工位操作台标签页（2026-11-21）
+- 工位操作台的三个操作改为 `st.tabs`：手动入站 / 托盘解绑 / 产品解锁，避免三个大区块纵向堆叠。
+- 手动入站条码位按两列排布；工艺路线放入折叠区；“操作员”统一使用侧边栏 `mes_operator`，页面内不再重复输入。
+- 产品解锁新增“解锁后所在工序”选择，默认“保持当前工序”；选中具体工序时传给 `unlock_workpiece(target_step=...)`，流转库按该工序落点。
+
+## 37. 工位操作台扫码交互（2026-11-21）
+- 手动入站改为单一常驻扫码框：首扫载具，后续连续扫产品条码；每扫一个自动推进计数，达到载具载荷后自动调用入站接口，不再要求点击按钮。
+- 三个标签页改为 `on_change="rerun" + .open` 懒加载，避免隐藏页脚本和接口调用互相干扰。
+- Streamlit 无原生 autofocus，使用作用域 `st.html` JS 按 `.st-key-workbench_*_scan_*` 保持当前扫码框焦点；每个扫码状态变化带唯一 marker，确保脚本重新执行。
+- 产品解锁只要求扫描产品条码，锁定校验由页面检查；解锁原因自动写为“工位操作台扫码解锁”，confirmed=True，仍保留操作员与解锁后工序选择。
+
+## 38. 手动入站卡片式布局（2026-11-21）
+- 载具输入框常驻并保留值；输入一个有效新载具才递增条码批次 token、清空上一批卡片，同一载具不会重复清空。
+- 条码按载具载荷生成卡片，每行数量由数字输入框控制（1~4）。每条码独立启用勾选，默认开启。
+- 条码内容保存在独立 value key，widget key 按 enabled/disabled/submitted 切换，确保真正禁用且不丢值。
+- 进度只统计启用卡片中已填写的数量；所有启用卡片完成后自动调用入站接口，保留本批卡片与载具值，并将焦点移回载具输入框以便扫描下一载具。
+- 后端入站规则由“条码数必须等于载荷”改为“不得多于载荷”，允许禁用部分载荷。
+
+## 39. 入线状态页面与删除边界（2026-11-21）
+- 新增 `src/py_server/ui/tag_page.py`，导航 `url_path=tag_page`，以只读列表展示产品条码、型号、载具、状态、当前工序、最近设备/说明和更新时间，不提供启用列。
+- 列表仅提供行内“删除”按钮和二次确认弹窗；只读角色不显示删除入口。删除调用 `DELETE /api/ui/product/flow?barcode=...`，移除 `product_overview` 当前状态和该产品的 ProductFlow 历史表，不删除 `workpieces` 档案或测试报告。
+- 行按钮只携带行号，因此页面每次渲染都把当前展示顺序的条码暂存到 `tag_page_display_barcodes`，回调再按行号映射到条码，避免列表排序后误删。
+- 工位操作台与入线状态专项测试：8 passed；真实 Streamlit 页面 `/tag_page` 已验证可加载。
+
+## 40. 入线状态并入工位操作台（2026-11-21）
+- 移除独立导航 `url_path=tag_page`，工位操作台改为四个标签：手动入站、入线状态、托盘解绑、产品解锁。
+- `ui/tag_page.py` 改为提供 `render_content(read_only=...)`，由 `page_workbench.py` 在“入线状态”标签中调用；标题、闪消息和只读提示统一由工位操作台管理。
+- 入线状态列表仍只允许删除，不显示启用列；删除确认与接口行为不变。
+- 调整后工位操作台专项测试 8 passed，运行页面已确认左侧无独立入口且四标签正常显示。
+
+## 41. 入线状态、LOCK/END 与托盘自动解绑（2026-11-21）
+- V1.3 上报按 `result + isfinalreport` 映射板状态：FAIL → `lock`，PASS 且最终报告 → `final`；下一站相应写 `LOCK` / `END`。
+- `product_flow_store.upsert_flow` 在任一产品写入 `lock/final` 时，对当前有效 `traycode` 执行整盘自动解绑，同时给盘内每个产品追加 `device=托盘自动解绑` 的流转记录。
+- 入线状态列表只显示仍具有 `traycode` 的当前绑定产品，以及所有 `lock/final` 终态产品；界面状态显示为 `NORMAL/LOCK/END`，并增加“托盘状态”（已绑定/已解绑）。
+- 对规则上线前遗留的 `LOCK` 托盘 `T02010` 已执行一次性自动解绑清理。
+- 工位操作台 + V1.3 上报定向测试：20 passed；8000/8501 已重启并验证页面。
+
+## 42. 入线状态仅保留在制托盘（2026-11-21）
+- 入线状态列表只筛选 `traycode` 非空的产品，不再展示已自动解绑的 LOCK/END 产品。
+- 标题改为“正在流转的托盘”，移除冗余“托盘状态（已绑定/已解绑）”列；无在制托盘时显示“暂无正在流转的托盘”。
+- 自动解绑规则不变：任一产品进入 LOCK/END 后整盘解绑，解绑后立即从该列表消失。
+- 工位操作台专项测试 12 passed；运行页面已确认空态与新标题。
+
+## 43. 工位入站按产品型号 + 工序校验托盘（2026-11-21）
+- 手动入站第一行改为：产品型号 / 工序 / 每行条码数量；工序下拉位于产品型号后，选中型号后才加载该产品启用工艺的工序。
+- `workbench_recipe` 的 `steps/routes` 增加每个工序独立的 `tray_models`；UI 只列出配置了载具型号的工序。
+- `POST /api/ui/workbench/inbound` 新增必填 `step_no`；服务端用“产品型号 → 唯一工艺 → 指定工序资源”的载具型号白名单校验实际托盘型号，并按所选工序写入 `current_step` 和该工序 `success_next_step`。
+- 切换产品会清空工序和扫码批次；切换工序会清空托盘与条码批次，避免旧批次继续使用。
+- 工位操作台专项测试 13 passed；运行页面已验证产品型号后方出现工序下拉。
+
+## 44. 入线状态按托盘聚合（2026-11-21）
+- UI 将 `traycode` 相同的产品聚合为一行：条码数量、产品条码、型号、状态、工序、设备/说明均去重合并，更新时间取最大值。
+- 条码单元格用 `、` 拼接同一托盘内的全部产品条码，避免同一托盘重复占多行。
+- 行内删除改为整盘删除；新增 `DELETE /api/ui/product/tray-flow?traycode=...`，在同一事务中删除该托盘全部 `product_overview` 行和各自流转表，保留工件档案与测试报告。
+- 工位操作台专项测试 13 passed；8000/8501 服务重启且 OpenAPI 已验证新接口。

@@ -243,3 +243,24 @@ SQLAlchemy 2.1.8 中 `Insert.on_conflict_do_update()` 不再接受 `constraint=`
 
 - Streamlit ButtonColumn 删除必须走 pending state + st.dialog 确认。工艺配置里「工序路线/工序资源」曾直接改 session_state，导致点击无弹窗；程序历史列表的 ButtonColumn 也需同样处理。AppTest 中 dialog 标题需要从 `at.caption` 或按钮 key 检查，不总是出现在 markdown。
 - 程序注册页当前运行程序列表删除历史版本时，不能只从当前激活版本元数据取 program_id；历史版本可能不是激活版本，必须从该程序名对应的全部程序记录收集 program_id，再按 (program_id, version) 删除 program_versions，避免历史版本删不掉。
+
+- 工位操作台手动入站必须先校验载具是否已占用。演示数据会预先绑定 T02001~T02010；已占用载具不能直接追加新条码，需先在“托盘解绑”或 `/api/ui/workbench/tray-unbind` 解除绑定。
+- 手动入站跨 mes.db 与 ProductFlow.db 两个 SQLite 库，不能依赖单事务原子性；服务层先完整校验产品工艺、载具型号、载荷数量、条码重复与占用，再用 application 用例写入。
+- Streamlit Agent API 驱动工位操作台时，输入未占用载具（如测试库中的 T02001）后应出现等于 `trays.capacity` 的 `workbench_barcode_<token>_<n>` 输入框；本机验证为 20 个。
+
+- 新增 `py_server.ui.client` 函数后，仅刷新 Streamlit 页面可能仍报 `module ... has no attribute`：Streamlit 热重载会重跑入口脚本，但已加载的导入模块可能继续使用旧缓存。必须重启 Streamlit 进程；若同时新增 FastAPI 路由，也必须重启 uvicorn，否则页面会从 AttributeError 变成对应接口 404。2026-11-21 工位操作台实际遇到并验证此问题。
+
+- 工位操作台页面被 `tests/ui_apps/workbench_app.py` 直接包装测试时不会经过主入口，因此 `render()` 内必须调用 `common.init_session()`；否则 `common.operator()` 为空，解锁接口会因 operator 长度不足返回 422。
+
+- Streamlit `st.text_input` 没有 autofocus 参数；扫码枪连续作业必须额外处理焦点。当前使用 `st.html(..., unsafe_allow_javascript=True)` 定时聚焦带 key 的输入框，并让脚本内容随扫码状态 marker 变化，否则 Streamlit 可能复用相同脚本而不重新执行。
+- 标签页如果默认 `on_change="ignore"`，所有页面会在隐藏状态一起执行，焦点脚本会提前过期。扫码页必须使用 `st.tabs(..., on_change="rerun", key=...)` 并结合 `.open` 只渲染当前标签。
+
+- Streamlit 对同一 key 的 text_input 动态修改 `disabled` 后，浏览器实际 DOM 可能仍保持可编辑。工位操作台改为按状态切换 widget key：`workbench_barcode_input_*` / `disabled_*` / `locked_*`，并用独立 value key `workbench_barcode_<token>_<index>` 保存内容；新 widget key 创建前用 session_state 回填旧值。
+
+- 入线状态删除报 `DELETE /api/ui/product/flow ... 404 Not Found` 时，先检查运行中 FastAPI 的 `/openapi.json` 是否存在该 DELETE 路径。本项目的 `scripts/run_api.ps1` 未启用 reload，后端新增路由后必须重启 8000 服务，否则 Streamlit 页面会调用到旧进程。2026-11-21 已重启并确认路由存在。
+
+- SQLAlchemy `conn.execute(text(...)).fetchone()` 返回 Row；当 SELECT 多列时，不能直接用 `row["column"]` 读取，应使用 `row._mapping["column"]`。2026-11-21 自动解绑逻辑初始化时报 `tuple indices must be integers`，已修正。
+
+- Streamlit selectbox 若用“工序号 · 工序名”作为显示选项，回调中不能直接把选项文本当工序号提交；工位操作台将显示值 `workbench_process_step` 与真实提交值 `workbench_inbound_step_no` 分离。
+
+- 工位操作台扫码焦点脚本不能在每次 rerun 默认聚焦托盘框，也不能在 3 秒内每 100ms 重复 focus。当前只在 `workbench_inbound_focus_key` 明确的扫码流程状态变化时执行，并且成功聚焦一次后立即 clearInterval；浏览器验证数量输入框可保持焦点 1.2 秒不被抢。
