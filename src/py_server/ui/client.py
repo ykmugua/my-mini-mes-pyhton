@@ -11,7 +11,7 @@ import httpx
 
 from .. import config
 
-TIMEOUT_SECONDS = 3.0
+TIMEOUT_SECONDS = 10.0
 
 # session_state key -> HTTP endpoint / params builder
 _FALLBACK: dict[str, Any] = {}

@@ -265,12 +265,14 @@ def test_workbench_page_scans_tray_and_auto_submits(client, workbench_seeded):
         "产品解锁",
     ]
     assert at.selectbox(key="workbench_product_model").value is None
+    assert at.selectbox(key="workbench_process_step").disabled
     assert at.number_input(key="workbench_barcode_columns").value == 2
     at.number_input(key="workbench_barcode_columns").set_value(3).run()
     assert not at.exception, [str(item.value) for item in at.exception]
     at.selectbox(key="workbench_product_model").select("P-1001").run()
     assert not at.exception, [str(item.value) for item in at.exception]
     assert at.selectbox(key="workbench_process_step").value is None
+    assert not at.selectbox(key="workbench_process_step").disabled
     assert not any(
         str(checkbox.key).startswith("workbench_barcode_enabled_")
         for checkbox in at.checkbox

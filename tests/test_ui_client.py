@@ -26,10 +26,10 @@ def test_client_uses_only_http(monkeypatch):
             assert node.module.split(".")[0] not in forbidden
 
 
-def test_client_timeout_is_3s():
+def test_client_timeout_allows_slow_lan():
     from py_server.ui import client
 
-    assert client.TIMEOUT_SECONDS == 3.0
+    assert client.TIMEOUT_SECONDS >= 10.0
 
 
 def test_ui_read_fallback_on_api_error(monkeypatch):

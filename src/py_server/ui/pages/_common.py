@@ -30,6 +30,10 @@ def ensure_master_data() -> bool:
         # 降级：使用页面内已有的占位初始化（若页面自己调用了 initialize_program_state）
         if error:
             st.error(f"⚠️ {error}（主数据可能不是最新）")
+        for key in MASTER_KEYS:
+            st.session_state.setdefault(key, [])
+        st.session_state.setdefault("program_pulls", [])
+        st.session_state.setdefault("program_status_logs", [])
         return False
     for key in MASTER_KEYS:
         if key in data:

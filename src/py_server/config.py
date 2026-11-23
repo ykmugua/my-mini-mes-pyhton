@@ -97,4 +97,6 @@ def ui_api_base() -> str:
     explicit = os.environ.get("MES_UI_API_BASE", "").strip()
     if explicit:
         return explicit.rstrip("/")
-    return api_public_base()
+    # Streamlit 与 FastAPI 默认部署在同一台机器上。走本机回环地址可以避免
+    # 经内网 IP/代理绕行导致 502 和几秒级延迟；设备侧下载地址仍使用 api_public_base。
+    return f"http://127.0.0.1:{api_port()}"

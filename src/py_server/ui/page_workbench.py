@@ -421,6 +421,32 @@ def _render_inbound(
             persist_state="session",
             on_change=_reset_inbound_for_product_change,
         )
+    recipe = None
+    route_options: dict[str, dict] = {}
+    if product_model:
+        try:
+            recipe = client.workbench_recipe(product_model)
+        except ServiceError as exc:
+            st.error(f"读取产品工艺失败：{exc}")
+        if recipe is not None:
+            route_options = {
+                f"{route['step_no']} · {route.get('step_name') or '未命名工序'}": route
+                for route in recipe["steps"]
+                if route.get("tray_models")
+            }
+    with step_column:
+        step_label = st.selectbox(
+            "工序",
+            list(route_options),
+            index=None,
+            placeholder="请选择工序" if product_model else "请先选择产品型号",
+            key=INBOUND_STEP_KEY,
+            persist_state="session",
+            on_change=_reset_inbound_for_step_change,
+            disabled=not product_model or not route_options,
+        )
+        if product_model and recipe is not None and not route_options:
+            st.warning("当前工艺没有配置允许载具型号的工序")
     with columns_column:
         columns_per_row = int(st.number_input(
             "每行条码输入框数量",
@@ -430,33 +456,10 @@ def _render_inbound(
             key=BARCODE_COLUMNS_KEY,
             persist_state="session",
         ))
-    recipe = None
-    if product_model:
-        try:
-            recipe = client.workbench_recipe(product_model)
-        except ServiceError as exc:
-            st.error(f"读取产品工艺失败：{exc}")
     if not product_model or recipe is None:
         return
-    route_options = {
-        f"{route['step_no']} · {route.get('step_name') or '未命名工序'}": route
-        for route in recipe["steps"]
-        if route.get("tray_models")
-    }
     if not route_options:
-        with step_column:
-            st.warning("当前工艺没有配置允许载具型号的工序")
         return
-    with step_column:
-        step_label = st.selectbox(
-            "工序",
-            list(route_options),
-            index=None,
-            placeholder="请选择工序",
-            key=INBOUND_STEP_KEY,
-            persist_state="session",
-            on_change=_reset_inbound_for_step_change,
-        )
     if not step_label:
         st.session_state.pop(INBOUND_STEP_NO_KEY, None)
         return
