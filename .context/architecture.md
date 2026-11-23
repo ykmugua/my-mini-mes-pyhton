@@ -647,3 +647,35 @@
 - 条码单元格用 `、` 拼接同一托盘内的全部产品条码，避免同一托盘重复占多行。
 - 行内删除改为整盘删除；新增 `DELETE /api/ui/product/tray-flow?traycode=...`，在同一事务中删除该托盘全部 `product_overview` 行和各自流转表，保留工件档案与测试报告。
 - 工位操作台专项测试 13 passed；8000/8501 服务重启且 OpenAPI 已验证新接口。
+
+## 45. 托盘操作与产品查询结果隔离（2026-11-23）
+- 托盘手动解绑与 LOCK/END 自动解绑只清除 `product_overview.traycode`，不再向产品流转明细写“托盘解绑/托盘自动解绑”事件，也不覆盖 `last_report_device` / `last_report_note`。
+- 产品查询结果因此只保留测试结果与“手动解锁”等产品解锁事件；托盘操作只在工位操作台的入线状态中表现为托盘消失。
+- 新增 `POST /api/ui/product/repair-tray-report-fields`，用于清理历史数据中被托盘动作覆盖的字段和流转明细；本次已修复 10 条历史记录。
+- 工位操作台专项测试 13 passed；运行接口确认产品查询中托盘相关记录数为 0。
+
+## 46. 产品查询托盘取最后测试上报（2026-11-23）
+- 产品查询结果中的 `traycode` 不再取当前工位绑定，改由 `/api/ui/product/report-traycodes` 按每个条码返回最后测试上报的托盘码。
+- 查询条件中的托盘下拉选项与筛选也按测试上报托盘码处理；工位操作台“正在流转的托盘”仍使用当前绑定关系，两者互不混淆。
+- 新增产品查询展示回归测试；全量测试 143 passed。
+
+## 47. 产品查询按产品型号 + 测试工序直查分库（2026-11-23）
+- 产品查询页新增“测试报告筛选（按工序库）”，支持产品型号、测试工序、条码、托盘、结果筛选。
+- 测试工序选项由 `db_*.db` 和 steps 主数据生成；选择工序后通过 `/api/ui/product/report-query` 直接读取对应 `db_<工序>.db` 的 `report_index`，结果增加 `step_no` 与 `source_db` 列。
+- 原有产品流转查询与追溯/解绑保持不变；全量测试 144 passed。
+
+## 48. 产品查询标签页化与报告行详情（2026-11-23）
+- 产品查询页改为两个标签：产品流转查询、测试报告查询；所有筛选控件与结果留在同一页面。
+- 测试报告查询结果首列为 barcode，并启用 `on_select="single-row"`；选中一行后在下方显示该报告总览字段和对应 details，交互方式与原产品查询的测试履历一致。
+- 报告详情读取时使用结果行携带的 `step_no`，因此明细仍从对应 `db_<工序>.db` 查找。
+- 全量测试 144 passed。
+
+## 49. 测试报告勾选详情修复（2026-11-23）
+- 报告结果表勾选后先用本次 `event.selection` 直接渲染详情，并在 key 变化时 `st.rerun()`；下次 rerun 从 `pq_report_current` 恢复详情，避免 Streamlit 表格勾选状态在重跑时未及时可读导致详情消失。
+- 新增回归测试覆盖选中后显示报告总览和 details；全量测试 144 passed。
+
+## 50. 测试报告查询条件对齐产品流转查询（2026-11-23）
+- 测试报告查询页的筛选排版改为与产品流转查询一致：两行三列，英文标签 `barcode` / `componentcode` / `traycode` / `board_status` / `current_step` / `last_report_device`。
+- 额外增加 `step_no` 选择框用于指定要查询的工序库，如 `db_1.db`；另保留英文 `result` 筛选。
+- 后端报告查询支持 `board_status` / `current_step` / `last_report_device` 过滤，其中 board_status 由测试 result/isfinalreport 映射。
+- 全量测试 144 passed。

@@ -264,3 +264,9 @@ SQLAlchemy 2.1.8 中 `Insert.on_conflict_do_update()` 不再接受 `constraint=`
 - Streamlit selectbox 若用“工序号 · 工序名”作为显示选项，回调中不能直接把选项文本当工序号提交；工位操作台将显示值 `workbench_process_step` 与真实提交值 `workbench_inbound_step_no` 分离。
 
 - 工位操作台扫码焦点脚本不能在每次 rerun 默认聚焦托盘框，也不能在 3 秒内每 100ms 重复 focus。当前只在 `workbench_inbound_focus_key` 明确的扫码流程状态变化时执行，并且成功聚焦一次后立即 clearInterval；浏览器验证数量输入框可保持焦点 1.2 秒不被抢。
+
+- 产品查询是测试结果/产品解锁视图，不能由托盘操作驱动。手动解绑与自动解绑只清 `product_overview.traycode`，不能写 ProductFlow 明细、不能覆盖 `last_report_device` / `last_report_note`；否则产品查询会错误出现“托盘解绑/托盘自动解绑”。历史数据可用 `POST /api/ui/product/repair-tray-report-fields` 修复，产品解锁记录保持不动。
+
+- Streamlit 按钮触发查询后，`st.button` 只在点击当次 rerun 为 True。若表格用 `on_select="rerun"`，勾选会再次 rerun，而按钮已恢复 False；此时若代码 `if not submitted: return`，结果表和 selection 都不会被处理，details 就不会出现。应把查询结果保存到 session_state，并在每次 rerun 都渲染结果表读取 selection。
+
+- 测试报告查询结果表取消勾选时，必须清空 `pq_report_current` 及详情标题缓存，并让详情渲染只使用本次 `event.selection`；不能再从旧 session_state 回退，否则取消勾选后仍显示上一次 details。
