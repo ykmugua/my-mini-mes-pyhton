@@ -679,3 +679,21 @@
 - 额外增加 `step_no` 选择框用于指定要查询的工序库，如 `db_1.db`；另保留英文 `result` 筛选。
 - 后端报告查询支持 `board_status` / `current_step` / `last_report_device` 过滤，其中 board_status 由测试 result/isfinalreport 映射。
 - 全量测试 144 passed。
+
+## 51. 架构决策：测试报告跨库查询逻辑归入 repositories/report_query_store.py
+2026-11-23 整理后端时确认：`api/routers/product_query.py` 不应负责 `db_*.db` 引擎扫描、report_index 明细拼接、筛选、latest traycode 聚合。这些逻辑已统一到 `repositories/report_query_store.py`，路由只保留参数声明和 service/repository 调用。新增结构测试 `test_report_query_orchestration_lives_in_repository` 防止路由层回退到内联 SQL/扫描。
+
+## 52. 架构决策：UI guards/sidebar 薄封装已删除
+`src/py_server/ui/guards.py` 和 `sidebar.py` 仅 re-export `common.can_edit` / `common.render_sidebar`，仓库内无使用点。整理后端时删除这两个空壳，权限与侧边栏统一由 `ui/common.py` 提供；测试 `test_no_unused_ui_thin_wrappers` 防止回退。
+
+## 53. 架构决策：删除旧 app_pages 原型前端与过时 UI 测试
+2026-11-23 清理多余文件：仓库根目录 `app_pages/` 与 `streamlit_app.py` 是被 `src/py_server/ui/pages/` + `src/py_server/streamlit_app.py` 完全替代的旧原型前端（注释中明确“暂未连接 FastAPI”）。依赖它的 `tests/test_device_registration.py`、`test_product_management.py`、`test_program_ui.py`、`test_step_registration.py` 断言旧原型字段/布局，与新页面不一致，已随旧前端一并删除；剩余 AppTest 覆盖新入口与新 UI 页面。清理同时删除了运行期 `logs/`、`.pytest_cache/` 与大部分 `.pytest_tmp*/`，但部分历史临时目录因 Windows 权限（Access is denied）无法删除，已在 .gitignore 中忽略，不影响项目运行。
+
+## 54. 架构决策：测试报告数据库从按工序分库改为单一 TestReport.db
+2026-11-23 把 db_1.db/db_2.db/db_3.db 合并为一个 data/TestReport.db。合并时保留 30 条 report_index（每工序 10 条）和 10 张按条码命名的 SN_ 明细表；新增 report_index.step_no 字段保存原工序归属（按 station TEST-01/02/03 回填 1/2/3）。代码调整：config.report_db_path() 与 engine.get_report_engine() 统一返回 details_db_path / details engine；report_query_store 不再扫描 db_*.db；seed/upload 写 overview 时显式写 step_no；product_query_repo、page_dashboard、report_details_store 同步改为单库与 step_no 过滤。验证：全量测试 113 passed；API 查询 product=L120201091&step_no=1 返回 1 行，source_db=TestReport.db，step_no=1。
+
+## 55. 架构决策：单库内按工序分总览表/明细表
+用户明确要求：不同工序使用不同总览 table，只是数据都放在同一个数据库。实现：`report_index_1`、`report_index_2`、`report_index_3` 等每工序一张总览表；SN 明细表名也加工序前缀，如 `SN_1_<barcode>_<hash16>`，hash 由 `step_no:barcode` 计算，确保同一条码不同工序指向不同 details。`report_details_store` 统一负责表名生成与访问；`list_overview(step_no=...)` 只读对应工序表，`query_reports(step_no=...)` 不再依赖单张大表字段过滤。重建演示数据后验证 step_no=1 报告详情只有 S1_01~S1_10，全量测试 113 passed。
+
+## 56. 架构决策：入站状态删除只释放当前占用，不删除测试数据
+2026-11-23：删除 ProductFlow 入站状态时，同时删除 mes.db.workpieces 中无测试数据的占位工件；如果条码已有 test_results 或任一 report_index_* 报告，则保留工件档案/测试数据，不删除测试报告。手动入站占用判定改为只查 ProductFlow 当前总览，不再用 workpieces 是否存在判断占用，因为 workpieces 也会由测试上报产生。验证：删除 SN202611180001 入站状态后报告数 before=3、after=3，delete status=200；全量测试 115 passed。

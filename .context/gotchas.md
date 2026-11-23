@@ -282,3 +282,6 @@ SQLAlchemy 2.1.8 中 `Insert.on_conflict_do_update()` 不再接受 `constraint=`
 
 ## 21. Gotcha：本机 pytest-of-WL 临时目录可能权限拒绝
 2026-11-23 在 Windows 直接运行 pytest 时，setup 阶段报 `PermissionError: [WinError 5] ... C:\Users\WL\AppData\Local\Temp\pytest-of-WL`。解决：运行 pytest 时传入项目内 `--basetemp`，例如 `--basetemp E:\personal\xqk\my-mini-mes-pyhton\.pytest_tmp_full`。这不是项目代码失败。
+
+## 22. Gotcha：合并测试报告库时必须保留工序来源
+原按工序分库的“工序”信息来自物理文件 db_<step>.db。合并到单库后必须新增/使用 report_index.step_no，否则 query_reports(step_no=...) 无法筛选，筛选框选工序 1 会返回所有工序或空结果。迁移历史数据时可按 station 回填（如 TEST-01→1、TEST-02→2、TEST-03→3），新上报由 upload_test_result_v1 和 seed 显式写入 step_no。
