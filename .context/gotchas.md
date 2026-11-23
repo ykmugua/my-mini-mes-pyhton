@@ -270,3 +270,15 @@ SQLAlchemy 2.1.8 中 `Insert.on_conflict_do_update()` 不再接受 `constraint=`
 - Streamlit 按钮触发查询后，`st.button` 只在点击当次 rerun 为 True。若表格用 `on_select="rerun"`，勾选会再次 rerun，而按钮已恢复 False；此时若代码 `if not submitted: return`，结果表和 selection 都不会被处理，details 就不会出现。应把查询结果保存到 session_state，并在每次 rerun 都渲染结果表读取 selection。
 
 - 测试报告查询结果表取消勾选时，必须清空 `pq_report_current` 及详情标题缓存，并让详情渲染只使用本次 `event.selection`；不能再从旧 session_state 回退，否则取消勾选后仍显示上一次 details。
+
+## 18. Gotcha：Streamlit 用本机内网 IP 调 FastAPI 会绕代理导致 502/慢页面
+2026-11-23 实测：Streamlit 通过 `http://172.130.64.122:8000/api/ui/master` 访问同机 FastAPI 时约 5.5 秒并返回 502；`http://127.0.0.1:8000/api/ui/master` 约 30–90ms 且返回 200。此前 `ui_api_base()` 默认复用 `api_public_base()`，会把设备侧公网/内网地址误用于 UI 服务调用，导致页面加载慢、接口超时降级。当前修复：`ui_api_base()` 未显式设置 `MES_UI_API_BASE` 时固定返回 `http://127.0.0.1:<MES_API_PORT>`；`api_public_base()` 保持不变，供设备下载地址使用。排查方式：分别用 httpx 请求 127.0.0.1 与局域网 IP，对比 status/耗时。
+
+## 19. Gotcha：主数据加载失败时页面必须初始化空列表
+`pages/_common.py::ensure_master_data()` 在 `client.master_snapshot()` 失败时以前只显示错误并返回，不写 session_state；直接读 `st.session_state.devices` / `steps` / `products` 的注册页会抛 `st.session_state has no attribute "devices"`。当前修复：失败分支对所有 MASTER_KEYS 及 `program_pulls`、`program_status_logs` 执行 `setdefault(key, [])`，保证页面显示空表而不是崩溃。
+
+## 20. Gotcha：工位操作台工序框不能按需消失
+`_render_inbound` 以前只有选择产品型号并成功读取工艺后才创建“工序” selectbox，未选型号时该控件不存在，现场看起来像工序框消失。当前实现：在产品型号同一行固定渲染“工序”框；未选型号时 options=[]、disabled=True、placeholder="请先选择产品型号"；选择型号后再加载该型号的 route_options。测试需验证初始时 `workbench_process_step` 存在且 disabled，选择型号后存在且 enabled。
+
+## 21. Gotcha：本机 pytest-of-WL 临时目录可能权限拒绝
+2026-11-23 在 Windows 直接运行 pytest 时，setup 阶段报 `PermissionError: [WinError 5] ... C:\Users\WL\AppData\Local\Temp\pytest-of-WL`。解决：运行 pytest 时传入项目内 `--basetemp`，例如 `--basetemp E:\personal\xqk\my-mini-mes-pyhton\.pytest_tmp_full`。这不是项目代码失败。
