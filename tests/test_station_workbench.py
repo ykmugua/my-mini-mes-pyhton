@@ -191,6 +191,64 @@ def test_workbench_inbound_and_tray_unbind_roundtrip(client, workbench_seeded):
     )
 
 
+def test_delete_inbound_releases_barcode_but_keeps_test_data(client, seeded):
+    barcode = "SN202611180001"
+    before = client.get("/api/ui/product/report-query", params={"barcode": barcode}).json()
+    assert before
+
+    assert client.delete("/api/ui/product/flow", params={"barcode": barcode}).status_code == 200
+    assert client.get("/api/ui/product/flow-overview", params={"barcode": barcode}).json() == []
+
+    after = client.get("/api/ui/product/report-query", params={"barcode": barcode}).json()
+    assert len(after) == len(before)
+
+    client.post(
+        "/api/ui/workbench/tray-unbind",
+        json={"traycode": "T02001", "operator": "工位测试员", "confirmed": True},
+    )
+    reused = client.post(
+        "/api/ui/workbench/inbound",
+        json={
+            "product": "P-1001",
+            "step_no": "1",
+            "traycode": "T02001",
+            "barcodes": [barcode],
+            "operator": "工位测试员",
+        },
+    )
+    assert reused.status_code == 200, reused.text
+
+
+def test_delete_tray_flow_releases_all_barcodes(client, workbench_seeded):
+    client.post(
+        "/api/ui/workbench/tray-unbind",
+        json={"traycode": "T02001", "operator": "工位测试员", "confirmed": True},
+    )
+    barcodes = ["WB-DELETE-001", "WB-DELETE-002"]
+    assert client.post(
+        "/api/ui/workbench/inbound",
+        json={
+            "product": "P-1001",
+            "step_no": "1",
+            "traycode": "T02001",
+            "barcodes": barcodes,
+            "operator": "工位测试员",
+        },
+    ).status_code == 200
+    assert client.delete("/api/ui/product/tray-flow", params={"traycode": "T02001"}).status_code == 200
+    assert client.get("/api/ui/product/flow-overview", params={"traycode": "T02001"}).json() == []
+    assert client.post(
+        "/api/ui/workbench/inbound",
+        json={
+            "product": "P-1001",
+            "step_no": "1",
+            "traycode": "T02001",
+            "barcodes": barcodes,
+            "operator": "工位测试员",
+        },
+    ).status_code == 200
+
+
 def test_workbench_inbound_rejects_more_than_tray_capacity(client, workbench_seeded):
     prepared = client.post(
         "/api/ui/workbench/tray-unbind",
@@ -455,10 +513,9 @@ def test_tag_page_delete_api_removes_entire_tray_status(
             ).scalar()
             assert exists == 0
 
-    # 入线状态删除后，原始工件档案和测试相关数据保持不变。
+    # 入线状态删除后，入站占位被释放；测试相关数据保持不变。
     detail = client.get(f"/api/ui/product/workpiece/{barcodes[0]}/detail")
-    assert detail.status_code == 200
-    assert detail.json()["product"] == "P-1001"
+    assert detail.status_code == 404
 
 
 def test_tag_page_lists_status_without_enabled_and_confirms_delete(

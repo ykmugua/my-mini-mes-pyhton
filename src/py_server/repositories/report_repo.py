@@ -16,8 +16,15 @@ def get_by_request_id(conn: Conn, request_id: str) -> dict | None:
     return dict(row) if row is not None else None
 
 
-def insert_report(conn: Conn, *, report: dict, details: list[dict], report_engine=None) -> int:
-    """插入主表（主库事务）+ 明细（独立库）；返回主表 id。"""
+def insert_report(
+    conn: Conn,
+    *,
+    report: dict,
+    details: list[dict],
+    step_no: str | int | None = None,
+    report_engine=None,
+) -> str:
+    """插入主表（主库事务）+ 明细（单库按工序隔离）；返回明细表名。"""
     conn.execute(eg.test_reports.insert().values(**report))
     report_id = conn.lastrowid
     if report_id is None:
@@ -29,9 +36,10 @@ def insert_report(conn: Conn, *, report: dict, details: list[dict], report_engin
         report_id = int(row[0]) if row is not None else None
     if report_id is None:
         raise RuntimeError("failed to get inserted report id")
-    # 明细写入独立库（每个产品一张表）
-    report_details_store.insert_details(report["barcode"], details, report_engine)
-    return report_id
+    # 明细写入统一 TestReport.db；同一工序内按条码分表
+    return report_details_store.insert_details(
+        report["barcode"], details, step_no=step_no, engine=report_engine
+    )
 
 
 def list_reports(barcode: str, conn: Conn, limit: int = 50, report_engine=None) -> list[dict]:
@@ -44,7 +52,5 @@ def list_reports(barcode: str, conn: Conn, limit: int = 50, report_engine=None) 
     ).fetchall()
     reports = rows_to_dicts(rows)
     for report in reports:
-        # 每条报告按其 station 路由到对应工序库；未注册设备回退默认库
-        eng = report_route.report_engine_for_station(report["station"], conn) if report.get("station") else report_engine
-        report["details"] = report_details_store.list_details(barcode, eng)
+        report["details"] = report_details_store.list_details(barcode, engine=report_engine)
     return reports

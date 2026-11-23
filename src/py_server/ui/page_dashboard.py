@@ -353,40 +353,27 @@ def _apply_stat_range() -> None:
     st.session_state["applied_stat_range"] = (start, end)
 
 
-def _stats_for_range(device_id: str, start: datetime, end: datetime) -> dict:
-    """按生效时间区间，从各工序测试库 report_index 统计该设备的数据。"""
-    from sqlalchemy import text as sql_text
-
-    from .. import config as cfg
-    from .. import engine as eg
+def _stats_for_range(device_id: str, start: datetime, end: datetime, step_no: str | None = None) -> dict:
+    """按生效时间区间，从统一测试报告库 report_index 统计该设备的数据。"""
+    from ..repositories import report_details_store
 
     records: list[dict] = []
-    for path in sorted(cfg.data_dir().glob("db_*.db")):
-        parts = path.stem.split("_", 2)
-        if len(parts) != 3:
+    rows = report_details_store.list_overview(None, step_no=step_no)
+    for row in rows:
+        if str(row.get("station") or "") == str(device_id):
+            pass
+        elif step_no and str(row.get("step_no") or "") == str(step_no):
+            pass
+        else:
             continue
-        eng = eg.get_report_engine(path.stem[3:])
-        try:
-            with eng.connect() as conn:
-                rows = conn.execute(sql_text(
-                    "SELECT barcode, station, testexecutetime, failed_step FROM report_index"
-                )).fetchall()
-        except Exception:
+        ts = _parse_stat_time(str(row.get("testexecutetime") or ""))
+        if ts is None or not (start <= ts <= end):
             continue
-        for row in rows:
-            m = row._mapping if hasattr(row, "_mapping") else None
-            if m is None:
-                continue
-            if str(m["station"]) != str(device_id):
-                continue
-            ts = _parse_stat_time(str(m["testexecutetime"] or ""))
-            if ts is None or not (start <= ts <= end):
-                continue
-            records.append({
-                "barcode": str(m["barcode"] or ""),
-                "ts": ts,
-                "failed": bool(str(m["failed_step"] or "").strip()),
-            })
+        records.append({
+            "barcode": str(row.get("barcode") or ""),
+            "ts": ts,
+            "failed": bool(str(row.get("failed_step") or "").strip()),
+        })
 
     total = len(records)
     fail = sum(1 for r in records if r["failed"])

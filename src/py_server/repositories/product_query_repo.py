@@ -78,20 +78,16 @@ def list_workpieces(
         known.add(barcode)
     # 合并产品流转总览（按条码）
     from . import product_flow_store, report_details_store
-    from .. import config as cfg
-    from .. import engine as eg2
 
     flow_rows = product_flow_store.list_overview()
     flow_by_bc = {r["barcode"]: r for r in flow_rows}
 
-    # 合并测试报告总览（跨所有工序库），用于测试工序筛选
+    # 合并测试报告总览（统一测试报告库），用于测试工序筛选
     report_by_bc: dict[str, dict] = {}
-    for path in sorted(cfg.data_dir().glob("db_*.db")):
-        eng = eg2.get_report_engine(path.stem[3:])
-        for rr in report_details_store.list_overview(None, eng):
-            bc = rr.get("barcode")
-            if bc and bc not in report_by_bc:
-                report_by_bc[bc] = rr
+    for rr in report_details_store.list_overview(None):
+        bc = rr.get("barcode")
+        if bc and bc not in report_by_bc:
+            report_by_bc[bc] = rr
 
     for r in rows:
         bc = r["workpiece"]

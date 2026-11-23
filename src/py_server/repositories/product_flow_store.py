@@ -230,6 +230,17 @@ def list_overview(
         return [dict(row._mapping) for row in result.fetchall()]
 
 
+def rename_componentcode(old_value: str, new_value: str) -> int:
+    """同步更新当前入线总览中的组件号；不修改测试报告。"""
+    ensure_overview_table()
+    with _eng().begin() as conn:
+        result = conn.execute(
+            text("UPDATE product_overview SET componentcode = :new WHERE componentcode = :old"),
+            {"new": new_value, "old": old_value},
+        )
+        return int(result.rowcount or 0)
+
+
 def get_overview_by_barcode(barcode: str) -> dict | None:
     """精确查询单个产品的产品流转总览。"""
     ensure_overview_table()

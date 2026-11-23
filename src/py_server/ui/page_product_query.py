@@ -585,26 +585,30 @@ def render() -> None:
                 with st.container(border=True):
                     st.subheader("测试履历")
                     try:
-                        steps = client.step_options()
+                        history_rows = client.report_index(current)
                     except ServiceError:
-                        steps = []
-                    step_names = [
-                        (str(x.get("step_no")), str(x.get("step_name")))
-                        for x in steps
-                    ]
-                    if step_names:
+                        history_rows = []
+                    try:
+                        steps = {
+                            str(x.get("step_no")): str(x.get("step_name") or "")
+                            for x in client.step_options()
+                        }
+                    except ServiceError:
+                        steps = {}
+                    available_steps = sorted({
+                        str(row.get("step_no") or "")
+                        for row in history_rows
+                        if str(row.get("step_no") or "")
+                    }, key=lambda x: (not x.isdigit(), int(x) if x.isdigit() else x))
+                    if available_steps:
                         hist_tabs = st.tabs(
-                            [f"{no}-{name}" for no, name in step_names]
+                            [f"{no}-{steps.get(no, '')}".rstrip("-") for no in available_steps]
                         )
-                        try:
-                            hist = client.workpiece_history(current)
-                            tests = hist.get("tests", [])
-                        except ServiceError:
-                            tests = []
-                        for idx, (no, _name) in enumerate(step_names):
+                        for idx, no in enumerate(available_steps):
                             with hist_tabs[idx]:
-                                _render_test_history(tests, current, no)
+                                _render_test_history(history_rows, current, no)
                     else:
+                        st.info("当前产品暂无测试履历数据")
                         _render_test_history([], current)
 
             ids = [r["barcode"] for r in results]

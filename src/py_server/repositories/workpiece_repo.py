@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 
 from .. import engine
 from .base import Conn, dialect_insert, rows_to_dicts, with_read_conn
@@ -15,6 +16,24 @@ tr = engine.test_results
 
 def get_workpiece(conn: Conn, workpiece: str) -> Any | None:
     return conn.execute(select(wp).where(wp.c.workpiece == workpiece)).fetchone()
+
+
+def delete_workpiece_if_no_tests(conn: Conn, workpiece: str) -> bool:
+    """删除工件占位记录；仅当该条码没有测试结果/整单报告时执行。"""
+    if conn.execute(select(tr.c.id).where(tr.c.workpiece == workpiece).limit(1)).fetchone():
+        return False
+    report_tables = conn.execute(text(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'report_index_%'"
+    )).fetchall()
+    for (table,) in report_tables:
+        if re.fullmatch(r"report_index_[A-Za-z0-9_]+", table):
+            exists = conn.execute(text(
+                f'SELECT 1 FROM "{table}" WHERE barcode = :bc LIMIT 1'
+            ), {"bc": workpiece}).fetchone()
+            if exists:
+                return False
+    result = conn.execute(wp.delete().where(wp.c.workpiece == workpiece))
+    return bool(result.rowcount)
 
 
 def public_workpiece(conn: Conn, workpiece: str) -> dict:

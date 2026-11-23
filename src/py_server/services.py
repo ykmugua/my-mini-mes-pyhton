@@ -995,9 +995,8 @@ def manual_inbound(
             raise ValidationError(
                 f"载具 {traycode} 最多可填写 {capacity} 个条码"
             )
-        for barcode in cleaned_barcodes:
-            if workpiece_repo.get_workpiece(conn, barcode) is not None:
-                raise ConflictError(f"条码 {barcode} 已存在，不能重复入站")
+        # 工件主表可能由测试上报产生，不能作为“当前入站占用”的判定依据；
+        # 入站占用只看 ProductFlow 当前总览。
 
     for barcode in cleaned_barcodes:
         if product_flow_store.get_overview_by_barcode(barcode) is not None:

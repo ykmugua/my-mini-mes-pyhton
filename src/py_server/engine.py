@@ -378,14 +378,8 @@ def _open_engine(path: Path | str, *, foreign_keys: bool = False) -> Engine:
 
 
 def get_report_engine(step_no: str | int) -> Engine:
-    """按工序获取测试报告库 Engine（db_<工序>_<工序名>.db）。"""
-    path = str(config.report_db_path(step_no))
-    eng = _report_engines.get(path)
-    if eng is None:
-        Path(path).parent.mkdir(parents=True, exist_ok=True)
-        eng = _open_engine(path)
-        _report_engines[path] = eng
-    return eng
+    """获取测试报告库 Engine；所有工序现在共用同一个数据库文件。"""
+    return get_details_engine()
 
 
 def get_product_flow_engine() -> Engine:

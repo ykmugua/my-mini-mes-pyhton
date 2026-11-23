@@ -441,7 +441,7 @@ def render_page() -> None:
         column_config = {
             "选择": st.column_config.CheckboxColumn("选择", default=False, width="small",
                                                    help="勾选后查看该程序历史版本并编辑"),
-            "程序名": st.column_config.TextColumn("程序名", disabled=True, width="medium"),
+            "程序名": st.column_config.TextColumn("程序名", required=True, width="medium"),
             "版本": st.column_config.SelectboxColumn("版本", options=version_options, required=True, width="small"),
             "启用": st.column_config.CheckboxColumn("启用", default=True, width="small"),
             "版本说明": st.column_config.TextColumn("版本说明", width="large"),
@@ -480,30 +480,37 @@ def render_page() -> None:
             with st.container(horizontal=True, horizontal_alignment="left"):
                 if st.button("保存程序修改", icon=":material/save:", key="save_program_edits"):
                     updated = []
-                    for _, row in edited_programs.iterrows():
-                        name = str(row["程序名"])
+                    rename_error = ""
+                    for index, row in edited_programs.iterrows():
+                        original = latest_programs[index]
+                        name = str(row["程序名"]).strip()
                         version = str(row["版本"])
                         desc = str(row["版本说明"] or "")
                         enabled = bool(row["启用"])
-                        for p in programs:
-                            if p["program_name"] == name:
-                                q = dict(p)
-                                if q["program_version"] == version:
-                                    q["version_description"] = desc
-                                    meta = next(
-                                        (v for v in program_versions
-                                         if str(v["program_id"]) == str(q["program_id"])
-                                         and v["program_version"] == version), None,
-                                    )
-                                    if meta:
-                                        q["sha256"] = meta.get("sha256") or q["sha256"]
-                                        q["download_url"] = meta.get("download_url") or q["download_url"]
-                                q["enabled"] = enabled
-                                updated.append(q)
-                    st.session_state.programs = updated
-                    master.save_key("programs")
-                    st.toast("程序修改已保存")
-                    st.rerun()
+                        if not name:
+                            rename_error = "程序名不能为空"
+                            break
+                        q = dict(original)
+                        q["program_name"] = name
+                        if q["program_version"] == version:
+                            q["version_description"] = desc
+                            meta = next(
+                                (v for v in program_versions
+                                 if str(v["program_id"]) == str(q["program_id"])
+                                 and v["program_version"] == version), None,
+                            )
+                            if meta:
+                                q["sha256"] = meta.get("sha256") or q["sha256"]
+                                q["download_url"] = meta.get("download_url") or q["download_url"]
+                        q["enabled"] = enabled
+                        updated.append(q)
+                    if rename_error:
+                        st.error(rename_error)
+                    else:
+                        st.session_state.programs = updated
+                        master.save_key("programs")
+                        st.toast("程序修改已保存")
+                        st.rerun()
 
         # 删除程序（最后一列按钮触发，弹框确认）
         pending = st.session_state.get("pending_program_delete")

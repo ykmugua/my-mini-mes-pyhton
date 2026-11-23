@@ -65,3 +65,19 @@ def test_dashboard_repo_sql_excludes_untrusted():
     src = inspect.getsource(dashboard_repo.snapshot)
     assert "trusted_only=True" in src
     assert "_where(start, end, device, fail_only=True)" in src
+
+
+def test_report_query_orchestration_lives_in_repository():
+    """测试报告跨库扫描/筛选属于 repository；路由只做参数与响应。"""
+    router = (SRC / "api" / "routers" / "product_query.py").read_text(encoding="utf-8")
+    store = (SRC / "repositories" / "report_query_store.py").read_text(encoding="utf-8")
+    assert "report_query_store." in router
+    assert "SELECT " not in router.upper()
+    for name in ("report_engines", "filter_options", "query_reports", "latest_traycodes"):
+        assert f"def {name}" in store
+
+
+def test_no_unused_ui_thin_wrappers():
+    """guards/sidebar 只是无人使用的 re-export，统一由 common 提供。"""
+    assert not (SRC / "ui" / "guards.py").exists()
+    assert not (SRC / "ui" / "sidebar.py").exists()

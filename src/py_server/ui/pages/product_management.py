@@ -67,7 +67,7 @@ def _product_frame(
 def _product_config(*, include_delete: bool) -> dict[str, Any]:
     config: dict[str, Any] = {
         "组件号": st.column_config.TextColumn(
-            "组件号", required=True, disabled=True, width="medium"
+            "组件号", required=True, width="medium"
         ),
         "组件名称": st.column_config.TextColumn("组件名称", required=True, width="medium"),
         "启用": st.column_config.CheckboxColumn("启用", default=True, width="small"),

@@ -35,10 +35,10 @@ def test_product_query_shows_last_test_report_traycode(client, seeded):
     assert row["traycode"] == "T02001"
 
 
-def test_report_query_by_product_and_step_reads_step_db(client, seeded):
+def test_report_query_by_product_and_step_reads_unified_db(client, seeded):
     options = client.get("/api/ui/product/report-filter-options").json()
     step_values = {row["step_no"]: row for row in options["steps"]}
-    assert step_values["1"]["db_name"] == "db_1.db"
+    assert step_values["1"]["db_name"] == "TestReport.db"
     assert "L120201091" in options["products"]
 
     response = client.get(
@@ -48,7 +48,7 @@ def test_report_query_by_product_and_step_reads_step_db(client, seeded):
     assert response.status_code == 200
     rows = response.json()
     assert rows
-    assert {row["source_db"] for row in rows} == {"db_1.db"}
+    assert {row["source_db"] for row in rows} == {"TestReport.db"}
     assert {row["componentcode"] for row in rows} == {"L120201091"}
     assert {row["step_no"] for row in rows} == {"1"}
 

@@ -136,14 +136,14 @@ def seed_test_reports() -> None:
         barcode = f"SN20261118{i:04d}"
         componentcode = f"L1202010{(90 + i):02d}"
         traycode = f"T{2000 + i:05d}"  # 演示托盘码
-        for step_index, (step_no, station) in enumerate(STEP_STATIONS, start=1):
+        for step_index, (step_code, station) in enumerate(STEP_STATIONS, start=1):
             seq += 1
             data = copy.deepcopy(template)
             data["barcode"] = barcode
             data["componentcode"] = componentcode
             data["traycode"] = traycode
             data["station"] = station
-            data["programname"] = f"TEST-DUT-S{step_no}"
+            data["programname"] = f"TEST-DUT-S{step_code}"
             data["programversion"] = f"V0.0.{i}"
             t = base_time + timedelta(minutes=seq * 3, seconds=i)
             data["testexecutetime"] = t.strftime("%Y/%m/%d %H:%M:%S.") + f"{t.microsecond // 1000:03d}"
@@ -153,7 +153,7 @@ def seed_test_reports() -> None:
             for j, item_name in enumerate(TEST_ITEMS):
                 d = copy.deepcopy(template["details"][0])
                 d["TestItem"] = item_name
-                d["TestStep"] = f"S{step_no}_{j + 1:02d}"
+                d["TestStep"] = f"S{step_code}_{j + 1:02d}"
                 d["StandardValue"] = f"{1.00 + j * 0.05:.2f}"
                 d["UpperValue"] = f"{1.20 + j * 0.05:.2f}"
                 d["LowerValue"] = f"{0.80 + j * 0.05:.2f}"
@@ -167,13 +167,14 @@ def seed_test_reports() -> None:
                 details.append(d)
             data["details"] = details
             data["result"] = "FAIL" if any(d["TestResult"] == "false" for d in details) else "PASS"
-            data["isfinalreport"] = "true" if step_no == "3" else "false"
+            data["isfinalreport"] = "true" if step_code == "3" else "false"
 
             report = {k: data[k] for k in (
                 "station", "componentcode", "traycode", "barcode",
                 "programname", "programversion", "testexecutetime",
                 "result", "testlongtime", "isfinalreport"
             )}
+            report["step_no"] = step_code
             report["request_id"] = f"demo{seq:032d}"
             report["created_at"] = t.astimezone(timezone.utc).isoformat(timespec="seconds")
             reports.append((report, details))
@@ -185,32 +186,23 @@ def seed_test_reports() -> None:
         from .repositories import report_details_store, workpiece_repo
 
         report_details_store.drop_all_tables()
-        # 清空每个工序分库的旧报告（drop_all_tables 只清默认库）
-        from . import config as _cfg
-        import glob as _glob
-        for _db in sorted(_cfg.data_dir().glob("db_*.db")):
-            _eng = engine.get_report_engine(_db.stem[3:])
-            with _eng.begin() as _c:
-                _c.execute(text("DROP TABLE IF EXISTS report_index"))
-                _tables = _c.execute(text(
-                    "SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'SN_%'"
-                )).fetchall()
-                for (_t,) in _tables:
-                    _c.execute(text(f'DROP TABLE IF EXISTS "{_t}"'))
-                _seq = _c.execute(text(
-                    "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='sqlite_sequence'"
-                )).scalar()
-                if _seq:
-                    _c.execute(text("DROP TABLE IF EXISTS sqlite_sequence"))
         product_flow_store.reset_all()
         conn.execute(delete(test_reports))
         for report, details in reports:
-            report_engine = report_route.report_engine_for_station(report["station"], conn)
             step_info = report_route.step_for_station(report["station"], conn)
             main_report = {k: v for k, v in report.items() if k != "traycode"}
-            report_repo.insert_report(conn, report=main_report, details=details, report_engine=report_engine)
+            main_report.pop("step_no", None)
+            detail_table = report_repo.insert_report(
+                conn, report=main_report, details=details, step_no=report["step_no"]
+            )
             failed_steps = [d["TestStep"] for d in details if d["TestResult"] == "false"]
-            report_details_store.insert_overview(report, ",".join(failed_steps), report_engine)
+            overview_report = dict(report)
+            report_details_store.insert_overview(
+                overview_report,
+                ",".join(failed_steps),
+                step_no=report["step_no"],
+                details_table=detail_table,
+            )
             # 产品流转库：每个产品三次流转
             if step_info:
                 product_flow_store.upsert_flow(

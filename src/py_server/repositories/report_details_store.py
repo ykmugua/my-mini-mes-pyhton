@@ -1,20 +1,18 @@
-"""生产明细独立库：每个产品/条码一张明细表（物理隔离，id 从 1 开始）。
+"""测试报告详情库：一个 SQLite 文件内按工序分表。
 
-表名 = SN_<条码>_<hash16>，条码中的非法字符用下划线替换。
-所有 SQL 用 SQLAlchemy Core text() + 参数绑定；只允许内部派生的表名。
+总览表：report_index_<安全工序号>，明细表：SN_<条码>_<hash16>。
+不同工序使用不同总览表，避免 details 混在一起；物理文件统一为 TestReport.db。
+所有 SQL 使用 SQLAlchemy Core text() + 参数绑定；表名只允许内部派生格式。
 """
 
 from __future__ import annotations
 
 import hashlib
+import re
 
 from sqlalchemy import text
 
 from .. import engine as eg
-from .base import Conn as MainConn
-
-def _engine_for(engine=None):
-    return engine or eg.get_details_engine()
 
 
 DETAIL_COLUMNS = [
@@ -22,17 +20,71 @@ DETAIL_COLUMNS = [
     "LowerValue", "MeasureValue", "TestResult", "TestBeginTime", "TestEndTime",
 ]
 
+OVERVIEW_COLUMNS = [
+    "id", "station", "componentcode", "traycode", "barcode",
+    "programname", "programversion", "testexecutetime", "testlongtime",
+    "result", "isfinalreport", "failed_step", "details_table",
+]
 
-def detail_table_name(barcode: str) -> str:
-    import re
+_DETAIL_TABLE_RE = re.compile(r"SN_[0-9A-Za-z_]{1,40}_[0-9a-f]{16}")
+_OVERVIEW_TABLE_RE = re.compile(r"report_index_[A-Za-z0-9_]+")
 
+
+def _engine_for(engine=None):
+    return engine or eg.get_details_engine()
+
+
+def safe_step_no(step_no: str | int | None) -> str:
+    value = re.sub(r"[^A-Za-z0-9]", "_", str(step_no or ""))
+    return value or "default"
+
+
+def overview_table_name(step_no: str | int | None) -> str:
+    return f"report_index_{safe_step_no(step_no)}"
+
+
+def detail_table_name(barcode: str, step_no: str | int | None = None) -> str:
     safe = re.sub(r"[^0-9A-Za-z_]", "_", barcode)[:40]
-    digest = hashlib.sha256(barcode.encode("utf-8")).hexdigest()[:16]
-    return f"SN_{safe}_{digest}"
+    identity = f"{step_no or ''}:{barcode}"
+    digest = hashlib.sha256(identity.encode("utf-8")).hexdigest()[:16]
+    step = safe_step_no(step_no)
+    return f"SN_{step}_{safe}_{digest}"
 
 
-def ensure_table(barcode: str, engine=None) -> str:
-    table = detail_table_name(barcode)
+def _overview_ddl() -> str:
+    return """
+        id INTEGER PRIMARY KEY,
+        station TEXT NOT NULL,
+        componentcode TEXT NOT NULL,
+        traycode TEXT NOT NULL DEFAULT '',
+        barcode TEXT NOT NULL,
+        programname TEXT NOT NULL,
+        programversion TEXT NOT NULL,
+        testexecutetime TEXT NOT NULL,
+        testlongtime TEXT NOT NULL,
+        result TEXT NOT NULL DEFAULT '',
+        isfinalreport TEXT NOT NULL DEFAULT 'false',
+        failed_step TEXT NOT NULL DEFAULT '',
+        details_table TEXT NOT NULL
+    """
+
+
+def ensure_overview_table(step_no: str | int | None, engine=None) -> str:
+    table = overview_table_name(step_no)
+    if not _OVERVIEW_TABLE_RE.fullmatch(table):
+        raise ValueError(f"非法总览表名: {table}")
+    with _engine_for(engine).begin() as conn:
+        conn.execute(text(f'CREATE TABLE IF NOT EXISTS "{table}" ({_overview_ddl()})'))
+        conn.execute(text(
+            f'CREATE INDEX IF NOT EXISTS "idx_{table}_barcode" ON "{table}"(barcode)'
+        ))
+    return table
+
+
+def ensure_table(barcode: str, *, step_no: str | int | None = None, engine=None) -> str:
+    table = detail_table_name(barcode, step_no)
+    if not _DETAIL_TABLE_RE.fullmatch(table):
+        raise ValueError(f"非法明细表名: {table}")
     with _engine_for(engine).begin() as conn:
         conn.execute(text(f"""
             CREATE TABLE IF NOT EXISTS "{table}" (
@@ -51,8 +103,8 @@ def ensure_table(barcode: str, engine=None) -> str:
     return table
 
 
-def insert_details(barcode: str, details: list[dict], engine=None) -> None:
-    table = ensure_table(barcode, engine)
+def insert_details(barcode: str, details: list[dict], *, step_no: str | int | None = None, engine=None) -> str:
+    table = ensure_table(barcode, step_no=step_no, engine=engine)
     sql = text(f"""
         INSERT INTO "{table}"
         (TestItem, TestStep, StandardValue, UpperValue, LowerValue,
@@ -62,115 +114,25 @@ def insert_details(barcode: str, details: list[dict], engine=None) -> None:
     """)
     with _engine_for(engine).begin() as conn:
         for d in details:
-            conn.execute(sql, {
-                k: d.get(k, "") for k in DETAIL_COLUMNS if k != "id"
-            })
+            conn.execute(sql, {k: d.get(k, "") for k in DETAIL_COLUMNS if k != "id"})
+    return table
 
 
-def list_details(barcode: str, engine=None) -> list[dict]:
-    table = detail_table_name(barcode)
-    with _engine_for(engine).connect() as conn:
-        result = conn.execute(text(f'SELECT * FROM "{table}" ORDER BY id ASC'))
-        return [dict(row._mapping) for row in result.fetchall()]
-
-
-def drop_product_table(barcode: str) -> None:
-    table = detail_table_name(barcode)
-    with _engine_for(engine).begin() as conn:
-        conn.execute(text(f'DROP TABLE IF EXISTS "{table}"'))
-
-
-def drop_all_tables() -> None:
-    """测试/演示重置用：清空独立明细库中的所有产品表。"""
-    with eg.get_details_engine().begin() as conn:
-        conn.execute(text("DROP TABLE IF EXISTS report_index"))
-        rows = conn.execute(text(
-            "SELECT name FROM sqlite_master WHERE type='table'"
-        )).fetchall()
-        for row in rows:
-            name = row[0]
-            if name == "sqlite_sequence" or name == "report_index":
-                continue
-            if name.startswith("SN_"):
-                conn.execute(text(f'DROP TABLE IF EXISTS "{name}"'))
-        # 删除自增序列残留，保证重建后 id 从 1 开始（表不存在时忽略）
-        seq_exists = conn.execute(text(
-            "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='sqlite_sequence'"
-        )).scalar()
-        if seq_exists:
-            conn.execute(text("DROP TABLE IF EXISTS sqlite_sequence"))
-
-
-# 总览表（details.db 内）：每次整单上报一行，指向该产品的明细表
-OVERVIEW_COLUMNS = [
-    "id", "station", "componentcode", "traycode", "barcode",
-    "programname", "programversion", "testexecutetime", "testlongtime",
-    "result", "isfinalreport", "failed_step", "details_table",
-]
-
-
-_NEW_OVERVIEW_DDL = """
-    id INTEGER PRIMARY KEY,
-    station TEXT NOT NULL,
-    componentcode TEXT NOT NULL,
-    traycode TEXT NOT NULL DEFAULT '',
-    barcode TEXT NOT NULL,
-    programname TEXT NOT NULL,
-    programversion TEXT NOT NULL,
-    testexecutetime TEXT NOT NULL,
-    testlongtime TEXT NOT NULL,
-    result TEXT NOT NULL DEFAULT '',
-    isfinalreport TEXT NOT NULL DEFAULT 'false',
-    failed_step TEXT NOT NULL DEFAULT '',
-    details_table TEXT NOT NULL
-"""
-
-# 目标物理列顺序（与 JSON 字段顺序一致；系统列 id/失败项/关联表按约定位置）
-_OVERVIEW_TARGET_COLS = [c.split()[0] for c in _NEW_OVERVIEW_DDL.strip().splitlines() if c.strip()]
-
-
-def ensure_overview_table(engine=None) -> None:
-    """保证 report_index 存在且物理列顺序与 JSON 约定一致；旧结构自动重建迁移。"""
-    with _engine_for(engine).begin() as conn:
-        exists = conn.execute(text(
-            "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='report_index'"
-        )).scalar()
-        cols = []
-        if exists:
-            cols = [r[1] for r in conn.execute(text("PRAGMA table_info(report_index)")).fetchall()]
-        if cols and cols != _OVERVIEW_TARGET_COLS:
-            # 旧表缺列或顺序不符：备份 -> 重建 -> 迁移 -> 删除旧表
-            conn.execute(text("ALTER TABLE report_index RENAME TO report_index_old"))
-            conn.execute(text(f"CREATE TABLE report_index ({_NEW_OVERVIEW_DDL})"))
-            # 兼容旧表：缺失列填空串
-            def col(name: str, default: str = "''") -> str:
-                return f"COALESCE({name}, {default})" if name in cols else default
-            conn.execute(text(f"""
-                INSERT INTO report_index
-                (id, station, componentcode, traycode, barcode, programname,
-                 programversion, testexecutetime, testlongtime, result,
-                 isfinalreport, failed_step, details_table)
-                SELECT id, {col('station')}, {col('componentcode')},
-                       {col('traycode')}, {col('barcode')}, {col('programname')},
-                       {col('programversion')}, {col('testexecutetime')}, {col('testlongtime')},
-                       {col('result')}, {col('isfinalreport', "'false'")}, {col('failed_step')},
-                       {col('details_table')}
-                FROM report_index_old
-            """))
-            conn.execute(text("DROP TABLE report_index_old"))
-        elif not cols:
-            conn.execute(text(f"CREATE TABLE report_index ({_NEW_OVERVIEW_DDL})"))
-        conn.execute(text(
-            "CREATE INDEX IF NOT EXISTS idx_report_index_barcode ON report_index(barcode)"
-        ))
-
-
-def insert_overview(report: dict, failed_step: str, engine=None) -> int:
-    """写入总览表；details_table 指向该条码的明细表名。"""
-    ensure_overview_table(engine)
-    table = detail_table_name(report["barcode"])
-    sql = text("""
-        INSERT INTO report_index
+def insert_overview(
+    report: dict,
+    failed_step: str,
+    *,
+    step_no: str | int | None = None,
+    details_table: str | None = None,
+    engine=None,
+) -> int:
+    resolved_step = str(step_no if step_no is not None else report.get("step_no") or "")
+    table = ensure_overview_table(resolved_step, engine)
+    detail_table = details_table or detail_table_name(report["barcode"], resolved_step)
+    if not _DETAIL_TABLE_RE.fullmatch(detail_table):
+        raise ValueError(f"非法明细表名: {detail_table}")
+    sql = text(f"""
+        INSERT INTO "{table}"
         (station, componentcode, traycode, barcode, programname, programversion,
          testexecutetime, testlongtime, result, isfinalreport, failed_step, details_table)
         VALUES (:station, :componentcode, :traycode, :barcode, :programname,
@@ -190,27 +152,94 @@ def insert_overview(report: dict, failed_step: str, engine=None) -> int:
             "result": report.get("result", ""),
             "isfinalreport": str(report.get("isfinalreport", "false")),
             "failed_step": failed_step or "",
-            "details_table": table,
+            "details_table": detail_table,
         })
-        result = conn.execute(text("SELECT last_insert_rowid()"))
-        return int(result.scalar())
+        return int(conn.execute(text("SELECT last_insert_rowid()")).scalar())
 
 
-def list_overview(barcode: str | None = None, engine=None) -> list[dict]:
-    ensure_overview_table(engine)
-    with _engine_for(engine).connect() as conn:
-        if barcode:
-            result = conn.execute(
-                text("SELECT * FROM report_index WHERE barcode = :bc ORDER BY id DESC"),
-                {"bc": barcode},
-            )
-        else:
-            result = conn.execute(text("SELECT * FROM report_index ORDER BY id DESC"))
-        return [dict(row._mapping) for row in result.fetchall()]
+def list_overview(
+    barcode: str | None = None,
+    *,
+    step_no: str | int | None = None,
+    engine=None,
+) -> list[dict]:
+    eng = _engine_for(engine)
+    if step_no is not None:
+        table = overview_table_name(step_no)
+        if not _OVERVIEW_TABLE_RE.fullmatch(table):
+            return []
+        with eng.connect() as conn:
+            exists = conn.execute(text(
+                "SELECT count(*) FROM sqlite_master WHERE type='table' AND name=:name"
+            ), {"name": table}).scalar()
+            if not exists:
+                return []
+            if barcode:
+                result = conn.execute(
+                    text(f'SELECT * FROM "{table}" WHERE barcode = :bc ORDER BY id DESC'),
+                    {"bc": barcode},
+                )
+            else:
+                result = conn.execute(text(f'SELECT * FROM "{table}" ORDER BY id DESC'))
+            rows = [dict(row._mapping) for row in result.fetchall()]
+            for row in rows:
+                row["step_no"] = str(step_no)
+            return rows
+
+    rows: list[dict] = []
+    with eng.connect() as conn:
+        tables = [
+            r[0]
+            for r in conn.execute(text(
+                "SELECT name FROM sqlite_master WHERE type='table' "
+                "AND name LIKE 'report_index_%' ORDER BY name"
+            )).fetchall()
+        ]
+        for table in tables:
+            if not _OVERVIEW_TABLE_RE.fullmatch(table):
+                continue
+            if barcode:
+                result = conn.execute(
+                    text(f'SELECT * FROM "{table}" WHERE barcode = :bc ORDER BY id DESC'),
+                    {"bc": barcode},
+                )
+            else:
+                result = conn.execute(text(f'SELECT * FROM "{table}" ORDER BY id DESC'))
+            for row in result.fetchall():
+                item = dict(row._mapping)
+                item["step_no"] = table.removeprefix("report_index_")
+                rows.append(item)
+    return rows
+
+
+def list_details(barcode: str, *, step_no: str | int | None = None, engine=None) -> list[dict]:
+    return list_details_by_table(detail_table_name(barcode, step_no), engine)
 
 
 def list_details_by_table(table: str, engine=None) -> list[dict]:
-    """按表名读取明细（表名必须已校验为 16 位 hex）。"""
+    if not _DETAIL_TABLE_RE.fullmatch(table or ""):
+        return []
     with _engine_for(engine).connect() as conn:
+        exists = conn.execute(text(
+            "SELECT count(*) FROM sqlite_master WHERE type='table' AND name=:name"
+        ), {"name": table}).scalar()
+        if not exists:
+            return []
         result = conn.execute(text(f'SELECT * FROM "{table}" ORDER BY id ASC'))
         return [dict(row._mapping) for row in result.fetchall()]
+
+
+def drop_all_tables() -> None:
+    """测试/演示重置用：清空单库内所有工序总览表和明细表。"""
+    with eg.get_details_engine().begin() as conn:
+        rows = conn.execute(text("SELECT name FROM sqlite_master WHERE type='table'")).fetchall()
+        for (name,) in rows:
+            if name == "sqlite_sequence":
+                continue
+            if _OVERVIEW_TABLE_RE.fullmatch(name) or _DETAIL_TABLE_RE.fullmatch(name) or name == "report_index":
+                conn.execute(text(f'DROP TABLE IF EXISTS "{name}"'))
+        seq_exists = conn.execute(text(
+            "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='sqlite_sequence'"
+        )).scalar()
+        if seq_exists:
+            conn.execute(text("DROP TABLE IF EXISTS sqlite_sequence"))

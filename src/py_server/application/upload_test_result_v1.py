@@ -9,7 +9,7 @@ from __future__ import annotations
 import time
 from datetime import datetime
 
-from .. import config, db
+from .. import config, db, engine as eg
 from ..repositories import product_flow_store, report_details_store, report_repo, report_route, station_repo
 from ..repositories.base import with_conn
 
@@ -85,8 +85,9 @@ def execute(
     device_id = station
     duration = _duration_seconds(payload["testlongtime"])
     now_ts = int(time.time())
-    report_engine = report_route.report_engine_for_station(station)
     step_info = report_route.step_for_station(station)
+    step_no = str(step_info["step_no"]) if step_info else ""
+    report_engine = eg.get_details_engine()
 
     # 复测判定：同一条码主表已有记录即为复测
     with with_conn() as conn:
@@ -141,13 +142,22 @@ def execute(
         }
         for d in details
     ]
+    detail_table = ""
     with with_conn() as conn:
-        report_repo.insert_report(conn, report=report, details=detail_rows, report_engine=report_engine)
+        detail_table = report_repo.insert_report(
+            conn, report=report, details=detail_rows, step_no=step_no, report_engine=report_engine
+        )
     # 总览表（details.db）：failed_step = 失败项 TestStep（成功为空）
     failed_steps = [d["TestStep"] for d in details if d["TestResult"] == "false"]
     overview_report = dict(report)
     overview_report["traycode"] = str(payload.get("traycode") or "")
-    report_details_store.insert_overview(overview_report, ",".join(failed_steps), report_engine)
+    report_details_store.insert_overview(
+        overview_report,
+        ",".join(failed_steps),
+        step_no=step_no,
+        details_table=detail_table,
+        engine=report_engine,
+    )
 
     # 写产品流转库（当前状态 + 流转记录）
     if step_info:

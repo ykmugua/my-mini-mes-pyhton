@@ -165,7 +165,7 @@ def render_page() -> None:
         config = {
             "选择": st.column_config.CheckboxColumn("选择", default=False, width="small",
                                                    help="勾选后在下方查看该工艺详情"),
-            "工艺号": st.column_config.TextColumn("工艺号", required=True, disabled=True, width="medium"),
+            "工艺号": st.column_config.TextColumn("工艺号", required=True, width="medium"),
             "工艺名称": st.column_config.TextColumn("工艺名称", required=True, width="medium"),
             "启用": st.column_config.CheckboxColumn("启用", default=True, width="small"),
             "来源工艺": st.column_config.TextColumn("来源工艺", disabled=True, width="medium"),
@@ -205,7 +205,7 @@ def render_page() -> None:
         if save_clicked and edited is not None:
             new_processes, err = [], None
             seen = set()
-            for _, row in edited.iterrows():
+            for index, row in edited.iterrows():
                 code = _text(row["工艺号"])
                 if not code:
                     continue
@@ -213,6 +213,7 @@ def render_page() -> None:
                     err = "工艺号不能重复"
                     break
                 seen.add(code)
+                original = processes[index]
                 new_processes.append({
                     "process_code": code, "process_name": _text(row["工艺名称"]),
                     "enabled": bool(row["启用"]), "remark": _text(row["备注"]),

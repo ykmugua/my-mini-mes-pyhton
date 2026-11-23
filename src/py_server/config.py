@@ -32,14 +32,13 @@ def db_path() -> Path:
 
 
 def details_db_path() -> Path:
-    """兼容旧配置：默认测试报告库（新设计按工序分库后仅作迁移参考）。"""
+    """测试报告库：所有工序的 report_index 与明细表统一存储在这里。"""
     return _env_path("MES_DETAILS_DB_PATH", data_dir() / "TestReport.db")
 
 
 def report_db_path(step_no: str | int) -> Path:
-    """按工序报告库：db_<工序号>.db（工序号只含字母/数字）。"""
-    safe = re.sub(r"[^A-Za-z0-9]", "_", str(step_no))
-    return data_dir() / f"db_{safe}.db"
+    """兼容旧调用：所有工序共用同一个测试报告库。"""
+    return details_db_path()
 
 
 def product_flow_db_path() -> Path:
