@@ -19,13 +19,13 @@ def _status_text(row: dict) -> str:
     return " ".join(parts)
 
 
-def _result_frame(results: list[dict]) -> pd.DataFrame:
-    """查询结果直接显示 ProductFlow.db 的 product_overview 字段。"""
+def _result_frame(results: list[dict], *, report_trays: dict[str, str]) -> pd.DataFrame:
+    """产品查询的托盘码取最后一次测试上报，不取当前托盘绑定。"""
     return pd.DataFrame([{
         "id": r.get("id") or "",
         "barcode": r.get("barcode") or "",
         "componentcode": r.get("componentcode") or "",
-        "traycode": r.get("traycode") or "",
+        "traycode": report_trays.get(str(r.get("barcode") or ""), ""),
         "board_status": r.get("board_status") or "",
         "current_step": r.get("current_step") or "",
         "last_report_device": r.get("last_report_device") or "",
@@ -34,7 +34,233 @@ def _result_frame(results: list[dict]) -> pd.DataFrame:
     } for r in results])
 
 
+def _report_query_frame(results: list[dict]) -> pd.DataFrame:
+    return pd.DataFrame([{
+        "step_no": r.get("step_no") or "",
+        "source_db": r.get("source_db") or "",
+        "station": r.get("station") or "",
+        "componentcode": r.get("componentcode") or "",
+        "traycode": r.get("traycode") or "",
+        "barcode": r.get("barcode") or "",
+        "programname": r.get("programname") or "",
+        "programversion": r.get("programversion") or "",
+        "testexecutetime": r.get("testexecutetime") or "",
+        "testlongtime": r.get("testlongtime") or "",
+        "result": r.get("result") or "",
+        "isfinalreport": r.get("isfinalreport") or "",
+        "failed_step": r.get("failed_step") or "",
+    } for r in results])
+
+
+def _render_report_query() -> None:
+    """按指定产品型号和测试工序直接查询工序报告库。"""
+    try:
+        options = client.report_filter_options()
+    except ServiceError as exc:
+        st.error(f"读取测试报告筛选项失败：{exc}")
+        return
+
+    def opts(values):
+        return ["全部"] + sorted({str(v) for v in values if v not in (None, "")})
+
+    product_options = opts(options.get("products", []))
+    barcode_options = opts(options.get("barcodes", []))
+    traycode_options = opts(options.get("traycodes", []))
+    device_options = opts(options.get("stations", []))
+    board_status_options = ["全部", "normal", "lock", "final"]
+    result_options = ["全部", "PASS", "FAIL"]
+    steps = options.get("steps", [])
+    step_labels = {
+        row["step_no"]: row["step_no"]
+        for row in steps
+    }
+    step_options = ["全部", *step_labels]
+    display_step_options = [
+        "全部",
+        *[
+            f"{row['step_no']} · {row['step_name'] or row['db_name']}"
+            for row in steps
+        ],
+    ]
+    step_display_to_no = {
+        f"{row['step_no']} · {row['step_name'] or row['db_name']}": row["step_no"]
+        for row in steps
+    }
+
+    with st.container(border=True):
+        st.subheader("查询条件")
+        c1, c2, c3 = st.columns(3)
+        report_barcode = c1.selectbox(
+            "barcode",
+            barcode_options,
+            key="pq_report_barcode",
+            persist_state="session",
+        )
+        report_product = c2.selectbox(
+            "componentcode",
+            product_options,
+            key="pq_report_product",
+            persist_state="session",
+        )
+        report_traycode = c3.selectbox(
+            "traycode",
+            traycode_options,
+            key="pq_report_traycode",
+            persist_state="session",
+        )
+        c4, c5, c6 = st.columns(3)
+        report_board_status = c4.selectbox(
+            "board_status",
+            board_status_options,
+            key="pq_report_board_status",
+            persist_state="session",
+        )
+        report_current_step = c5.selectbox(
+            "current_step",
+            step_options,
+            key="pq_report_current_step",
+            persist_state="session",
+        )
+        report_device = c6.selectbox(
+            "last_report_device",
+            device_options,
+            key="pq_report_last_report_device",
+            persist_state="session",
+        )
+        c7, c8 = st.columns([2, 1])
+        report_step_display = c7.selectbox(
+            "step_no",
+            display_step_options,
+            key="pq_report_step",
+            persist_state="session",
+        )
+        report_result = c8.selectbox(
+            "result",
+            result_options,
+            key="pq_report_result",
+            persist_state="session",
+        )
+        submitted = st.button("🔍 查询", key="pq_report_query_btn")
+
+    if submitted:
+        if report_step_display == "全部" and report_product == "全部":
+            st.info("请选择产品型号或测试工序后查询")
+            return
+        try:
+            rows = client.report_query(
+                product=None if report_product == "全部" else report_product,
+                step_no=step_display_to_no.get(report_step_display),
+                barcode=None if report_barcode == "全部" else report_barcode,
+                traycode=None if report_traycode == "全部" else report_traycode,
+                result=None if report_result == "全部" else report_result,
+                board_status=None if report_board_status == "全部" else report_board_status,
+                current_step=None if report_current_step == "全部" else report_current_step,
+                last_report_device=None if report_device == "全部" else report_device,
+            )
+        except ServiceError as exc:
+            st.error(f"查询测试报告失败：{exc}")
+            return
+        st.session_state["pq_report_rows"] = rows
+        st.session_state.pop("pq_report_current", None)
+
+    rows = st.session_state.get("pq_report_rows", [])
+    if submitted and not rows:
+        st.info("暂无匹配测试报告")
+        return
+    if not rows:
+        return
+
+    event = st.dataframe(
+        _report_query_frame(rows)[[
+            "barcode", "step_no", "source_db", "station", "componentcode",
+            "traycode", "programname", "programversion", "testexecutetime",
+            "result", "isfinalreport", "failed_step",
+        ]],
+        hide_index=True,
+        width="stretch",
+        height=280,
+        alt="按产品型号和测试工序查询的测试报告列表",
+        on_select="rerun",
+        selection_mode="single-row",
+        key="pq_report_result_table",
+    )
+    selection = event.selection.rows if hasattr(event, "selection") else []
+    selected = None
+    if selection:
+        selected = rows[selection[0]]
+        key = f"{selected.get('barcode')}|{selected.get('step_no')}|{selected.get('id')}"
+        st.session_state["pq_report_current"] = key
+    else:
+        st.session_state.pop("pq_report_current", None)
+        st.session_state.pop("pq_report_detail_caption", None)
+        st.session_state.pop("pq_report_details_caption", None)
+        st.session_state.pop("pq_report_details_title_markdown", None)
+    _render_selected_report_detail(selected)
+
+
+def _render_selected_report_detail(selected: dict | None = None) -> None:
+    if selected is None:
+        return
+    barcode = str(selected.get("barcode") or "")
+    step_no = str(selected.get("step_no") or "") or None
+    st.markdown("**测试报告详情**")
+    with st.container(border=True):
+        st.caption(
+            f"条码 {barcode} · 工序 {step_no or '默认'} · "
+            f"来源 {selected.get('source_db') or ''}"
+        )
+        st.session_state["pq_report_detail_caption"] = "选中的测试报告总览"
+        st.dataframe(
+            pd.DataFrame([{
+                "station": selected.get("station") or "",
+                "componentcode": selected.get("componentcode") or "",
+                "traycode": selected.get("traycode") or "",
+                "barcode": selected.get("barcode") or "",
+                "programname": selected.get("programname") or "",
+                "programversion": selected.get("programversion") or "",
+                "testexecutetime": selected.get("testexecutetime") or "",
+                "testlongtime": selected.get("testlongtime") or "",
+                "result": selected.get("result") or "",
+                "isfinalreport": selected.get("isfinalreport") or "",
+                "failed_step": selected.get("failed_step") or "",
+            }]),
+            hide_index=True,
+            width="stretch",
+            alt="选中的测试报告总览",
+        )
+        details_table = str(selected.get("details_table") or "")
+        if not details_table:
+            st.info("该报告暂无 details 表")
+            return
+        try:
+            details = client.report_details(details_table, step_no)
+        except ServiceError as exc:
+            st.error(f"读取测试明细失败：{exc}")
+            return
+        if not details:
+            st.info("该报告暂无明细")
+            return
+        detail_frame = pd.DataFrame(details)
+        if "id" in detail_frame.columns:
+            detail_frame = detail_frame.drop(columns=["id"])
+        detail_frame.insert(0, "序号", range(1, len(detail_frame) + 1))
+        st.session_state["pq_report_details_caption"] = "选中的测试报告明细"
+        st.session_state["pq_report_details_title_markdown"] = "**测试明细 details**"
+        st.markdown(st.session_state["pq_report_details_title_markdown"])
+        st.dataframe(
+            detail_frame,
+            hide_index=True,
+            width="stretch",
+            alt="选中的测试报告明细",
+        )
+
+
 def _render_query() -> list[dict]:
+    try:
+        report_trays = client.latest_report_traycodes()
+    except ServiceError:
+        report_trays = {}
+    st.session_state["pq_report_traycodes"] = report_trays
     with st.container(border=True):
         st.subheader("查询条件")
         # 选项来自产品流转总览表
@@ -45,7 +271,7 @@ def _render_query() -> list[dict]:
         def opts(values):
             return ["全部"] + sorted({str(v) for v in values if v not in (None, "")})
         products = opts([r.get("componentcode") for r in all_wps])
-        traycodes = opts([r.get("traycode") for r in all_wps])
+        traycodes = opts(report_trays.values())
         workpiece_options = opts([r.get("barcode") for r in all_wps])
         device_options = opts(
             [r.get("last_report_device") for r in all_wps]
@@ -69,6 +295,15 @@ def _render_query() -> list[dict]:
     # 结果常驻 session_state：首次进入自动加载全部；之后只在点“查询”时更新
     if "pq_results" not in st.session_state:
         st.session_state["pq_results"] = client.product_flow_overview()
+        st.session_state["pq_results"] = [
+            {
+                **row,
+                "traycode": report_trays.get(
+                    str(row.get("barcode") or ""), ""
+                ),
+            }
+            for row in st.session_state["pq_results"]
+        ]
 
     if query:
         params = {"limit": 200}
@@ -86,12 +321,25 @@ def _render_query() -> list[dict]:
             new_results = client.product_flow_overview(
                 barcode=None if workpiece == "全部" else workpiece,
                 componentcode=None if product == "全部" else product,
-                traycode=None if traycode == "全部" else traycode,
                 device=None if device == "全部" else device,
                 board_status=None if board_status == "全部" else board_status,
                 current_step=None if test_step == "全部" else test_step,
             )
-            st.session_state["pq_results"] = new_results
+            st.session_state["pq_results"] = [
+                {
+                    **row,
+                    "traycode": report_trays.get(
+                        str(row.get("barcode") or ""), ""
+                    ),
+                }
+                for row in new_results
+            ]
+            if traycode != "全部":
+                st.session_state["pq_results"] = [
+                    row
+                    for row in st.session_state["pq_results"]
+                    if row["traycode"] == traycode
+                ]
             # 已选工件若仍在新结果中则保留；否则清掉，避免详情指向旧数据
             current = st.session_state.get("pq_current")
             ids = [r["barcode"] for r in new_results]
@@ -109,7 +357,10 @@ def _render_results(results: list[dict]) -> None:
             st.info("暂无结果，请调整查询条件")
             st.session_state.pop("pq_current", None)
             return
-        frame = _result_frame(results)
+        frame = _result_frame(
+            results,
+            report_trays=st.session_state.get("pq_report_traycodes", {}),
+        )
         event = st.dataframe(
             frame,
             hide_index=True,
@@ -319,38 +570,52 @@ def render() -> None:
     common.render_flash()
     common.render_readonly_notice()
 
-    results = _render_query()
-    _render_results(results)
+    flow_tab, report_tab = st.tabs(
+        ["产品流转查询", "测试报告查询"],
+        key="pq_tabs",
+        on_change="rerun",
+    )
+    if flow_tab.open:
+        with flow_tab:
+            results = _render_query()
+            _render_results(results)
 
-    current = st.session_state.get("pq_current")
-    if current:
-        with st.container(border=True):
-            st.subheader("测试履历")
-            try:
-                steps = client.step_options()
-            except ServiceError:
-                steps = []
-            step_names = [(str(x.get("step_no")), str(x.get("step_name"))) for x in steps]
-            if step_names:
-                hist_tabs = st.tabs([f"{no}-{name}" for no, name in step_names])
-                try:
-                    hist = client.workpiece_history(current)
-                    tests = hist.get("tests", [])
-                except ServiceError:
-                    tests = []
-                for idx, (no, _name) in enumerate(step_names):
-                    with hist_tabs[idx]:
-                        _render_test_history(tests, current, no)
+            current = st.session_state.get("pq_current")
+            if current:
+                with st.container(border=True):
+                    st.subheader("测试履历")
+                    try:
+                        steps = client.step_options()
+                    except ServiceError:
+                        steps = []
+                    step_names = [
+                        (str(x.get("step_no")), str(x.get("step_name")))
+                        for x in steps
+                    ]
+                    if step_names:
+                        hist_tabs = st.tabs(
+                            [f"{no}-{name}" for no, name in step_names]
+                        )
+                        try:
+                            hist = client.workpiece_history(current)
+                            tests = hist.get("tests", [])
+                        except ServiceError:
+                            tests = []
+                        for idx, (no, _name) in enumerate(step_names):
+                            with hist_tabs[idx]:
+                                _render_test_history(tests, current, no)
+                    else:
+                        _render_test_history([], current)
+
+            ids = [r["barcode"] for r in results]
+            if current and current not in ids:
+                st.session_state.pop("pq_current", None)
+                current = None
+            if current:
+                st.divider()
+                _render_detail(current)
             else:
-                _render_test_history([], current)
-
-
-    ids = [r["barcode"] for r in results]
-    if current and current not in ids:
-        st.session_state.pop("pq_current", None)
-        current = None
-    if current:
-        st.divider()
-        _render_detail(current)
-    else:
-        st.info("请点击查询结果中的一行查看追溯详情")
+                st.info("请点击查询结果中的一行查看追溯详情")
+    if report_tab.open:
+        with report_tab:
+            _render_report_query()

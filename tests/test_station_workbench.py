@@ -184,8 +184,11 @@ def test_workbench_inbound_and_tray_unbind_roundtrip(client, workbench_seeded):
         "/api/ui/product/flow-details",
         params={"flow_table": inbound_row["flow_table"]},
     ).json()
-    assert flow[-1]["device"] == "托盘解绑"
-    assert "工位测试员" in flow[-1]["note"]
+    assert all(row["device"] != "托盘解绑" for row in flow)
+    assert inbound_row["last_report_device"] == "手动入站"
+    assert inbound_row["last_report_note"] == (
+        "手动入站（操作员：工位测试员）"
+    )
 
 
 def test_workbench_inbound_rejects_more_than_tray_capacity(client, workbench_seeded):
@@ -603,10 +606,10 @@ def test_terminal_result_auto_unbinds_entire_tray(
         "/api/ui/product/flow-details",
         params={"flow_table": trigger["flow_table"]},
     ).json()
-    assert flow[-1]["device"] == "托盘自动解绑"
-    assert trigger_flow[-1]["note"] == (
-        f"托盘自动解绑（{expected_status.upper()}）"
-    )
+    assert trigger_flow[-1]["device"] == "TEST-03"
+    assert trigger_flow[-1]["note"] in {"test pass", "test fail"}
+    assert all(row["device"] != "托盘自动解绑" for row in trigger_flow)
+    assert all(row["device"] != "托盘自动解绑" for row in flow)
 
 
 def test_tag_page_shows_only_flowing_trays(
@@ -688,6 +691,7 @@ def test_auto_unbind_terminal_trays_cleans_existing_bindings(
     rows = product_flow_store.list_overview(componentcode="P-1001")
     affected = [row for row in rows if row["barcode"] in barcodes]
     assert {row["traycode"] for row in affected} == {""}
-    assert {row["last_report_device"] for row in affected} == {
-        "托盘自动解绑"
-    }
+    assert {row["last_report_device"] for row in affected} == {"手动入站"}
+    assert all(
+        "托盘自动解绑" not in row["last_report_note"] for row in affected
+    )

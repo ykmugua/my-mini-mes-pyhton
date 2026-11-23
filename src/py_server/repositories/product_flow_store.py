@@ -15,7 +15,6 @@ from sqlalchemy import text
 from .. import config, engine as eg
 
 TERMINAL_BOARD_STATUSES = frozenset({"lock", "final"})
-AUTO_UNBIND_DEVICE = "托盘自动解绑"
 
 
 def flow_table_name(barcode: str) -> str:
@@ -183,12 +182,13 @@ def upsert_flow(
                     "note": str(note or ""), "ts": ts, "ft": table,
                 })
         if board_status in TERMINAL_BOARD_STATUSES and effective_traycode:
-            _unbind_tray_in_conn(
-                conn,
-                traycode=effective_traycode,
-                device=AUTO_UNBIND_DEVICE,
-                note=f"托盘自动解绑（{board_status.upper()}）",
-                changed_at=ts,
+            conn.execute(
+                text("""
+                    UPDATE product_overview
+                    SET traycode = ''
+                    WHERE traycode = :tc
+                """),
+                {"tc": effective_traycode},
             )
 
 
@@ -332,11 +332,8 @@ def _unbind_tray_in_conn(
     conn,
     *,
     traycode: str,
-    device: str,
-    note: str,
-    changed_at: str,
 ) -> list[dict]:
-    """在现有事务内解除托盘绑定，并为受影响产品追加流转留痕。"""
+    """仅解除托盘绑定，不写入产品流转或产品查询字段。"""
     affected: list[dict] = []
     rows = conn.execute(
         text("SELECT * FROM product_overview WHERE traycode = :tc ORDER BY id"),
@@ -344,53 +341,86 @@ def _unbind_tray_in_conn(
     ).fetchall()
     for raw in rows:
         row = dict(raw._mapping)
-        table = str(row["flow_table"])
-        if not re.fullmatch(r"F_[0-9A-Za-z_]{1,40}_[0-9a-f]{16}", table):
-            continue
-        conn.execute(text(f"""
-            INSERT INTO "{table}"
-            (board_status, step_no, next_step, device, note, changed_at)
-            VALUES (:board_status, :step_no, '', :device, :note, :changed_at)
-        """), {
-            "board_status": str(row["board_status"]),
-            "step_no": str(row["current_step"]),
-            "device": device,
-            "note": note,
-            "changed_at": changed_at,
-        })
         conn.execute(text("""
             UPDATE product_overview
-            SET traycode = '', last_report_device = :device,
-                last_report_note = :note, updated_at = :changed_at
+            SET traycode = ''
             WHERE barcode = :barcode
         """), {
             "barcode": row["barcode"],
-            "device": device,
-            "note": note,
-            "changed_at": changed_at,
         })
         affected.append(row)
     return affected
 
 
 def unbind_tray(*, traycode: str, operator: str, changed_at: str) -> list[dict]:
-    """解除托盘与当前所有产品的绑定，并为每个产品写一条流转留痕。"""
+    """解除托盘与当前所有产品的绑定，不写入产品流转记录。"""
     ensure_overview_table()
-    ts = normalize_time(changed_at)
     with _eng().begin() as conn:
         return _unbind_tray_in_conn(
             conn,
             traycode=traycode,
-            device="托盘解绑",
-            note=f"托盘解绑（操作员：{operator}）",
-            changed_at=ts,
         )
+
+
+def restore_last_report_from_flow(*, barcode: str, changed_at: str) -> bool:
+    """从产品流转明细恢复被托盘操作覆盖的最近设备/说明。"""
+    ensure_overview_table()
+    table = flow_table_name(barcode)
+    with _eng().begin() as conn:
+        conn.execute(text("""
+            DELETE FROM "{table}"
+            WHERE device IN ('托盘解绑', '托盘自动解绑')
+        """.format(table=table)))
+        row = conn.execute(text("""
+            SELECT device, note, changed_at
+            FROM "{table}"
+            WHERE device NOT IN ('托盘解绑', '托盘自动解绑')
+            ORDER BY id DESC
+            LIMIT 1
+        """.format(table=table))).fetchone()
+        if row is None:
+            return False
+        conn.execute(text("""
+            UPDATE product_overview
+            SET last_report_device = :device,
+                last_report_note = :note,
+                updated_at = :changed_at
+            WHERE barcode = :barcode
+        """), {
+            "barcode": barcode,
+            "device": str(row[0] or ""),
+            "note": str(row[1] or ""),
+            "changed_at": str(row[2] or changed_at),
+        })
+        return True
+
+
+def purge_tray_events_from_flow_details() -> int:
+    """清除历史产品流转明细中的托盘解绑事件，产品解锁事件保留。"""
+    ensure_overview_table()
+    removed = 0
+    with _eng().begin() as conn:
+        rows = conn.execute(
+            text("SELECT barcode, flow_table FROM product_overview")
+        ).fetchall()
+        for raw in rows:
+            table = str(raw._mapping.get("flow_table") or "")
+            barcode = str(raw._mapping.get("barcode") or "")
+            if not re.fullmatch(r"F_[0-9A-Za-z_]{1,40}_[0-9a-f]{16}", table):
+                continue
+            if table != flow_table_name(barcode):
+                continue
+            result = conn.execute(text("""
+                DELETE FROM "{table}"
+                WHERE device IN ('托盘解绑', '托盘自动解绑')
+            """.format(table=table)))
+            removed += result.rowcount or 0
+    return removed
 
 
 def auto_unbind_terminal_trays(*, changed_at: str) -> list[str]:
     """一次性清理规则上线前仍绑定在 LOCK/END 产品上的托盘。"""
     ensure_overview_table()
-    ts = normalize_time(changed_at)
     with _eng().begin() as conn:
         rows = conn.execute(text("""
             SELECT DISTINCT traycode
@@ -403,9 +433,6 @@ def auto_unbind_terminal_trays(*, changed_at: str) -> list[str]:
             _unbind_tray_in_conn(
                 conn,
                 traycode=traycode,
-                device=AUTO_UNBIND_DEVICE,
-                note="托盘自动解绑（LOCK/END）",
-                changed_at=ts,
             )
         return traycodes
 

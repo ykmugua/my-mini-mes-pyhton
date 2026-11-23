@@ -126,6 +126,168 @@ def ui_report_details(
     return []
 
 
+@router.get("/api/ui/product/report-traycodes")
+def ui_report_traycodes() -> list[dict]:
+    """按产品条码返回最后一次测试上报的托盘码（产品查询展示用）。"""
+    from ... import config, engine as eg
+    from ...repositories import report_details_store
+
+    rows: list[dict] = []
+    engines = []
+    for path in sorted(config.data_dir().glob("db_*.db")):
+        engines.append(eg.get_report_engine(path.stem[3:]))
+    engines.append(eg.get_details_engine())
+    for engine in engines:
+        rows.extend(report_details_store.list_overview(None, engine))
+
+    latest: dict[str, tuple[str, str, int]] = {}
+    for row in rows:
+        barcode = str(row.get("barcode") or "")
+        if not barcode:
+            continue
+        key = (
+            str(row.get("testexecutetime") or ""),
+            str(row.get("traycode") or ""),
+            int(row.get("id") or 0),
+        )
+        if barcode not in latest or key > latest[barcode]:
+            latest[barcode] = key
+    return [
+        {"barcode": barcode, "traycode": value[1]}
+        for barcode, value in sorted(latest.items())
+    ]
+
+
+@router.get("/api/ui/product/report-filter-options")
+def ui_report_filter_options() -> dict:
+    """测试报告筛选选项：产品/条码/托盘来自工序报告库。"""
+    import re
+
+    from ... import config, engine as eg
+    from ...repositories import master_data_repo, report_details_store
+
+    products: set[str] = set()
+    barcodes: set[str] = set()
+    traycodes: set[str] = set()
+    stations: set[str] = set()
+    engines = []
+    for path in sorted(config.data_dir().glob("db_*.db")):
+        match = re.fullmatch(r"db_([A-Za-z0-9_]+)\.db", path.name)
+        if match:
+            engines.append((match.group(1), eg.get_report_engine(match.group(1))))
+    default_path = config.details_db_path()
+    if default_path.exists():
+        engines.append(("", eg.get_details_engine()))
+
+    for _, engine in engines:
+        for row in report_details_store.list_overview(None, engine):
+            product = str(row.get("componentcode") or "").strip()
+            barcode = str(row.get("barcode") or "").strip()
+            traycode = str(row.get("traycode") or "").strip()
+            station = str(row.get("station") or "").strip()
+            if product:
+                products.add(product)
+            if barcode:
+                barcodes.add(barcode)
+            if traycode:
+                traycodes.add(traycode)
+            if station:
+                stations.add(station)
+
+    step_names = {
+        str(row.get("step_no") or ""): str(row.get("step_name") or "")
+        for row in master_data_repo.list_steps()
+    }
+    steps = [
+        {
+            "step_no": step_no,
+            "step_name": step_names.get(step_no, ""),
+            "db_name": f"db_{step_no}.db",
+        }
+        for step_no in sorted({step for step, _ in engines} | set(step_names))
+        if step_no
+    ]
+    if default_path.exists():
+        steps.insert(
+            0,
+            {
+                "step_no": "",
+                "step_name": f"默认库（{default_path.name}）",
+                "db_name": default_path.name,
+            },
+        )
+    return {
+        "products": sorted(products),
+        "barcodes": sorted(barcodes),
+        "traycodes": sorted(traycodes),
+        "stations": sorted(stations),
+        "steps": steps,
+    }
+
+
+@router.get("/api/ui/product/report-query")
+def ui_report_query(
+    product: str | None = Query(default=None),
+    step_no: str | None = Query(default=None),
+    barcode: str | None = Query(default=None),
+    traycode: str | None = Query(default=None),
+    result: str | None = Query(default=None),
+    board_status: str | None = Query(default=None),
+    current_step: str | None = Query(default=None),
+    last_report_device: str | None = Query(default=None),
+    limit: int = Query(default=200),
+) -> list[dict]:
+    """按产品型号 + 测试工序直接查询对应工序库的 report_index。"""
+    import re
+
+    from ... import config, engine as eg
+    from ...repositories import report_details_store
+
+    if step_no and not re.fullmatch(r"[A-Za-z0-9_]+", step_no):
+        return []
+    if step_no:
+        engine = eg.get_report_engine(step_no)
+        source_db = config.report_db_path(step_no).name
+    else:
+        engine = eg.get_details_engine()
+        source_db = config.details_db_path().name
+
+    rows = report_details_store.list_overview(barcode, engine)
+    filtered = []
+    for row in rows:
+        if product and str(row.get("componentcode") or "") != product:
+            continue
+        if traycode and str(row.get("traycode") or "") != traycode:
+            continue
+        if result and str(row.get("result") or "") != result:
+            continue
+        if last_report_device and str(row.get("station") or "") != last_report_device:
+            continue
+        item = dict(row)
+        item["step_no"] = step_no or ""
+        item["source_db"] = source_db
+        if current_step and str(item["step_no"]) != str(current_step):
+            continue
+        if board_status:
+            report_result = str(item.get("result") or "")
+            is_final = str(item.get("isfinalreport") or "").lower() == "true"
+            if board_status == "normal" and (report_result != "PASS" or is_final):
+                continue
+            if board_status == "lock" and report_result != "FAIL":
+                continue
+            if board_status == "final" and not is_final:
+                continue
+        filtered.append(item)
+    filtered.sort(
+        key=lambda row: (
+            str(row.get("testexecutetime") or ""),
+            int(row.get("id") or 0),
+        ),
+        reverse=True,
+    )
+    return filtered[:limit]
+
+
 @router.get("/api/ui/product/flow-overview")
 def ui_product_flow_overview(
     barcode: str | None = Query(default=None),
@@ -158,6 +320,11 @@ def ui_delete_product_flow(barcode: str = Query(min_length=1)) -> dict:
 @router.delete("/api/ui/product/tray-flow")
 def ui_delete_tray_flow(traycode: str = Query(min_length=1)) -> dict:
     return services.delete_tray_flow(traycode=traycode)
+
+
+@router.post("/api/ui/product/repair-tray-report-fields")
+def ui_repair_tray_report_fields() -> dict:
+    return services.repair_tray_operation_report_fields()
 
 
 @router.get("/api/ui/product/step-options")

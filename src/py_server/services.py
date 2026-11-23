@@ -1071,3 +1071,22 @@ def delete_tray_flow(*, traycode: str) -> dict:
         "count": len(deleted),
         "barcodes": [str(item["barcode"]) for item in deleted],
     }
+
+
+def repair_tray_operation_report_fields() -> dict:
+    """修复历史托盘操作覆盖的最近设备/说明；产品解锁记录保留。"""
+    from .repositories import product_flow_store
+
+    purged = product_flow_store.purge_tray_events_from_flow_details()
+    rows = product_flow_store.list_overview()
+    repaired = 0
+    for row in rows:
+        device = str(row.get("last_report_device") or "")
+        if device not in {"托盘解绑", "托盘自动解绑"}:
+            continue
+        if product_flow_store.restore_last_report_from_flow(
+            barcode=str(row["barcode"]),
+            changed_at=str(row.get("updated_at") or ""),
+        ):
+            repaired += 1
+    return {"repaired": repaired, "purged_flow_events": purged}

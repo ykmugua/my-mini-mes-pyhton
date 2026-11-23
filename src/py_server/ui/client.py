@@ -252,6 +252,47 @@ def report_index(barcode: str | None = None, step_no: str | None = None) -> list
     return _request("GET", "/api/ui/product/report-index", params=params or None)
 
 
+def report_filter_options() -> dict:
+    return _request("GET", "/api/ui/product/report-filter-options")
+
+
+def report_query(
+    *,
+    product: str | None = None,
+    step_no: str | None = None,
+    barcode: str | None = None,
+    traycode: str | None = None,
+    result: str | None = None,
+    board_status: str | None = None,
+    current_step: str | None = None,
+    last_report_device: str | None = None,
+) -> list[dict]:
+    params = {}
+    if product:
+        params["product"] = product
+    if step_no:
+        params["step_no"] = step_no
+    if barcode:
+        params["barcode"] = barcode
+    if traycode:
+        params["traycode"] = traycode
+    if result:
+        params["result"] = result
+    if board_status:
+        params["board_status"] = board_status
+    if current_step:
+        params["current_step"] = current_step
+    if last_report_device:
+        params["last_report_device"] = last_report_device
+    return _request("GET", "/api/ui/product/report-query", params=params or None)
+
+
+def latest_report_traycodes() -> dict[str, str]:
+    """按条码返回最近一次测试上报的托盘码。"""
+    rows = _request("GET", "/api/ui/product/report-traycodes")
+    return {str(row.get("barcode") or ""): str(row.get("traycode") or "") for row in rows}
+
+
 def report_details(table: str, step_no: str | None = None) -> list[dict]:
     params = {"table": table}
     if step_no:
