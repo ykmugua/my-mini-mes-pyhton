@@ -104,7 +104,7 @@ def seed_test_reports() -> None:
     from .repositories import product_flow_store, report_repo, report_route
     from .repositories.base import with_conn
 
-    template_path = config.PROJECT_ROOT / "design_data" / "MesFormat" / "mesUploadTestDataFormat.json"
+    template_path = config.PROJECT_ROOT / "docs" / "MesFormat" / "mesUploadTestDataFormat.json"
     try:
         template = json.loads(template_path.read_text(encoding="utf-8"))
     except (FileNotFoundError, ValueError):

@@ -9,6 +9,13 @@ import streamlit as st
 
 from . import _common as master
 from ._mock_program_data import enabled_steps
+from .constants import (
+    CREATE_PROCESS_BUTTON,
+    CREATE_PROCESS_SECTION,
+    PAGE_TITLE_PROCESS_CONFIG,
+    PROCESS_LIST_SECTION,
+    SAVE_PROCESS_BUTTON,
+)
 
 
 def _text(value: Any) -> str:
@@ -106,13 +113,13 @@ def render_page() -> None:
     step_nos = [str(s["step_no"]) for s in active_steps]
     component_options = [""] + [str(q["product_model"]) for q in products]
 
-    st.title("⚙️ 工艺配置")
+    st.title(PAGE_TITLE_PROCESS_CONFIG)
 
     # -------------------------------------------------------------------------
     # 区块 1：新增工艺（空白 / 从原有模板中新建）
     # -------------------------------------------------------------------------
     with st.container(border=True):
-        st.subheader("新增工艺")
+        st.subheader(CREATE_PROCESS_SECTION)
         if read_only:
             st.info("只读角色不可新增工艺。")
         else:
@@ -128,7 +135,7 @@ def render_page() -> None:
                 new_remark = c4.text_input("备注", key="new_process_remark", placeholder="可选")
                 new_component = c5.selectbox("绑定组件", options=component_options, key="new_process_component")
                 enabled_text = c6.selectbox("启用", options=["是", "否"], key="new_process_enabled")
-                submitted = st.form_submit_button("添加工艺")
+                submitted = st.form_submit_button(CREATE_PROCESS_BUTTON)
             if submitted:
                 code = new_code.strip()
                 if not code:
@@ -156,7 +163,7 @@ def render_page() -> None:
     # 区块 2：工艺列表（前面勾选框 + 可直接改 + 启用勾选框 + 删除按钮）
     # -------------------------------------------------------------------------
     with st.container(border=True, key="process_list_panel"):
-        st.subheader("工艺列表")
+        st.subheader(PROCESS_LIST_SECTION)
         codes = [p["process_code"] for p in processes]
         st.session_state["_process_codes"] = codes
         frame = pd.DataFrame([{
@@ -204,7 +211,7 @@ def render_page() -> None:
         save_clicked = False
         if not read_only:
             with st.container(horizontal=True, horizontal_alignment="left"):
-                save_clicked = st.button("保存工艺修改", icon=":material/save:", key="save_processes")
+                save_clicked = st.button(SAVE_PROCESS_BUTTON, icon=":material/save:", key="save_processes")
         if not processes:
             st.info("暂无工艺，请新增")
         if save_clicked and edited is not None:

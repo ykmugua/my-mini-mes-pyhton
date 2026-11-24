@@ -8,6 +8,13 @@ import streamlit as st
 from . import client
 from .client import ApiError as ServiceError
 from . import common
+from .pages.constants import (
+    CHECK_INTERLOCK_BUTTON,
+    INTERLOCK_CHECK_SECTION,
+    PAGE_TITLE_INTERLOCK,
+    SAVE_UPSTREAM_RULES_BUTTON,
+    UPSTREAM_RULES_SECTION,
+)
 
 
 def _locked_frame(locked: list[dict]) -> pd.DataFrame:
@@ -125,7 +132,7 @@ def _cell(value) -> str:
 
 def _render_upstream_rules() -> None:
     """执行 render_upstream_rules。"""
-    st.subheader("前道关键设备配置")
+    st.subheader(UPSTREAM_RULES_SECTION)
     st.caption(
         "“前道关键设备”不写死在代码里：在此维护设备的前道依赖，保存后立即生效。"
         "产品型号留空表示对所有产品生效。"
@@ -160,7 +167,7 @@ def _render_upstream_rules() -> None:
             ),
         },
     )
-    if st.button("保存前道规则", disabled=not common.can_edit()):
+    if st.button(SAVE_UPSTREAM_RULES_BUTTON, disabled=not common.can_edit()):
         rows = []
         for record in edited.to_dict("records"):
             product = _cell(record.get("产品型号"))
@@ -186,14 +193,14 @@ def _render_upstream_rules() -> None:
 
 def _render_interlock_check() -> None:
     """执行 render_interlock_check。"""
-    st.subheader("放行状态自检")
+    st.subheader(INTERLOCK_CHECK_SECTION)
     st.caption("现场调试时可直接模拟设备查询，检查规则是否按预期放行。")
     with st.form("interlock_check_form"):
         col1, col2, col3 = st.columns(3)
         workpiece = col1.text_input("工件码", key="check_workpiece")
         device = col2.text_input("设备 ID", key="check_device")
         product = col3.text_input("产品型号（可选）", key="check_product")
-        submitted = st.form_submit_button("查询放行状态")
+        submitted = st.form_submit_button(CHECK_INTERLOCK_BUTTON)
     if not submitted:
         return
     try:
@@ -214,7 +221,7 @@ def _render_interlock_check() -> None:
 
 def render() -> None:
     """执行 render。"""
-    st.title("🔒 工序锁")
+    st.title(PAGE_TITLE_INTERLOCK)
     st.caption(
         "规则：① 前道关键设备无 PASS 记录 → 拒绝启动；② FAIL 工件后续设备拦截；"
         "③ 程序版本/校验和不一致 → 结果不可信且禁止放行。"

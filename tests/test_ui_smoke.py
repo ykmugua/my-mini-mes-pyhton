@@ -30,7 +30,7 @@ def _run(page_file: str | Path) -> AppTest:
 def test_main_app_renders_with_drift_alert(seeded):
     """主入口默认页（产线监控看板）可正常渲染。"""
     at = _run(MAIN_APP)
-    assert at.title[0].value == "产线测试工站监控｜设备主动上报"
+    assert at.title[0].value == "产线测试工站监控"
 
 
 def test_program_page_editor_and_metrics(seeded):
@@ -39,7 +39,7 @@ def test_program_page_editor_and_metrics(seeded):
     assert labels == ["绑定关系", "版本漂移告警", "可生产设备"]
     assert at.metric[0].value == "5"
     buttons = {button.label: button for button in at.button}
-    assert buttons["💾 保存绑定关系"].disabled is False
+    assert buttons["保存程序绑定关系"].disabled is False
     assert buttons["发布并更新绑定"].disabled is False
 
 
@@ -69,7 +69,7 @@ def test_interlock_unlock_from_page(seeded):
 def test_dashboard_metrics_and_untrusted_warning(seeded):
     """新看板：读 Redis 配置渲染设备卡片；无数据时显示禁用样式。"""
     at = _run(UI_DIR / "dashboard_app.py")
-    assert at.title[0].value == "产线测试工站监控｜设备主动上报"
+    assert at.title[0].value == "产线测试工站监控"
     # autorefresh 在 AppTest 下会中断脚本，只验证标题渲染成功即可
 
 

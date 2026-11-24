@@ -179,17 +179,24 @@ def test_workbench_inbound_and_tray_unbind_roundtrip(client, workbench_seeded):
     ).json()
     assert remaining == []
     rows = client.get("/api/ui/product/flow-overview").json()
-    inbound_row = next(row for row in rows if row["barcode"] == barcodes[0])
-    assert inbound_row["traycode"] == ""
-    flow = client.get(
-        "/api/ui/product/flow-details",
-        params={"flow_table": inbound_row["flow_table"]},
-    ).json()
-    assert all(row["device"] != "托盘解绑" for row in flow)
-    assert inbound_row["last_report_device"] == "手动入站"
-    assert inbound_row["last_report_note"] == (
-        "手动入站（操作员：工位测试员）"
+    assert all(row["barcode"] not in barcodes for row in rows)
+
+    from py_server.repositories import product_flow_store
+
+    history = product_flow_store.list_flow(product_flow_store.flow_table_name(barcodes[0]))
+    assert any(row["device"] == "托盘解绑" for row in history)
+
+    reused = client.post(
+        "/api/ui/workbench/inbound",
+        json={
+            "product": "P-1001",
+            "step_no": "1",
+            "traycode": "T02001",
+            "barcodes": [barcodes[0]],
+            "operator": "工位测试员",
+        },
     )
+    assert reused.status_code == 200, reused.text
 
 
 def test_delete_inbound_releases_barcode_but_keeps_test_data(client, seeded):
@@ -316,7 +323,7 @@ def test_workbench_page_scans_tray_and_auto_submits(client, workbench_seeded):
         default_timeout=90,
     ).run()
     assert not at.exception, [str(item.value) for item in at.exception]
-    assert at.title[0].value == "🛠️ 工位操作台"
+    assert at.title[0].value == "工位操作台"
     assert [item.label for item in at.tabs] == [
         "手动入站",
         "入线状态",
@@ -545,70 +552,21 @@ def test_tag_page_lists_status_without_enabled_and_confirms_delete(
     at.session_state["workbench_tabs"] = "入线状态"
     at.run()
     assert not at.exception, [str(item.value) for item in at.exception]
-    assert at.title[0].value == "🛠️ 工位操作台"
+    assert at.title[0].value == "工位操作台"
     assert len(at.dataframe) == 1
     assert list(at.dataframe[0].value.columns) == [
         "载具号",
         "条码数量",
         "产品条码",
-        "产品型号",
-        "状态",
         "当前工序",
-        "最近设备",
-        "最近说明",
-        "更新时间",
-        "删除",
     ]
-    assert "启用" not in at.dataframe[0].value.columns
     assert len(at.dataframe[0].value) == 1
     page_row = at.dataframe[0].value.iloc[0]
     assert page_row["载具号"] == "T02001"
     assert page_row["条码数量"] == 2
     assert set(str(page_row["产品条码"]).split("、")) == set(barcodes)
 
-    column_config = json.loads(at.dataframe[0].proto.columns)
-    assert column_config["删除"]["type_config"]["type"] == "button"
-
-    at.session_state["pending_tag_page_delete"] = "T02001"
-    at.run()
-    assert not at.exception, [str(item.value) for item in at.exception]
-    assert any("确定删除托盘" in item.value for item in at.markdown)
-    at.button(key="confirm_tag_page_delete").click().run()
-    assert not at.exception, [str(item.value) for item in at.exception]
-
-    remaining = client.get(
-        "/api/ui/product/flow-overview",
-        params={"traycode": "T02001"},
-    ).json()
-    assert remaining == []
-
-
-def test_tag_page_hides_delete_for_read_only_role(client, workbench_seeded):
-    inbound = client.post(
-        "/api/ui/workbench/inbound",
-        json={
-            "product": "P-1001",
-            "step_no": "1",
-            "traycode": "T02001",
-            "barcodes": ["TAG-READONLY-0001"],
-            "operator": "入线状态测试员",
-        },
-    )
-    assert inbound.status_code == 200, inbound.text
-
-    at = AppTest.from_file(
-        str(UI_DIR / "workbench_app.py"),
-        default_timeout=90,
-    )
-    at.session_state["mes_role"] = "只读"
-    at.run()
-    at.session_state["workbench_tabs"] = "入线状态"
-    at.run()
-
-    assert not at.exception, [str(item.value) for item in at.exception]
     assert "删除" not in at.dataframe[0].value.columns
-    assert "启用" not in at.dataframe[0].value.columns
-    assert any("当前为只读模式" in item.value for item in at.info)
 
 
 @pytest.mark.parametrize(
@@ -717,7 +675,6 @@ def test_tag_page_shows_only_flowing_trays(
     assert page_row["载具号"] == "T02002"
     assert page_row["条码数量"] == 1
     assert page_row["产品条码"] == bound
-    assert page_row["状态"] == "NORMAL"
     assert ending not in str(page_row["产品条码"])
     assert sibling not in str(page_row["产品条码"])
 

@@ -94,7 +94,7 @@ x-timestamp = floor(当前毫秒时间戳 / 1000) * 1000     // 结果仍为 13 
 
 ### 3.2 顶层字段
 
-字段顺序与 `design_data/MesFormat/mesUploadTestDataFormat.json` 保持一致。
+字段顺序与 `docs/MesFormat/mesUploadTestDataFormat.json` 保持一致。
 
 | 字段                |  类型  |     必填     | 示例                             | 说明                                         |
 | ------------------- | :----: | :----------: | -------------------------------- | -------------------------------------------- |

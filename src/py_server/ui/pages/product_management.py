@@ -181,7 +181,6 @@ def render_page() -> None:
     # 区块 1：新增组件
     # -----------------------------------------------------------------------------
     with st.container(border=True):
-        st.subheader("组件管理")
         if read_only:
             with st.expander(CREATE_COMPONENT_SECTION, expanded=False):
                 st.info("只读角色不可新增组件。")

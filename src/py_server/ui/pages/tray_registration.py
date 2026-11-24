@@ -153,7 +153,6 @@ def render_page() -> None:
 
     # 区块 1：新增载具（折叠表单）
     with st.container(border=True):
-        st.subheader("载具管理")
         if read_only:
             with st.expander(CREATE_TRAY_SECTION, expanded=False):
                 st.info("只读角色不可新增载具。")

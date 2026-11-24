@@ -8,6 +8,12 @@ import streamlit as st
 from .. import config
 from . import client, common
 from .client import ApiError as ServiceError
+from .pages.constants import (
+    PAGE_TITLE_PRODUCT_QUERY,
+    QUERY_BUTTON,
+    QUERY_CONDITIONS_SECTION,
+    QUERY_RESULTS_SECTION,
+)
 
 STATUS_OPTIONS = ["全部", "PENDING", "PASS", "FAIL"]
 
@@ -91,7 +97,7 @@ def _render_report_query() -> None:
     }
 
     with st.container(border=True):
-        st.subheader("查询条件")
+        st.subheader(QUERY_CONDITIONS_SECTION)
         c1, c2, c3 = st.columns(3)
         report_barcode = c1.selectbox(
             "barcode",
@@ -143,7 +149,7 @@ def _render_report_query() -> None:
             key="pq_report_result",
             persist_state="session",
         )
-        submitted = st.button("🔍 查询", key="pq_report_query_btn")
+        submitted = st.button(QUERY_BUTTON, key="pq_report_query_btn", icon=":material/search:")
 
     if submitted:
         if report_step_display == "全部" and report_product == "全部":
@@ -267,7 +273,7 @@ def _render_query() -> list[dict]:
         report_trays = {}
     st.session_state["pq_report_traycodes"] = report_trays
     with st.container(border=True):
-        st.subheader("查询条件")
+        st.subheader(QUERY_CONDITIONS_SECTION)
         # 选项来自产品流转总览表
         try:
             all_wps = client.product_flow_overview()
@@ -296,7 +302,7 @@ def _render_query() -> list[dict]:
         board_status = c4.selectbox("board_status", board_status_options, key="pq_board_status")
         test_step = c5.selectbox("current_step", test_step_options, key="pq_test_step")
         device = c6.selectbox("last_report_device", device_options, key="pq_device")
-        query = st.button("🔍 查询", key="pq_query_btn")
+        query = st.button(QUERY_BUTTON, key="pq_query_btn", icon=":material/search:")
 
     # 结果常驻 session_state：首次进入自动加载全部；之后只在点“查询”时更新
     if "pq_results" not in st.session_state:
@@ -359,7 +365,7 @@ def _render_query() -> list[dict]:
 def _render_results(results: list[dict]) -> None:
     """执行 render_results。"""
     with st.container(border=True):
-        st.subheader("查询结果")
+        st.subheader(QUERY_RESULTS_SECTION)
         if not results:
             st.info("暂无结果，请调整查询条件")
             st.session_state.pop("pq_current", None)
@@ -574,7 +580,7 @@ def _render_detail(wp_id: str) -> None:
 
 def render() -> None:
     """执行 render。"""
-    st.title("🔎 产品查询｜追溯与解绑")
+    st.title(PAGE_TITLE_PRODUCT_QUERY)
     st.caption("按产品/工件/状态/时间查询工件，点击结果行查看追溯详情，并对锁定工件执行人工解绑放行。")
     common.render_flash()
     common.render_readonly_notice()

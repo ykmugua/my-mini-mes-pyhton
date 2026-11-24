@@ -3,12 +3,18 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 from .repositories import master_data_repo
 from .repositories.base import with_conn
 
-_DATA_FILE = Path(__file__).with_name("master_data.json")
+def _data_file() -> Path:
+    """返回当前进程使用的主数据种子文件。"""
+    override = os.getenv("MES_MASTER_SEED_FILE")
+    if override:
+        return Path(override)
+    return Path(__file__).with_name("master_data.json")
 _KEYS = (
     "steps", "devices", "trays", "programs", "program_versions",
     "products", "processes", "process_routes", "process_step_resources",
@@ -17,7 +23,7 @@ _KEYS = (
 
 def seed_master_data() -> None:
     """写入主数据演示数据（整体替换）。"""
-    data = json.loads(_DATA_FILE.read_text(encoding="utf-8"))
+    data = json.loads(_data_file().read_text(encoding="utf-8"))
     with with_conn() as conn:
         master_data_repo.replace_steps(conn, data["steps"])
         master_data_repo.replace_devices(conn, data["devices"])

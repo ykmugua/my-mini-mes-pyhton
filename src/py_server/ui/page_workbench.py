@@ -9,6 +9,7 @@ import streamlit as st
 
 from . import client, common, tag_page
 from .client import ApiError as ServiceError
+from .pages.constants import PAGE_TITLE_WORKBENCH
 
 INBOUND_TRAY_KEY = "workbench_inbound_active_tray"
 INBOUND_CAPACITY_KEY = "workbench_inbound_capacity"
@@ -23,6 +24,9 @@ TRAY_INPUT_KEY = "workbench_inbound_tray_input"
 BARCODE_COLUMNS_KEY = "workbench_barcode_columns"
 UNLOCK_ERROR_KEY = "workbench_unlock_error"
 UNLOCK_TOKEN_KEY = "workbench_unlock_token"
+UNBIND_SCAN_KEY = "workbench_unbind_scan"
+UNBIND_TOKEN_KEY = "workbench_unbind_token"
+UNBIND_PENDING_KEY = "workbench_unbind_pending"
 
 
 def _text(value: Any) -> str:
@@ -63,6 +67,31 @@ def _bound_product_frame(rows: list[dict]) -> pd.DataFrame:
         ],
         columns=["条码", "当前工序"],
     )
+
+
+def _handle_unbind_scan() -> None:
+    """扫描载具号后记录待解绑托盘。"""
+    traycode = str(st.session_state.get(UNBIND_SCAN_KEY) or "").strip()
+    st.session_state[UNBIND_SCAN_KEY] = ""
+    if not traycode:
+        return
+    try:
+        rows = client.product_flow_overview(traycode=traycode)
+    except ServiceError as exc:
+        st.session_state[UNBIND_PENDING_KEY] = ""
+        st.error(f"读取托盘绑定失败：{exc}")
+        return
+    if not rows:
+        st.session_state[UNBIND_PENDING_KEY] = ""
+        st.error(f"载具 {traycode} 当前没有绑定产品")
+        return
+    st.session_state[UNBIND_PENDING_KEY] = traycode
+    st.session_state[UNBIND_TOKEN_KEY] = int(st.session_state.get(UNBIND_TOKEN_KEY, 0)) + 1
+
+
+def _clear_unbind_pending() -> None:
+    """关闭确认弹窗时清空待解绑托盘。"""
+    st.session_state[UNBIND_PENDING_KEY] = ""
 
 
 def _focus_scan_input(
@@ -269,6 +298,16 @@ def _submit_or_focus_next_barcode(
             str(st.session_state.get(text_key) or "").strip()
             for _, text_key in enabled_slots
         ]
+        if not all(barcodes):
+            missing_indexes = [
+                str(index)
+                for (index, text_key), barcode in zip(enabled_slots, barcodes)
+                if not barcode
+            ]
+            st.session_state[INBOUND_ERROR_KEY] = (
+                f"还有未填写的条码槽位：{'、'.join(missing_indexes)}"
+            )
+            return
         if len({barcode.casefold() for barcode in barcodes}) != len(barcodes):
             st.session_state[INBOUND_ERROR_KEY] = "启用的条码不能重复"
             return
@@ -289,7 +328,8 @@ def _submit_or_focus_next_barcode(
             return
         st.session_state[INBOUND_SUBMITTED_KEY] = True
         st.session_state[INBOUND_MESSAGE_KEY] = (
-            f"载具 {result['traycode']} 的 {result['count']} 个产品已入站"
+            f"载具 {result['traycode']} 的 {result['count']} 个产品已入站："
+            f"{'、'.join(result['barcodes'])}"
         )
         st.session_state.pop(INBOUND_ERROR_KEY, None)
         st.session_state[INBOUND_FOCUS_KEY] = TRAY_INPUT_KEY
@@ -610,59 +650,50 @@ def _render_inbound(
 
 def _render_tray_unbind(*, trays: list[dict], read_only: bool) -> None:
     """执行 render_tray_unbind。"""
-    tray_options = [str(tray["traycode"]) for tray in trays]
-    if not tray_options:
-        st.info("暂无已注册载具。")
-        return
-    traycode = st.selectbox(
-        "载具号",
-        tray_options,
-        key="workbench_unbind_traycode",
-    )
-    try:
-        bound_rows = client.product_flow_overview(traycode=traycode)
-    except ServiceError as exc:
-        st.error(f"读取托盘绑定失败：{exc}")
-        return
-    if not bound_rows:
-        st.info(f"载具 {traycode} 当前未绑定产品。")
-        return
-    st.caption(
-        f"当前绑定 {len(bound_rows)} 个产品 · "
-        f"操作员 {common.operator() or '未填写'}"
-    )
-    with st.expander("查看绑定产品", expanded=False):
-        st.dataframe(
-            _bound_product_frame(bound_rows),
-            hide_index=True,
-            alt="待解绑托盘产品列表",
-        )
-    confirmed = st.checkbox(
-        "确认解除该托盘与全部产品的绑定",
-        key="workbench_unbind_confirm",
+    st.text_input(
+        "扫描托盘码",
+        key=UNBIND_SCAN_KEY,
+        placeholder="扫描已绑定托盘码后回车",
+        on_change=_handle_unbind_scan,
         disabled=read_only,
     )
-    if st.button(
-        "确认解绑托盘",
-        type="secondary",
-        icon=":material/link_off:",
-        key="workbench_unbind_submit",
-        disabled=read_only,
-    ):
-        try:
-            result = client.unbind_tray(
-                traycode=traycode,
-                operator=common.operator(),
-                confirmed=confirmed,
+    pending_traycode = str(st.session_state.get(UNBIND_PENDING_KEY) or "")
+    if not pending_traycode:
+        return
+    if read_only:
+        st.session_state[UNBIND_PENDING_KEY] = ""
+        return
+    _confirm_tray_unbind(pending_traycode)
+
+
+@st.dialog(
+    "确认解绑托盘",
+    icon=":material/link_off:",
+    on_dismiss=_clear_unbind_pending,
+)
+def _confirm_tray_unbind(traycode: str) -> None:
+    """确认后解除托盘与全部产品的绑定。"""
+    st.write(f"确定解绑托盘 **{traycode}** 绑定的全部产品吗？")
+    with st.container(horizontal=True, horizontal_alignment="left"):
+        if st.button("取消", key="workbench_unbind_cancel"):
+            st.session_state[UNBIND_PENDING_KEY] = ""
+            st.rerun()
+        if st.button("确认解绑", type="primary", key="workbench_unbind_confirm"):
+            try:
+                result = client.unbind_tray(
+                    traycode=traycode,
+                    operator=common.operator(),
+                    confirmed=True,
+                )
+            except ServiceError as exc:
+                st.error(f"托盘解绑失败：{exc}")
+                return
+            st.session_state[UNBIND_PENDING_KEY] = ""
+            common.flash(
+                "success",
+                f"载具 {result['traycode']} 已解绑 {result['count']} 个产品。",
             )
-        except ServiceError as exc:
-            st.error(f"托盘解绑失败：{exc}")
-            return
-        common.flash(
-            "success",
-            f"载具 {result['traycode']} 已解绑 {result['count']} 个产品。",
-        )
-        st.rerun()
+            st.rerun()
 
 
 def _render_product_unlock(*, steps: list[dict], read_only: bool) -> None:
@@ -699,7 +730,7 @@ def _render_product_unlock(*, steps: list[dict], read_only: bool) -> None:
 def render() -> None:
     """执行 render。"""
     common.init_session()
-    st.title("🛠️ 工位操作台")
+    st.title(PAGE_TITLE_WORKBENCH)
     st.caption("现场工位的一站式操作：扫码入站、查看入线状态、托盘解绑、扫码解锁。")
     common.render_flash()
     common.render_readonly_notice()

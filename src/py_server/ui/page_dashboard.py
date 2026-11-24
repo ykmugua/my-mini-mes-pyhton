@@ -13,6 +13,18 @@ import streamlit as st
 from streamlit_sortables import sort_items
 
 from . import client
+from .pages.constants import (
+    ADD_MONITOR_DEVICE_BUTTON,
+    DISPLAY_SETTINGS_SECTION,
+    MONITOR_DEVICE_SECTION,
+    PAGE_TITLE_DASHBOARD,
+    QUERY_BUTTON,
+    SELECT_DEVICE_LABEL,
+    SELECT_PROCESS_LABEL,
+    SELECT_PROCESS_PLACEHOLDER,
+    SAVE_MONITOR_DEVICES_BUTTON,
+    STEP_FILTER_LABEL,
+)
 
 DEFAULT_COLS = 6
 refresh_interval = 1000
@@ -114,6 +126,86 @@ def _step_names() -> dict:
         return {str(d["step_no"]): d.get("step_name") or str(d["step_no"]) for d in client.master_list("steps")}
     except Exception:
         return {}
+
+
+def _process_options() -> dict[str, str]:
+    """按工艺配置返回工艺 label 到工艺号的映射。"""
+    from . import client
+    try:
+        snapshot = client.master_snapshot()[0] or {}
+    except Exception:
+        return {}
+    options: dict[str, str] = {}
+    for process in snapshot.get("processes", []) or []:
+        if not process.get("enabled", True):
+            continue
+        code = str(process.get("process_code") or "")
+        if not code:
+            continue
+        name = str(process.get("process_name") or code)
+        options[f"{code} - {name}"] = code
+    return dict(sorted(options.items()))
+
+
+def _process_step_map(process_code: str) -> list[tuple[str, str]]:
+    """返回指定工艺的工序列表：(工序号, 工序名)。"""
+    from . import client
+    try:
+        snapshot = client.master_snapshot()[0] or {}
+    except Exception:
+        return []
+    step_names = {
+        str(step.get("step_no")): str(step.get("step_name") or step.get("step_no") or "")
+        for step in snapshot.get("steps", [])
+    }
+    steps: list[tuple[str, str]] = []
+    seen: set[str] = set()
+    for route in snapshot.get("process_routes", []) or []:
+        if str(route.get("process_code") or "") != process_code:
+            continue
+        step_no = str(route.get("step_no") or "")
+        if not step_no or step_no in {"END", "LOCK"} or step_no in seen:
+            continue
+        seen.add(step_no)
+        steps.append((step_no, step_names.get(step_no, step_no)))
+    return steps
+
+
+def _split_csv(value: object) -> list[str]:
+    """拆分工艺资源中的逗号分隔字段。"""
+    return [part.strip() for part in str(value or "").split(",") if part.strip()]
+
+
+def _process_device_step_map(process_code: str) -> dict[str, tuple[str, str]]:
+    """按工艺资源配置返回设备编号到 (工序号, 工序名) 的映射。"""
+    from . import client
+    try:
+        snapshot = client.master_snapshot()[0] or {}
+    except Exception:
+        return {}
+    step_names = {
+        str(step.get("step_no")): str(step.get("step_name") or step.get("step_no") or "")
+        for step in snapshot.get("steps", [])
+    }
+    devices = {
+        str(device.get("device_id")): str(device.get("device_model") or "")
+        for device in snapshot.get("devices", []) or []
+    }
+    result: dict[str, tuple[str, str]] = {}
+    for resource in snapshot.get("process_step_resources", []) or []:
+        if str(resource.get("process_code") or "") != process_code:
+            continue
+        step_no = str(resource.get("step_no") or "")
+        if not step_no or step_no in {"END", "LOCK"}:
+            continue
+        models = set(_split_csv(resource.get("device_models")))
+        if not models:
+            continue
+        step_name = step_names.get(step_no, step_no)
+        for device_id, model in devices.items():
+            if model in models:
+                result[device_id] = (step_no, step_name)
+    return result
 
 
 def _read_summary(device_id: str) -> dict | None:
@@ -223,45 +315,64 @@ def _render_device_manager(config_devices: list[dict]) -> list[dict]:
     """监控设备管理（新增/编辑/删除），默认折叠容器。"""
     all_config = list(config_devices)
 
-    with st.expander("⚙️ 监控设备管理", expanded=False):
+    with st.expander("监控设备管理", expanded=False):
         step_names = _step_names()
 
-        st.subheader("监控设备管理（可直接修改名称，改完点“保存修改”）")
+        st.subheader(MONITOR_DEVICE_SECTION)
 
-        # 新增：按工序筛选后选择设备
+        # 新增：按工艺配置决定设备归属工序
         registered = _registered_devices()
         shown_ids = [x["device_id"] for x in all_config]
         candidates = [d for d in registered if d["device_id"] not in shown_ids]
 
         if candidates:
-            step_opts = ["全部"] + sorted({str(d.get("step_no")) for d in candidates if d.get("step_no")})
-            fs = st.selectbox(
-                "工序筛选", step_opts, key="mon_filter_step",
-                format_func=lambda x: "全部" if x == "全部" else f"{x} - {step_names.get(x, x)}",
+            process_options = _process_options()
+            selected_process_label = st.selectbox(
+                SELECT_PROCESS_LABEL,
+                list(process_options),
+                index=None,
+                placeholder=SELECT_PROCESS_PLACEHOLDER,
+                key="mon_process_select",
+                persist_state="session",
+                on_change="rerun",
             )
+            selected_process_code = process_options.get(selected_process_label or "")
+            process_device_steps = _process_device_step_map(selected_process_code) if selected_process_code else {}
+            process_steps = _process_step_map(selected_process_code) if selected_process_code else []
+            step_filter_options = ["全部"] + [f"{step_no} - {step_name}" for step_no, step_name in process_steps]
+            selected_step_filter = st.selectbox(
+                STEP_FILTER_LABEL,
+                step_filter_options,
+                key="mon_filter_step",
+                persist_state="session",
+                on_change="rerun",
+                disabled=not selected_process_code,
+            )
+            filtered_device_ids = {
+                device_id
+                for device_id, (step_no, _) in process_device_steps.items()
+                if selected_step_filter == "全部"
+                or selected_step_filter.startswith(f"{step_no} - ")
+            }
             filtered = [
-                d for d in candidates
-                if (fs == "全部" or str(d.get("step_no") or "") == str(fs))
+                d for d in candidates if d["device_id"] in filtered_device_ids
             ]
             if filtered:
                 with st.form("mon_device_create_form", clear_on_submit=False):
                     picked = st.selectbox(
-                        "选择设备",
+                        SELECT_DEVICE_LABEL,
                         options=[d["device_id"] for d in filtered],
-                        format_func=lambda x: (
-                            f"{x} - {next((d['device_name'] for d in filtered if d['device_id']==x), x)}"
-                            f"（{step_names.get(str(next((d.get('step_no') for d in filtered if d['device_id']==x), '')), '')}）"
-                        ),
                         key="mon_add_select",
                     )
-                    submitted = st.form_submit_button("添加监控设备")
+                    submitted = st.form_submit_button(ADD_MONITOR_DEVICE_BUTTON)
                 if submitted:
                     d = next(x for x in filtered if x["device_id"] == picked)
+                    step_no, step_name = process_device_steps[d["device_id"]]
                     all_config.append({
                         "device_id": d["device_id"],
                         "name": d.get("device_name") or d["device_id"],
-                        "step_no": str(d.get("step_no") or ""),
-                        "step_name": step_names.get(str(d.get("step_no") or ""), str(d.get("step_no") or "")),
+                        "step_no": step_no,
+                        "step_name": step_name,
                         "ip": d.get("ip", "127.0.0.1"), "port": d.get("port", 6379), "enable": True,
                     })
                     _save_config_devices(all_config)
@@ -301,7 +412,7 @@ def _render_device_manager(config_devices: list[dict]) -> list[dict]:
         else:
             st.info("暂无监控设备，请在上方新增")
 
-        if st.button("保存修改", icon=":material/save:", key="mon_save_names"):
+        if st.button(SAVE_MONITOR_DEVICES_BUTTON, icon=":material/save:", key="mon_save_names"):
             if edited is not None:
                 name_map = dict(zip(edited["设备编号"], edited["设备名称"]))
                 new_list = []
@@ -428,7 +539,7 @@ def _range_caption() -> str:
 
 def _render_display_order(all_config: list[dict]) -> None:
     """设置显示：每行卡片数、卡片顺序、统计时间区间。"""
-    with st.expander("🔀 设置显示", expanded=False):
+    with st.expander(DISPLAY_SETTINGS_SECTION, expanded=False):
         st.number_input(
             "每行卡片数", min_value=1, max_value=12, value=DEFAULT_COLS, step=1, key="mon_cols"
         )
@@ -447,7 +558,7 @@ def _render_display_order(all_config: list[dict]) -> None:
                 _save_config_devices(new_list)
                 st.rerun()
         else:
-            st.info("当前没有显示的设备，请先在“监控设备管理”中新增")
+            st.info("当前没有显示的设备，请先在“监控设备列表”中新增")
 
         # 2) 调整统计时间区间（放在卡片顺序下面）
         st.markdown("**调整统计时间区间**")
@@ -461,7 +572,7 @@ def _render_display_order(all_config: list[dict]) -> None:
             key="stat_time_end",
         )
         c3.button("清空", key="stat_time_clear", on_click=_clear_stat_inputs)
-        st.button("查询", key="stat_time_query", on_click=_apply_stat_range, type="primary")
+        st.button(QUERY_BUTTON, key="stat_time_query", on_click=_apply_stat_range, type="primary")
 
         applied = st.session_state.get("applied_stat_range")
         if applied:
@@ -481,7 +592,7 @@ def _render_cards_fragment() -> None:
     devices = _load_config_devices()
     n_cols = int(st.session_state.get("mon_cols", DEFAULT_COLS))
     if not devices:
-        st.info("当前没有显示的设备，请在“监控设备管理”中新增")
+        st.info("当前没有显示的设备，请在“监控设备列表”中新增")
         return
     rows = [devices[i : i + n_cols] for i in range(0, len(devices), n_cols)]
     for row in rows:
@@ -502,7 +613,7 @@ def _render_step_fragment() -> None:
     """工序页：按工序聚合监控设备列表中的统计数据。"""
     devices = _load_config_devices()
     if not devices:
-        st.info("当前没有显示的设备，请先在“监控设备管理”中新增")
+        st.info("当前没有显示的设备，请先在“监控设备列表”中新增")
         return
 
     applied = st.session_state.get("applied_stat_range")
@@ -566,7 +677,7 @@ def _render_step_fragment() -> None:
 def render() -> None:
     """执行 render。"""
     st.html(COMPACT_CSS)
-    st.title("产线测试工站监控｜设备主动上报")
+    st.title(PAGE_TITLE_DASHBOARD)
 
     # 两个同级折叠容器：设备管理 / 显示顺序——不在 fragment 内，不会被刷新打断
     devices = _load_config_devices()

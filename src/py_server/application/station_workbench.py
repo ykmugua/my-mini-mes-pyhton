@@ -24,12 +24,19 @@ def manual_inbound(
 
 
 def unbind_tray(*, traycode: str, operator: str, now: str) -> list[dict]:
-    """解除托盘绑定并返回受影响的产品。"""
-    return product_flow_store.unbind_tray(
-        traycode=traycode,
-        operator=operator,
+    """解除托盘绑定并删除受影响产品的当前入线状态。"""
+    deleted = product_flow_store.close_tray_flow(
+        traycode,
+        device="托盘解绑",
+        note=f"托盘解绑（操作员：{operator}）",
         changed_at=now,
     )
+    with with_conn() as conn:
+        for row in deleted:
+            barcode = str(row.get("barcode") or "")
+            if barcode:
+                workpiece_repo.delete_workpiece_if_no_tests(conn, barcode)
+    return deleted
 
 
 def delete_product_flow(*, barcode: str) -> dict | None:

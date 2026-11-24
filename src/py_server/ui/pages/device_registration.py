@@ -132,7 +132,6 @@ def render_page() -> None:
 
     # 区块 1：新增设备（折叠表单）
     with st.container(border=True):
-        st.subheader("设备管理")
         if read_only:
             with st.expander(CREATE_DEVICE_SECTION, expanded=False):
                 st.info("只读角色不可新增设备。")

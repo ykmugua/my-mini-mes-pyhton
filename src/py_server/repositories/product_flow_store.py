@@ -345,6 +345,40 @@ def create_inbound(rows: list[dict], *, changed_at: str) -> None:
             })
 
 
+def close_tray_flow(traycode: str, *, device: str, note: str, changed_at: str) -> list[dict]:
+    """结束托盘下所有产品的当前流转：写历史、删除当前总览，保留流转表。"""
+    ensure_overview_table()
+    ts = normalize_time(changed_at)
+    with _eng().begin() as conn:
+        rows = conn.execute(
+            text("SELECT * FROM product_overview WHERE traycode = :tc ORDER BY id"),
+            {"tc": traycode},
+        ).fetchall()
+        affected = [dict(row._mapping) for row in rows]
+        for row in affected:
+            table = str(row.get("flow_table") or "")
+            barcode = str(row.get("barcode") or "")
+            if barcode and re.fullmatch(r"F_[0-9A-Za-z_]{1,40}_[0-9a-f]{16}", table):
+                conn.execute(text(f"""
+                    INSERT INTO "{table}"
+                    (board_status, step_no, next_step, device, note, changed_at)
+                    VALUES (:board_status, :step_no, :next_step, :device, :note, :changed_at)
+                """), {
+                    "board_status": str(row.get("board_status") or "normal"),
+                    "step_no": str(row.get("current_step") or ""),
+                    "next_step": "",
+                    "device": device,
+                    "note": note,
+                    "changed_at": ts,
+                })
+        if affected:
+            conn.execute(
+                text("DELETE FROM product_overview WHERE traycode = :tc"),
+                {"tc": traycode},
+            )
+        return affected
+
+
 def _unbind_tray_in_conn(
     conn,
     *,

@@ -68,7 +68,7 @@ my-mini-mes-pyhton/
 │  ├─ seed.py               # 演示数据初始化
 │  └─ streamlit_app.py      # Streamlit 页面入口
 ├─ data/                    # 运行期数据，已 gitignore
-├─ design_data/             # 协议与设计资料
+├─ docs/                    # 文档、协议与设计资料
 ├─ examples/                # 设备侧参考客户端
 ├─ scripts/                 # 启动脚本
 └─ tests/                   # 接口、业务规则、架构与 AppTest 测试

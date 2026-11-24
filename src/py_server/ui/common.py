@@ -6,7 +6,6 @@ import streamlit as st
 
 from .. import config
 from . import client
-
 ROLE_EDIT = "工程师（可编辑）"
 ROLE_VIEW = "只读"
 

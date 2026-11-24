@@ -8,6 +8,11 @@ import streamlit as st
 from . import client
 from .client import ApiError as ServiceError
 from . import common
+from .pages.constants import (
+    PAGE_TITLE_PROGRAM_REGISTRATION,
+    PROGRAM_BINDINGS_SECTION,
+    SAVE_PROGRAM_BINDINGS_BUTTON,
+)
 
 EDIT_MAP = {
     "设备标识": "device_id",
@@ -141,7 +146,7 @@ def _render_editor() -> None:
 
     left, right = st.columns([1, 3])
     if left.button(
-        "💾 保存绑定关系",
+        SAVE_PROGRAM_BINDINGS_BUTTON,
         type="primary",
         disabled=not common.can_edit(),
         help="保存后设备下次 GET /api/program 即拿到新版本",
@@ -268,7 +273,7 @@ curl -X POST "{base}/api/program/status" \\
 
 def render() -> None:
     """执行 render。"""
-    st.title("📦 程序注册")
+    st.title(PAGE_TITLE_PROGRAM_REGISTRATION)
     st.caption("设备-产品-程序版本绑定；设备拉取记录与版本漂移告警。保存后设备下次拉取即生效。")
     common.render_flash()
     common.render_readonly_notice()
@@ -287,7 +292,7 @@ def render() -> None:
         "可生产设备", sum(1 for item in bindings if _production_status(item) == "可生产")
     )
 
-    st.subheader("绑定关系")
+    st.subheader(PROGRAM_BINDINGS_SECTION)
     _render_editor()
     st.divider()
     _render_publish_form()

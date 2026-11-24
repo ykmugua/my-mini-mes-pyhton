@@ -1095,7 +1095,7 @@ def manual_inbound(
 
 
 def unbind_tray(*, traycode: str, operator: str, confirmed: bool) -> dict:
-    """解除托盘与产品的当前绑定，并为每个产品写明操作留痕。"""
+    """解除托盘绑定并结束当前流转；保留产品流转历史，允许条码重新入站。"""
     traycode = _clean_text(traycode, "载具号")
     operator = _clean_text(operator, "操作员", max_len=64)
     if not confirmed:

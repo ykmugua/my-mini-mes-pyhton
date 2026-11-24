@@ -1,3 +1,58 @@
 {
-  "devices": []
+  "devices": [
+    {
+      "device_id": "ICT-01",
+      "name": "ICT站-1",
+      "step_no": "1",
+      "step_name": "ICT_Process",
+      "ip": "127.0.0.1",
+      "port": 6379,
+      "enable": true
+    },
+    {
+      "device_id": "FCT-01",
+      "name": "测试站-1",
+      "step_no": "2",
+      "step_name": "FCT_Process",
+      "ip": "127.0.0.1",
+      "port": 6379,
+      "enable": true
+    },
+    {
+      "device_id": "FCT-02",
+      "name": "测试站-2",
+      "step_no": "2",
+      "step_name": "FCT_Process",
+      "ip": "127.0.0.1",
+      "port": 6379,
+      "enable": true
+    },
+    {
+      "device_id": "FCT-03",
+      "name": "测试站-3",
+      "step_no": "2",
+      "step_name": "FCT_Process",
+      "ip": "127.0.0.1",
+      "port": 6379,
+      "enable": true
+    },
+    {
+      "device_id": "FCT-04",
+      "name": "测试站-4",
+      "step_no": "2",
+      "step_name": "FCT_Process",
+      "ip": "127.0.0.1",
+      "port": 6379,
+      "enable": true
+    },
+    {
+      "device_id": "FCT-05",
+      "name": "测试站-5",
+      "step_no": "2",
+      "step_name": "FCT_Process",
+      "ip": "127.0.0.1",
+      "port": 6379,
+      "enable": true
+    }
+  ]
 }

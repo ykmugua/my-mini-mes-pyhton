@@ -7,6 +7,12 @@ import streamlit as st
 
 from . import client, common
 from .client import ApiError as ServiceError
+from .pages.constants import (
+    CREATE_VARIABLE_SECTION,
+    PAGE_TITLE_VARIABLES,
+    SAVE_VARIABLES_BUTTON,
+    VARIABLE_LIST_SECTION,
+)
 
 VARIABLE_TYPES = ["int", "float", "str", "bool"]
 DELETE_CLICK_KEY = "var_delete_click"
@@ -112,7 +118,7 @@ def _render_add_form(editable: bool) -> None:
         type_name = c1.selectbox("类型", VARIABLE_TYPES, key="new_var_type")
         value = c2.text_input("初始值", key="new_var_value",
                               help="int 填整数；float 填小数；bool 填 true/false；str 填文本")
-        submitted = st.form_submit_button("新增变量", type="primary")
+        submitted = st.form_submit_button(CREATE_VARIABLE_SECTION, type="primary")
     name = _build_name(l1, l2, l3)
     if name:
         st.caption(f"将创建：`{name}`")
@@ -182,7 +188,7 @@ def _render_list(editable: bool) -> None:
             hide_index=True, num_rows="fixed", width="stretch",
             alt="变量列表", key="var_editor",
         )
-        if st.button("保存修改", icon=":material/save:", type="primary", key="save_vars"):
+        if st.button(SAVE_VARIABLES_BUTTON, icon=":material/save:", type="primary", key="save_vars"):
             _apply_edits(edited, variables)
     else:
         st.dataframe(
@@ -232,18 +238,18 @@ def _render_device_logs() -> None:
 
 def render() -> None:
     """执行 render。"""
-    st.title("🔧 开放性变量")
+    st.title(PAGE_TITLE_VARIABLES)
     st.caption("最多三层的组/子组/键结构；支持在列表中直接编辑；设备按完整路径读写。")
     common.render_flash()
     common.render_readonly_notice()
     editable = common.can_edit()
 
     with st.container(border=True):
-        st.subheader("新增变量")
+        st.subheader(CREATE_VARIABLE_SECTION)
         _render_add_form(editable)
 
     with st.container(border=True):
-        st.subheader("变量列表（可直接修改变量名/类型/当前值，改完点“保存修改”）")
+        st.subheader(VARIABLE_LIST_SECTION)
         _render_list(editable)
 
     with st.container(border=True):

@@ -1,0 +1,318 @@
+{
+  "steps": [
+    {
+      "step_no": "1",
+      "step_name": "S1",
+      "enabled": true,
+      "remark": "首站上电与基础安全检查"
+    },
+    {
+      "step_no": "2",
+      "step_name": "S2",
+      "enabled": true,
+      "remark": "功能与参数校验"
+    },
+    {
+      "step_no": "3",
+      "step_name": "S3",
+      "enabled": true,
+      "remark": "出货前最终检查"
+    },
+    {
+      "step_no": "4",
+      "step_name": "S4",
+      "enabled": false,
+      "remark": "当前阶段暂未启用"
+    }
+  ],
+  "devices": [
+    {
+      "device_id": "TEST-01",
+      "device_name": "上电测试机",
+      "step_no": "1",
+      "enabled": true,
+      "remark": "一线上电测试工位",
+      "device_model": "DM-T01"
+    },
+    {
+      "device_id": "TEST-01B",
+      "device_name": "上电测试机B",
+      "step_no": "1",
+      "enabled": true,
+      "remark": "一线上电备用机",
+      "device_model": "DM-01B"
+    },
+    {
+      "device_id": "TEST-02",
+      "device_name": "功能测试机",
+      "step_no": "2",
+      "enabled": true,
+      "remark": "一线功能测试工位",
+      "device_model": "DM-T02"
+    },
+    {
+      "device_id": "TEST-02B",
+      "device_name": "功能测试机B",
+      "step_no": "2",
+      "enabled": true,
+      "remark": "二线功能测试工位",
+      "device_model": "DM-02B"
+    },
+    {
+      "device_id": "TEST-03",
+      "device_name": "终检机",
+      "step_no": "3",
+      "enabled": true,
+      "remark": "一线终检工位",
+      "device_model": "DM-T03"
+    },
+    {
+      "device_id": "TEST-03B",
+      "device_name": "终检机B",
+      "step_no": "3",
+      "enabled": true,
+      "remark": "二线终检工位",
+      "device_model": "DM-03B"
+    },
+    {
+      "device_id": "TEST-04",
+      "device_name": "备用上电测试机",
+      "step_no": "1",
+      "enabled": false,
+      "remark": "备用设备，当前停用",
+      "device_model": "DM-T04"
+    }
+  ],
+  "programs": [
+    {
+      "program_id": 1,
+      "program_name": "TEST_MAIN",
+      "program_version": "v1.2.0",
+      "version_description": "增加压力检测与启动保护",
+      "sha256": "6f3b8e0c1d2a9f7e4b5c6d8a1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f",
+      "download_url": "http://192.168.1.50:8000/programs/fw_TEST-01_v1.2.0.zip",
+      "step_no": "1",
+      "enabled": true
+    },
+    {
+      "program_id": 2,
+      "program_name": "FUNC_TEST",
+      "program_version": "v2.0.1",
+      "version_description": "修复型号切换后的参数缓存",
+      "sha256": "a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90",
+      "download_url": "http://192.168.1.50:8000/programs/fw_FUNC-TEST_v2.0.1.7z",
+      "step_no": "2",
+      "enabled": true
+    },
+    {
+      "program_id": 3,
+      "program_name": "FINAL_CHECK",
+      "program_version": "v1.0.0",
+      "version_description": "正式终检参数模板",
+      "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+      "download_url": "http://192.168.1.50:8000/programs/fw_FINAL-CHECK_v1.0.0.zip",
+      "step_no": "3",
+      "enabled": true
+    }
+  ],
+  "program_versions": [
+    {
+      "program_id": 1,
+      "program_version": "v1.0.0",
+      "version_description": "首版上电测试程序",
+      "sha256": "6f3b8e0c1d2a9f7e4b5c6d8a1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f",
+      "download_url": "http://192.168.1.50:8000/programs/fw_TEST-01_v1.2.0.zip"
+    },
+    {
+      "program_id": 1,
+      "program_version": "v1.1.0",
+      "version_description": "修复上电计时偏差",
+      "sha256": "6f3b8e0c1d2a9f7e4b5c6d8a1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f",
+      "download_url": "http://192.168.1.50:8000/programs/fw_TEST-01_v1.2.0.zip"
+    },
+    {
+      "program_id": 1,
+      "program_version": "v1.2.0",
+      "version_description": "增加压力检测与启动保护",
+      "sha256": "6f3b8e0c1d2a9f7e4b5c6d8a1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f",
+      "download_url": "http://192.168.1.50:8000/programs/fw_TEST-01_v1.2.0.zip"
+    },
+    {
+      "program_id": 2,
+      "program_version": "v1.9.0",
+      "version_description": "首版多型号功能测试程序",
+      "sha256": "a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90",
+      "download_url": "http://192.168.1.50:8000/programs/fw_FUNC-TEST_v2.0.1.7z"
+    },
+    {
+      "program_id": 2,
+      "program_version": "v2.0.0",
+      "version_description": "优化整包比对流程",
+      "sha256": "a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90",
+      "download_url": "http://192.168.1.50:8000/programs/fw_FUNC-TEST_v2.0.1.7z"
+    },
+    {
+      "program_id": 2,
+      "program_version": "v2.0.1",
+      "version_description": "修复型号切换后的参数缓存",
+      "sha256": "a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90",
+      "download_url": "http://192.168.1.50:8000/programs/fw_FUNC-TEST_v2.0.1.7z"
+    },
+    {
+      "program_id": 3,
+      "program_version": "v0.9.0",
+      "version_description": "终检程序试运行版本",
+      "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+      "download_url": "http://192.168.1.50:8000/programs/fw_FINAL-CHECK_v1.0.0.zip"
+    },
+    {
+      "program_id": 3,
+      "program_version": "v1.0.0",
+      "version_description": "正式终检参数模板",
+      "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+      "download_url": "http://192.168.1.50:8000/programs/fw_FINAL-CHECK_v1.0.0.zip"
+    }
+  ],
+  "products": [
+    {
+      "product_model": "P-1001",
+      "product_name": "电源模块",
+      "test_program_name": "TEST_MAIN",
+      "test_program_path": "D:/test/P-1001/main.exe",
+      "remark": "",
+      "enabled": true
+    },
+    {
+      "product_model": "P-1002",
+      "product_name": "控制板",
+      "test_program_name": "",
+      "test_program_path": "",
+      "remark": "待配置",
+      "enabled": true
+    }
+  ],
+  "trays": [
+    {
+      "traycode": "T02001",
+      "tray_name": "01号载具",
+      "capacity": 20,
+      "enabled": true,
+      "remark": "一线DIP托盘",
+      "tray_model": "TM-A"
+    },
+    {
+      "traycode": "T02002",
+      "tray_name": "02号载具",
+      "capacity": 20,
+      "enabled": true,
+      "remark": "一线DIP托盘",
+      "tray_model": "TM-A"
+    },
+    {
+      "traycode": "T02003",
+      "tray_name": "03号载具",
+      "capacity": 24,
+      "enabled": true,
+      "remark": "二线备载具",
+      "tray_model": "TM-B"
+    }
+  ],
+  "processes": [
+    {
+      "process_code": "PROC-001",
+      "process_name": "标准电源板工艺",
+      "enabled": true,
+      "remark": "P-1001 默认工艺",
+      "component_no": "P-1001"
+    },
+    {
+      "process_code": "PROC-002",
+      "process_name": "控制板工艺",
+      "enabled": true,
+      "remark": "由 PROC-001 派生",
+      "component_no": "P-1002"
+    }
+  ],
+  "process_routes": [
+    {
+      "process_code": "PROC-001",
+      "step_no": "1",
+      "success_next_step": "2",
+      "fail_next_step": "LOCK"
+    },
+    {
+      "process_code": "PROC-001",
+      "step_no": "2",
+      "success_next_step": "3",
+      "fail_next_step": "LOCK"
+    },
+    {
+      "process_code": "PROC-001",
+      "step_no": "3",
+      "success_next_step": "END",
+      "fail_next_step": "LOCK"
+    },
+    {
+      "process_code": "PROC-002",
+      "step_no": "1",
+      "success_next_step": "2",
+      "fail_next_step": "LOCK"
+    },
+    {
+      "process_code": "PROC-002",
+      "step_no": "2",
+      "success_next_step": "3",
+      "fail_next_step": "LOCK"
+    },
+    {
+      "process_code": "PROC-002",
+      "step_no": "3",
+      "success_next_step": "END",
+      "fail_next_step": "LOCK"
+    }
+  ],
+  "process_step_resources": [
+    {
+      "process_code": "PROC-001",
+      "step_no": "1",
+      "program_name": "TEST_MAIN",
+      "device_models": "DM-T01,DM-01B",
+      "tray_models": "TM-A"
+    },
+    {
+      "process_code": "PROC-001",
+      "step_no": "2",
+      "program_name": "FUNC_TEST",
+      "device_models": "DM-T02",
+      "tray_models": "TM-A"
+    },
+    {
+      "process_code": "PROC-001",
+      "step_no": "3",
+      "program_name": "FINAL_CHECK",
+      "device_models": "DM-T03",
+      "tray_models": "TM-B"
+    },
+    {
+      "process_code": "PROC-002",
+      "step_no": "1",
+      "program_name": "TEST_MAIN",
+      "device_models": "DM-T01",
+      "tray_models": "TM-A"
+    },
+    {
+      "process_code": "PROC-002",
+      "step_no": "2",
+      "program_name": "FUNC_TEST",
+      "device_models": "DM-T02",
+      "tray_models": "TM-B"
+    },
+    {
+      "process_code": "PROC-002",
+      "step_no": "3",
+      "program_name": "FINAL_CHECK",
+      "device_models": "DM-T03",
+      "tray_models": "TM-B"
+    }
+  ]
+}
