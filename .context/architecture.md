@@ -697,3 +697,6 @@
 
 ## 56. 架构决策：入站状态删除只释放当前占用，不删除测试数据
 2026-11-23：删除 ProductFlow 入站状态时，同时删除 mes.db.workpieces 中无测试数据的占位工件；如果条码已有 test_results 或任一 report_index_* 报告，则保留工件档案/测试数据，不删除测试报告。手动入站占用判定改为只查 ProductFlow 当前总览，不再用 workpieces 是否存在判断占用，因为 workpieces 也会由测试上报产生。验证：删除 SN202611180001 入站状态后报告数 before=3、after=3，delete status=200；全量测试 115 passed。
+
+## 57. 架构决策：注册页统一骨架与跨层常量
+2026-11-24：设备/载具/工序/组件四类注册页统一复用 `ui/pages/registry_helpers.py` 与 `ui/pages/constants.py`，共享空值清洗、权限判断、启用值转换、DataFrame 生成、删除 pending state、保存提示等逻辑。新增 `src/py_server/constants.py` 集中跨层业务常量（PASS/FAIL、normal/lock/final、LOCK/END、true/false、全部、变量类型、权限等），application/repository/ui 逐步替换散落字符串。批量补全 src/py_server 下所有函数/类 docstring（AST 检查缺失数为 0）。新增 docs/CODEBASE_GUIDE.md，详细说明框架、分层、关键函数、数据库、设计模式、关键流程、魔术值清理与注释规范。

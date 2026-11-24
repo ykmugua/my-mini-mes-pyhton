@@ -18,12 +18,14 @@ TERMINAL_BOARD_STATUSES = frozenset({"lock", "final"})
 
 
 def flow_table_name(barcode: str) -> str:
+    """执行 flow_table_name。"""
     safe = re.sub(r"[^0-9A-Za-z_]", "_", barcode)[:40]
     digest = hashlib.sha256(barcode.encode("utf-8")).hexdigest()[:16]
     return f"F_{safe}_{digest}"
 
 
 def _eng():
+    """执行 eng。"""
     return eg.get_product_flow_engine()
 
 
@@ -41,10 +43,12 @@ def normalize_time(value: str) -> str:
 
 
 def _columns(conn, table: str) -> list[str]:
+    """执行 columns。"""
     return [row[1] for row in conn.execute(text(f"PRAGMA table_info(\"{table}\")")).fetchall()]
 
 
 def ensure_overview_table() -> None:
+    """确保overview_table。"""
     with _eng().begin() as conn:
         cols = _columns(conn, "product_overview") if conn.execute(text(
             "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='product_overview'"
@@ -77,6 +81,7 @@ def ensure_overview_table() -> None:
 
 
 def ensure_flow_table(barcode: str) -> str:
+    """确保flow_table。"""
     table = flow_table_name(barcode)
     with _eng().begin() as conn:
         exists = conn.execute(text(
@@ -200,6 +205,7 @@ def list_overview(
     board_status: str | None = None,
     current_step: str | None = None,
 ) -> list[dict]:
+    """列出overview。"""
     ensure_overview_table()
     conds = []
     params = {}
@@ -449,6 +455,7 @@ def auto_unbind_terminal_trays(*, changed_at: str) -> list[str]:
 
 
 def list_flow(flow_table: str) -> list[dict]:
+    """列出flow。"""
     if not re.fullmatch(r"F_[0-9A-Za-z_]{1,40}_[0-9a-f]{16}", flow_table):
         return []
     with _eng().connect() as conn:
@@ -457,6 +464,7 @@ def list_flow(flow_table: str) -> list[dict]:
 
 
 def reset_all() -> None:
+    """重置all。"""
     with _eng().begin() as conn:
         rows = conn.execute(text("SELECT name FROM sqlite_master WHERE type='table'")).fetchall()
         for row in rows:

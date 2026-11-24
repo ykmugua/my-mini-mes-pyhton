@@ -22,6 +22,7 @@ def get_by_device(device_id: str, conn: Conn | None = None) -> dict | None:
 
 
 def get_all(conn: Conn | None = None) -> list[dict]:
+    """获取all。"""
     if conn is None:
         with with_read_conn() as c:
             return get_all(c)

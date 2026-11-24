@@ -14,6 +14,7 @@ PENDING_DELETE_KEY = "pending_var_delete"
 
 
 def _variable_frame(variables: list[dict], *, include_delete: bool) -> pd.DataFrame:
+    """执行 variable_frame。"""
     records = []
     for item in variables:
         records.append({
@@ -31,6 +32,7 @@ def _variable_frame(variables: list[dict], *, include_delete: bool) -> pd.DataFr
 
 
 def _variable_config(*, include_delete: bool) -> dict:
+    """执行 variable_config。"""
     config = {
         "变量名": st.column_config.TextColumn("变量名", required=True, width="large"),
         "类型": st.column_config.SelectboxColumn("类型", options=VARIABLE_TYPES, required=True, width="small"),
@@ -46,6 +48,7 @@ def _variable_config(*, include_delete: bool) -> dict:
 
 
 def _request_delete() -> None:
+    """执行 request_delete。"""
     click = st.session_state.get(DELETE_CLICK_KEY)
     if click is None:
         return
@@ -56,11 +59,13 @@ def _request_delete() -> None:
 
 
 def _clear_pending_delete() -> None:
+    """执行 clear_pending_delete。"""
     st.session_state.pop(PENDING_DELETE_KEY, None)
 
 
 @st.dialog("确认删除变量", icon=":material/delete_forever:", on_dismiss=_clear_pending_delete)
 def _confirm_delete(name: str) -> None:
+    """执行 confirm_delete。"""
     st.write(f"确定删除变量 **{name}** 吗？")
     st.caption("删除后设备将无法再读写该变量，操作不可撤销。")
     with st.container(horizontal=True, horizontal_alignment="left"):
@@ -79,6 +84,7 @@ def _confirm_delete(name: str) -> None:
 
 
 def _level_inputs(prefix: str, editable: bool, l1="", l2="", l3=""):
+    """执行 level_inputs。"""
     a, b, c = st.columns(3)
     return (
         a.text_input("第一层（组名）", value=l1, key=f"{prefix}_l1",
@@ -91,10 +97,12 @@ def _level_inputs(prefix: str, editable: bool, l1="", l2="", l3=""):
 
 
 def _build_name(l1, l2, l3) -> str:
+    """执行 build_name。"""
     return ".".join(part.strip() for part in (l1, l2, l3) if part and part.strip())
 
 
 def _render_add_form(editable: bool) -> None:
+    """执行 render_add_form。"""
     if not editable:
         st.info("只读角色不可新增变量。")
         return
@@ -157,6 +165,7 @@ def _apply_edits(edited: pd.DataFrame, originals: list[dict]) -> None:
 
 
 def _render_list(editable: bool) -> None:
+    """执行 render_list。"""
     variables, error = client.list_variables()
     common.show_error(error)
     variables = variables or []
@@ -189,6 +198,7 @@ def _render_list(editable: bool) -> None:
 
 
 def _log_frame(records: list[dict], action: str) -> pd.DataFrame:
+    """执行 log_frame。"""
     rows = []
     for item in records:
         rows.append({
@@ -203,6 +213,7 @@ def _log_frame(records: list[dict], action: str) -> pd.DataFrame:
 
 
 def _render_device_logs() -> None:
+    """执行 render_device_logs。"""
     st.subheader("设备读写记录")
     tab_r, tab_w = st.tabs(["设备读取（拉取）", "设备写入（上报）"])
     with tab_r:
@@ -220,6 +231,7 @@ def _render_device_logs() -> None:
 
 
 def render() -> None:
+    """执行 render。"""
     st.title("🔧 开放性变量")
     st.caption("最多三层的组/子组/键结构；支持在列表中直接编辑；设备按完整路径读写。")
     common.render_flash()

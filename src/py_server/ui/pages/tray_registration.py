@@ -8,6 +8,8 @@ import pandas as pd
 import streamlit as st
 
 from . import _common as master
+from . import registry_helpers as helpers
+from .constants import ENABLED_OPTIONS
 
 TRAY_COLUMNS = ["载具码", "载具名称", "载具型号", "载荷数量", "启用", "备注"]
 DELETE_CLICK_KEY = "tray_delete_click"
@@ -15,15 +17,12 @@ PENDING_DELETE_KEY = "pending_tray_delete"
 
 
 def _text(value: Any) -> str:
-    if value is None:
-        return ""
-    if isinstance(value, float) and pd.isna(value):
-        return ""
-    text = str(value).strip()
-    return "" if text.lower() in {"nan", "none", "nat"} else text
+    """统一空值清洗。"""
+    return helpers.clean_text(value)
 
 
 def _integer(value: Any) -> int | None:
+    """执行 integer。"""
     text = _text(value)
     if not text:
         return None
@@ -35,6 +34,7 @@ def _integer(value: Any) -> int | None:
 
 
 def _tray_frame(trays: list[dict[str, Any]], *, include_delete: bool) -> pd.DataFrame:
+    """执行 tray_frame。"""
     records = [
         {
             "载具码": tray.get("traycode", ""),
@@ -55,6 +55,7 @@ def _tray_frame(trays: list[dict[str, Any]], *, include_delete: bool) -> pd.Data
 
 
 def _tray_config(*, include_delete: bool) -> dict[str, Any]:
+    """执行 tray_config。"""
     config: dict[str, Any] = {
         "载具码": st.column_config.TextColumn("载具码", required=True, width="medium"),
         "载具名称": st.column_config.TextColumn("载具名称", required=True, width="medium"),
@@ -63,7 +64,7 @@ def _tray_config(*, include_delete: bool) -> dict[str, Any]:
             "载荷数量", min_value=1, step=1, required=True, width="small",
             help="一个托盘可放置的板子数量",
         ),
-        "启用": st.column_config.CheckboxColumn("启用", default=True, width="small"),
+        "启用": helpers.enabled_column(),
         "备注": st.column_config.TextColumn("备注", width="large"),
     }
     if include_delete:
@@ -75,6 +76,7 @@ def _tray_config(*, include_delete: bool) -> dict[str, Any]:
 
 
 def _validate_trays(rows: list[dict[str, Any]]) -> tuple[list[dict[str, Any]] | None, str | None]:
+    """执行 validate_trays。"""
     trays: list[dict[str, Any]] = []
     codes: set[str] = set()
     for row in rows:
@@ -100,9 +102,7 @@ def _validate_trays(rows: list[dict[str, Any]]) -> tuple[list[dict[str, Any]] | 
             "tray_model": model,
             "capacity": capacity,
             "enabled": (
-                True if raw_enabled is None
-                or (isinstance(raw_enabled, float) and pd.isna(raw_enabled))
-                else bool(raw_enabled)
+                helpers.enabled_from_cell(raw_enabled)
             ),
             "remark": remark,
         })
@@ -110,21 +110,18 @@ def _validate_trays(rows: list[dict[str, Any]]) -> tuple[list[dict[str, Any]] | 
 
 
 def _request_tray_delete() -> None:
-    click = st.session_state.get(DELETE_CLICK_KEY)
-    if click is None:
-        return
-    row_index = int(click["row"])
-    trays = st.session_state.get("trays", [])
-    if 0 <= row_index < len(trays):
-        st.session_state[PENDING_DELETE_KEY] = str(trays[row_index]["traycode"])
+    """记录待删除载具码。"""
+    helpers.request_delete(DELETE_CLICK_KEY, PENDING_DELETE_KEY, "trays", "traycode")
 
 
 def _clear_pending_delete() -> None:
-    st.session_state.pop(PENDING_DELETE_KEY, None)
+    """执行 clear_pending_delete。"""
+    helpers.clear_pending(PENDING_DELETE_KEY)
 
 
 @st.dialog("确认删除载具", icon=":material/delete_forever:", on_dismiss=_clear_pending_delete)
 def _confirm_delete_tray(tray: dict[str, Any]) -> None:
+    """执行 confirm_delete_tray。"""
     st.write(f"确定删除载具 **{tray['traycode']} - {tray.get('tray_name','')}（{tray.get('tray_model','')}）** 吗？")
     st.caption("删除后，历史数据中的托盘码引用将保留，但不再显示为已注册载具。")
     with st.container(horizontal=True, horizontal_alignment="left"):
@@ -144,7 +141,7 @@ def _confirm_delete_tray(tray: dict[str, Any]) -> None:
 def render_page() -> None:
     """页面渲染入口。"""
     master.ensure_master_data()
-    read_only = st.session_state.get("role", "工程师") == "只读"
+    read_only = not helpers.is_editable()
     trays: list[dict[str, Any]] = st.session_state.get("trays", [])
 
     st.title("📦 载具注册")
@@ -181,7 +178,7 @@ def render_page() -> None:
                         placeholder="可选，用于填写现场说明",
                     )
                     new_enabled_text = enabled_col.selectbox(
-                        "启用", options=["是", "否"], key="new_tray_enabled_text",
+                        "启用", options=list(ENABLED_OPTIONS), key="new_tray_enabled_text",
                     )
                     # 第三行：添加按钮（左侧单独一行）
                     submitted = st.form_submit_button("添加载具")
@@ -193,17 +190,14 @@ def render_page() -> None:
                         "载具名称": new_name.strip(),
                         "载具型号": new_model.strip(),
                         "载荷数量": int(new_capacity),
-                        "启用": new_enabled_text == "是",
+                        "启用": helpers.enabled_from_text(new_enabled_text),
                         "备注": new_remark.strip(),
                     })
                     validated, error = _validate_trays(proposed_rows)
                     if error:
                         st.error(error)
                     else:
-                        st.session_state.trays = validated
-                        master.save_key("trays")
-                        st.toast("载具已添加")
-                        st.rerun()
+                        helpers.save_rows("trays", validated, "载具已添加")
 
     # 区块 2：载具列表
     with st.container(border=True):

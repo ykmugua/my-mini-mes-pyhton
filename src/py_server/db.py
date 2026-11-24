@@ -56,6 +56,7 @@ def get_conn() -> sqlite3.Connection:
 # 时间工具：数据库统一存 UTC ISO 字符串；展示时转业务时区
 # -----------------------------------------------------------------------------
 def utc_now() -> datetime:
+    """执行 utc_now。"""
     return datetime.now(timezone.utc)
 
 
@@ -65,6 +66,7 @@ def to_iso(dt: datetime) -> str:
 
 
 def utc_now_iso() -> str:
+    """执行 utc_now_iso。"""
     return to_iso(utc_now())
 
 
@@ -95,6 +97,7 @@ def parse_ts(value: Any, *, default: datetime | None = None) -> datetime | None:
 
 
 def normalize_ts(value: Any) -> str:
+    """规范化ts。"""
     parsed = parse_ts(value)
     return to_iso(parsed) if parsed else utc_now_iso()
 
@@ -117,8 +120,10 @@ def today_bounds_utc(now: datetime | None = None) -> tuple[str, str]:
 
 
 def row_to_dict(row: sqlite3.Row | None) -> dict | None:
+    """执行 row_to_dict。"""
     return dict(row) if row is not None else None
 
 
 def rows_to_dicts(rows: list[sqlite3.Row]) -> list[dict]:
+    """执行 rows_to_dicts。"""
     return [dict(row) for row in rows]

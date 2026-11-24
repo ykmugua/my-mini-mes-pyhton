@@ -8,6 +8,8 @@ import pandas as pd
 import streamlit as st
 
 from . import _common as master
+from . import registry_helpers as helpers
+from .constants import ENABLED_OPTIONS
 
 from ._mock_program_data import enabled_steps, step_label
 
@@ -26,15 +28,12 @@ ROUTE_WARNING_KEY = "product_route_warning"
 
 
 def _text(value: Any) -> str:
-    if value is None:
-        return ""
-    if isinstance(value, float) and pd.isna(value):
-        return ""
-    text = str(value).strip()
-    return "" if text.lower() in {"nan", "none", "nat"} else text
+    """统一空值清洗。"""
+    return helpers.clean_text(value)
 
 
 def _integer(value: Any) -> int | None:
+    """执行 integer。"""
     text = _text(value)
     if not text:
         return None
@@ -47,6 +46,7 @@ def _integer(value: Any) -> int | None:
 def _product_frame(
     products: list[dict[str, Any]], *, include_delete: bool
 ) -> pd.DataFrame:
+    """执行 product_frame。"""
     records = [
         {
             "组件号": product["product_model"],
@@ -65,12 +65,13 @@ def _product_frame(
 
 
 def _product_config(*, include_delete: bool) -> dict[str, Any]:
+    """执行 product_config。"""
     config: dict[str, Any] = {
         "组件号": st.column_config.TextColumn(
             "组件号", required=True, width="medium"
         ),
         "组件名称": st.column_config.TextColumn("组件名称", required=True, width="medium"),
-        "启用": st.column_config.CheckboxColumn("启用", default=True, width="small"),
+        "启用": helpers.enabled_column(),
         "备注": st.column_config.TextColumn("备注", width="medium"),
     }
     if include_delete:
@@ -87,6 +88,7 @@ def _product_config(*, include_delete: bool) -> dict[str, Any]:
 def _validate_products(
     rows: list[dict[str, Any]],
 ) -> tuple[list[dict[str, Any]] | None, str | None]:
+    """执行 validate_products。"""
     products: list[dict[str, Any]] = []
     models: set[str] = set()
     for row in rows:
@@ -105,9 +107,7 @@ def _validate_products(
                 "product_model": product_model,
                 "product_name": product_name,
                 "enabled": (
-                    True if row.get("启用") is None
-                    or (isinstance(row.get("启用"), float) and pd.isna(row.get("启用")))
-                    else bool(row.get("启用"))
+                helpers.enabled_from_cell(row.get("启用"))
                 ),
                 "remark": remark,
             }
@@ -116,19 +116,15 @@ def _validate_products(
 
 
 def _request_product_delete() -> None:
-    click = st.session_state.get(PRODUCT_DELETE_CLICK_KEY)
-    if click is None:
-        return
-    row_index = int(click["row"])
-    products = st.session_state.get("products", [])
-    if 0 <= row_index < len(products):
-        st.session_state[PENDING_PRODUCT_DELETE_KEY] = str(
-            products[row_index]["product_model"]
-        )
+    """记录待删除组件号。"""
+    helpers.request_delete(
+        PRODUCT_DELETE_CLICK_KEY, PENDING_PRODUCT_DELETE_KEY, "products", "product_model"
+    )
 
 
 def _clear_pending_product_delete() -> None:
-    st.session_state.pop(PENDING_PRODUCT_DELETE_KEY, None)
+    """执行 clear_pending_product_delete。"""
+    helpers.clear_pending(PENDING_PRODUCT_DELETE_KEY)
 
 
 @st.dialog(
@@ -137,6 +133,7 @@ def _clear_pending_product_delete() -> None:
     on_dismiss=_clear_pending_product_delete,
 )
 def _confirm_delete_product(product: dict[str, Any]) -> None:
+    """执行 confirm_delete_product。"""
     st.write(
         f"确定删除组件 **{product['product_model']} - "
         f"{product.get('product_name', '')}** 吗？"
@@ -165,7 +162,7 @@ def _confirm_delete_product(product: dict[str, Any]) -> None:
 def render_page() -> None:
     """页面渲染入口（app_pages 脚本包装）。"""
     master.ensure_master_data()
-    read_only = st.session_state.get("role", "工程师") == "只读"
+    read_only = not helpers.is_editable()
     steps: list[dict[str, Any]] = st.session_state.steps
     active_steps = enabled_steps(steps)
     devices: list[dict[str, Any]] = st.session_state.devices
@@ -207,7 +204,7 @@ def render_page() -> None:
                         placeholder="可选",
                     )
                     enabled_text = enabled_col.selectbox(
-                        "启用", options=["是", "否"], key="new_product_enabled_text",
+                        "启用", options=list(ENABLED_OPTIONS), key="new_product_enabled_text",
                     )
                     # 第三行：添加按钮
                     submitted = st.form_submit_button("添加组件")
@@ -226,14 +223,11 @@ def render_page() -> None:
                             {
                                 "product_model": clean_model,
                                 "product_name": product_name.strip(),
-                                "enabled": enabled_text == "是",
+                                "enabled": helpers.enabled_from_text(enabled_text),
                                 "remark": remark.strip(),
                             }
                         )
-                        st.session_state.products = products
-                        master.save_key("products")
-                        st.toast("组件已添加")
-                        st.rerun()
+                        helpers.save_rows("products", products, "组件已添加")
 
 
     # -----------------------------------------------------------------------------
@@ -281,10 +275,7 @@ def render_page() -> None:
             if error:
                 st.error(error)
             else:
-                st.session_state.products = updated_products
-                master.save_key("products")
-                st.toast("组件已保存")
-                st.rerun()
+                helpers.save_rows("products", updated_products or [], "组件已保存")
 
         pending_product_model = st.session_state.get(PENDING_PRODUCT_DELETE_KEY)
         if pending_product_model is not None:

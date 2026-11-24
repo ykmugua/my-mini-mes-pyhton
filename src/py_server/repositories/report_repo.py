@@ -8,6 +8,7 @@ from .base import Conn, rows_to_dicts
 
 
 def get_by_request_id(conn: Conn, request_id: str) -> dict | None:
+    """获取by_request_id。"""
     from sqlalchemy import select
 
     row = conn.execute(

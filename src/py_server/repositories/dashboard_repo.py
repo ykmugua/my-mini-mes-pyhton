@@ -10,32 +10,36 @@ from typing import Any
 from sqlalchemy import and_, func, select
 
 from .. import engine
+from ..constants import RESULT_FAIL, RESULT_PASS
 from .base import Conn, rows_to_dicts, with_read_conn
 
 tr = engine.test_results
 
 
 def _where(start: str, end: str, device: str | None, *, trusted_only: bool = False, fail_only: bool = False):
+    """执行 where。"""
     conds = [tr.c.tested_at >= start, tr.c.tested_at < end]
     if device:
         conds.append(tr.c.device_id == device)
     if trusted_only:
         conds.append(tr.c.trusted == 1)
     if fail_only:
-        conds.append(tr.c.result == "FAIL")
+        conds.append(tr.c.result == RESULT_FAIL)
     return and_(*conds)
 
 
 def _count_rows(conn: Conn, where_clause, *, with_result: bool = False) -> Any:
+    """执行 count_rows。"""
     cols = [
         func.count().label("total"),
-        func.coalesce(func.sum(func.IF(tr.c.result == "PASS", 1, 0)), 0).label("pass_count"),
-        func.coalesce(func.sum(func.IF(tr.c.result == "FAIL", 1, 0)), 0).label("fail_count"),
+        func.coalesce(func.sum(func.IF(tr.c.result == RESULT_PASS, 1, 0)), 0).label("pass_count"),
+        func.coalesce(func.sum(func.IF(tr.c.result == RESULT_FAIL, 1, 0)), 0).label("fail_count"),
     ] if with_result else [func.count().label("n")]
     return conn.execute(select(*cols).select_from(tr).where(where_clause)).fetchone()
 
 
 def snapshot(conn: Conn | None, *, start: str, end: str, device: str | None) -> dict:
+    """执行 snapshot。"""
     if conn is None:
         with with_read_conn() as c:
             return snapshot(c, start=start, end=end, device=device)

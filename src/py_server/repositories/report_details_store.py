@@ -31,19 +31,23 @@ _OVERVIEW_TABLE_RE = re.compile(r"report_index_[A-Za-z0-9_]+")
 
 
 def _engine_for(engine=None):
+    """执行 engine_for。"""
     return engine or eg.get_details_engine()
 
 
 def safe_step_no(step_no: str | int | None) -> str:
+    """执行 safe_step_no。"""
     value = re.sub(r"[^A-Za-z0-9]", "_", str(step_no or ""))
     return value or "default"
 
 
 def overview_table_name(step_no: str | int | None) -> str:
+    """执行 overview_table_name。"""
     return f"report_index_{safe_step_no(step_no)}"
 
 
 def detail_table_name(barcode: str, step_no: str | int | None = None) -> str:
+    """执行 detail_table_name。"""
     safe = re.sub(r"[^0-9A-Za-z_]", "_", barcode)[:40]
     identity = f"{step_no or ''}:{barcode}"
     digest = hashlib.sha256(identity.encode("utf-8")).hexdigest()[:16]
@@ -52,6 +56,7 @@ def detail_table_name(barcode: str, step_no: str | int | None = None) -> str:
 
 
 def _overview_ddl() -> str:
+    """执行 overview_ddl。"""
     return """
         id INTEGER PRIMARY KEY,
         station TEXT NOT NULL,
@@ -70,6 +75,7 @@ def _overview_ddl() -> str:
 
 
 def ensure_overview_table(step_no: str | int | None, engine=None) -> str:
+    """确保overview_table。"""
     table = overview_table_name(step_no)
     if not _OVERVIEW_TABLE_RE.fullmatch(table):
         raise ValueError(f"非法总览表名: {table}")
@@ -82,6 +88,7 @@ def ensure_overview_table(step_no: str | int | None, engine=None) -> str:
 
 
 def ensure_table(barcode: str, *, step_no: str | int | None = None, engine=None) -> str:
+    """确保table。"""
     table = detail_table_name(barcode, step_no)
     if not _DETAIL_TABLE_RE.fullmatch(table):
         raise ValueError(f"非法明细表名: {table}")
@@ -104,6 +111,7 @@ def ensure_table(barcode: str, *, step_no: str | int | None = None, engine=None)
 
 
 def insert_details(barcode: str, details: list[dict], *, step_no: str | int | None = None, engine=None) -> str:
+    """插入details。"""
     table = ensure_table(barcode, step_no=step_no, engine=engine)
     sql = text(f"""
         INSERT INTO "{table}"
@@ -126,6 +134,7 @@ def insert_overview(
     details_table: str | None = None,
     engine=None,
 ) -> int:
+    """插入overview。"""
     resolved_step = str(step_no if step_no is not None else report.get("step_no") or "")
     table = ensure_overview_table(resolved_step, engine)
     detail_table = details_table or detail_table_name(report["barcode"], resolved_step)
@@ -163,6 +172,7 @@ def list_overview(
     step_no: str | int | None = None,
     engine=None,
 ) -> list[dict]:
+    """列出overview。"""
     eng = _engine_for(engine)
     if step_no is not None:
         table = overview_table_name(step_no)
@@ -213,10 +223,12 @@ def list_overview(
 
 
 def list_details(barcode: str, *, step_no: str | int | None = None, engine=None) -> list[dict]:
+    """列出details。"""
     return list_details_by_table(detail_table_name(barcode, step_no), engine)
 
 
 def list_details_by_table(table: str, engine=None) -> list[dict]:
+    """列出details_by_table。"""
     if not _DETAIL_TABLE_RE.fullmatch(table or ""):
         return []
     with _engine_for(engine).connect() as conn:

@@ -19,6 +19,7 @@ EDIT_MAP = {
 
 
 def _cell(value) -> str:
+    """执行 cell。"""
     if value is None:
         return ""
     if isinstance(value, float) and pd.isna(value):
@@ -28,6 +29,7 @@ def _cell(value) -> str:
 
 
 def _production_status(binding: dict) -> str:
+    """执行 production_status。"""
     if not binding.get("reported_version"):
         return "未上报"
     if binding["reported_version"] != binding["program_version"]:
@@ -43,6 +45,7 @@ def _production_status(binding: dict) -> str:
 
 
 def _sha_status(binding: dict) -> str:
+    """执行 sha_status。"""
     reported = (binding.get("reported_sha256") or "").lower()
     if not reported:
         return "未上报"
@@ -50,6 +53,7 @@ def _sha_status(binding: dict) -> str:
 
 
 def _display_frame(bindings: list[dict]) -> pd.DataFrame:
+    """执行 display_frame。"""
     records = []
     for binding in bindings:
         records.append(
@@ -77,6 +81,7 @@ def _display_frame(bindings: list[dict]) -> pd.DataFrame:
 
 
 def _render_drift_alerts() -> None:
+    """执行 render_drift_alerts。"""
     drifts, error = client.program_drift()
     common.show_error(error)
     drifts = drifts or []
@@ -100,6 +105,7 @@ def _render_drift_alerts() -> None:
 
 
 def _render_editor() -> None:
+    """执行 render_editor。"""
     bindings, error = client.list_bindings()
     common.show_error(error)
     bindings = bindings or []
@@ -157,6 +163,7 @@ def _render_editor() -> None:
 
 
 def _render_publish_form() -> None:
+    """执行 render_publish_form。"""
     st.subheader("发布程序文件（可选）")
     st.caption(
         "上传后自动保存到静态目录、计算 SHA256 并更新绑定；"
@@ -197,6 +204,7 @@ def _render_publish_form() -> None:
 
 
 def _render_logs() -> None:
+    """执行 render_logs。"""
     with st.expander("设备拉取记录（最近 30 条）"):
         pulls, error = client.list_program_pulls(30)
         common.show_error(error)
@@ -242,6 +250,7 @@ def _render_logs() -> None:
 
 
 def _render_api_help() -> None:
+    """执行 render_api_help。"""
     base = common.api_base()
     with st.expander("设备侧接口调用示例"):
         st.code(
@@ -258,6 +267,7 @@ curl -X POST "{base}/api/program/status" \\
 
 
 def render() -> None:
+    """执行 render。"""
     st.title("📦 程序注册")
     st.caption("设备-产品-程序版本绑定；设备拉取记录与版本漂移告警。保存后设备下次拉取即生效。")
     common.render_flash()

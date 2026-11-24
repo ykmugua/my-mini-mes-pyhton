@@ -11,6 +11,7 @@ from .. import InvariantViolation
 
 
 class WorkpieceStatus(str, Enum):
+    """WorkpieceStatus 类。"""
     PENDING = "PENDING"
     PASS = "PASS"
     FAIL = "FAIL"
@@ -31,6 +32,7 @@ class UnlockOutcome:
 
 @dataclass
 class Workpiece:
+    """Workpiece 类。"""
     workpiece: str
     product: str | None = None
     current_device: str | None = None
@@ -46,6 +48,7 @@ class Workpiece:
 
     @classmethod
     def from_row(cls, row) -> "Workpiece":
+        """执行 from_row。"""
         data = dict(row)
         status = data.get("status")
         return cls(
@@ -64,6 +67,7 @@ class Workpiece:
 
     @property
     def locked(self) -> bool:
+        """执行 locked。"""
         return bool(self.lock_reason)
 
     def mark_pass(self) -> None:

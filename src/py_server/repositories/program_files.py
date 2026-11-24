@@ -13,6 +13,7 @@ from .. import config
 def save_program_file(
     *, device_id: str, product: str, program_version: str, filename: str, content: bytes
 ) -> dict:
+    """保存program_file。"""
     original = Path(filename).name if filename else "program.bin"
     safe_name = re.sub(r"[^A-Za-z0-9._-]+", "_", original) or "program.bin"
     prefix = re.sub(r"[^A-Za-z0-9._-]+", "_", f"{device_id}_{product}_{program_version}")
@@ -25,6 +26,7 @@ def save_program_file(
 
 
 def resolve_download(filename: str) -> Path | None:
+    """解析download。"""
     root = config.program_dir().resolve()
     target = (root / Path(filename).name).resolve()
     if target.parent != root or not target.is_file():

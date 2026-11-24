@@ -22,6 +22,7 @@ router = APIRouter(tags=["test_result"])
 
 
 def _envelope(success: bool, message: str, code: int, result=None) -> dict:
+    """执行 envelope。"""
     return {"success": success, "message": message, "code": code, "result": result}
 
 
@@ -30,6 +31,7 @@ def _envelope(success: bool, message: str, code: int, result=None) -> dict:
 # ---------------------------------------------------------------------------
 @router.post("/api/test-result")
 def post_test_result(payload: TestResultIn) -> dict:
+    """执行 post_test_result。"""
     return services.report_test_result(
         workpiece=payload.workpiece,
         device_id=payload.device_id,

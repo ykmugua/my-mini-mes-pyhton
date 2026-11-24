@@ -23,40 +23,51 @@ class Row:
     _data: dict[str, Any]
 
     def __getitem__(self, key) -> Any:
+        """执行 getitem__。"""
         if isinstance(key, int):
             return list(self._data.values())[key]
         return self._data[key]
 
     def get(self, key: str, default: Any = None) -> Any:
+        """执行 get。"""
         return self._data.get(key, default)
 
     def keys(self):
+        """执行 keys。"""
         return self._data.keys()
 
     def __iter__(self):
+        """执行 iter__。"""
         return iter(self._data)
 
     def __contains__(self, key: str) -> bool:
+        """执行 contains__。"""
         return key in self._data
 
     def as_dict(self) -> dict[str, Any]:
+        """执行 as_dict。"""
         return dict(self._data)
 
     def __repr__(self) -> str:
+        """执行 repr__。"""
         return f"Row({self._data!r})"
 
 
 class Result:
+    """Result 类。"""
     def __init__(self, result: Any):
+        """执行 init__。"""
         self._result = result
         self.rowcount = result.rowcount
         self.lastrowid: int | None = None
 
     def fetchone(self) -> Row | None:
+        """执行 fetchone。"""
         row = self._result.fetchone()
         return Row(dict(row._mapping)) if row is not None else None
 
     def fetchall(self) -> list[Row]:
+        """执行 fetchall。"""
         return [Row(dict(row._mapping)) for row in self._result.fetchall()]
 
 
@@ -69,11 +80,13 @@ class Conn:
     """
 
     def __init__(self, conn: Connection):
+        """执行 init__。"""
         self._conn = conn
         self.lastrowid: int | None = None
 
     def execute(self, statement: Any, params: Any = None):
         # 兼容测试夹具中临时构造数据的原生 SQL 字符串（生产代码只用 SQLAlchemy Core）。
+        """执行 execute。"""
         if isinstance(statement, str):
             statement = text(statement)
             if params is not None and not isinstance(params, dict):
@@ -102,9 +115,11 @@ class Conn:
 
     def commit(self) -> None:
         # 事务由 with_conn 统一管理；保留接口兼容旧调用。
+        """执行 commit。"""
         pass
 
     def rollback(self) -> None:
+        """执行 rollback。"""
         pass
 
 
@@ -131,6 +146,7 @@ def _tx() -> Iterator[Conn]:
 
 
 def rows_to_dicts(rows: list[Row]) -> list[dict]:
+    """执行 rows_to_dicts。"""
     return [dict(row) for row in rows]
 
 def dialect_insert(table):

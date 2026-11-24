@@ -12,11 +12,13 @@ ROLE_VIEW = "只读"
 
 
 def init_session() -> None:
+    """执行 init_session。"""
     st.session_state.setdefault("mes_operator", "engineer")
     st.session_state.setdefault("mes_role", ROLE_EDIT)
 
 
 def render_sidebar() -> None:
+    """渲染sidebar。"""
     st.sidebar.markdown("## 🏭 旁路 MES")
     st.sidebar.caption("设备乙方内部轻量工具 · 不对接甲方 MES")
     st.sidebar.divider()
@@ -35,6 +37,7 @@ def render_sidebar() -> None:
 
 
 def can_edit() -> bool:
+    """执行 can_edit。"""
     editable = st.session_state.get("mes_role", ROLE_EDIT) == ROLE_EDIT
     # 与 app_pages 页面的 role key 同步（工程师/只读）
     st.session_state["role"] = "工程师" if editable else "只读"
@@ -42,19 +45,23 @@ def can_edit() -> bool:
 
 
 def operator() -> str:
+    """执行 operator。"""
     return str(st.session_state.get("mes_operator", "") or "").strip()
 
 
 def render_readonly_notice() -> None:
+    """渲染readonly_notice。"""
     if not can_edit():
         st.info("当前为只读模式（可在左侧切换为“工程师（可编辑）”）。")
 
 
 def flash(kind: str, message: str) -> None:
+    """执行 flash。"""
     st.session_state["mes_flash"] = (kind, message)
 
 
 def render_flash() -> None:
+    """渲染flash。"""
     item = st.session_state.pop("mes_flash", None)
     if not item:
         return
@@ -78,12 +85,14 @@ def local_time(value) -> str:
 
 
 def now_text() -> str:
+    """执行 now_text。"""
     from datetime import datetime, timezone
 
     return datetime.now(timezone.utc).astimezone(config.timezone()).strftime("%Y-%m-%d %H:%M:%S")
 
 
 def api_base() -> str:
+    """执行 api_base。"""
     return config.api_public_base()
 
 
@@ -94,4 +103,5 @@ def show_error(error: str | None) -> None:
 
 
 def service_error_message(exc: Exception) -> str:
+    """执行 service_error_message。"""
     return str(exc)

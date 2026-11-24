@@ -32,6 +32,7 @@ from .repositories import (
     master_data_repo,
     program_files,
     product_flow_store,
+    station_repo,
     upstream_repo,
     variable_repo,
     product_query_repo,
@@ -50,14 +51,17 @@ class ServiceError(DomainError):
 
 
 class ValidationError(ServiceError):
+    """ValidationError 类。"""
     status_code = 400
 
 
 class NotFoundError(ServiceError):
+    """NotFoundError 类。"""
     status_code = 404
 
 
 class ConflictError(ServiceError):
+    """ConflictError 类。"""
     status_code = 409
 
 
@@ -66,12 +70,14 @@ class ConflictError(ServiceError):
 # -----------------------------------------------------------------------------
 @contextmanager
 def _read():
+    """执行 read。"""
     with _with_read() as conn:
         yield conn
 
 
 @contextmanager
 def _tx():
+    """执行 tx。"""
     with _with_conn() as conn:
         yield conn
 
@@ -80,6 +86,7 @@ def _tx():
 # 输入清洗
 # -----------------------------------------------------------------------------
 def _clean_text(value: Any, field: str, *, max_len: int = 128) -> str:
+    """执行 clean_text。"""
     text = "" if value is None else str(value).strip()
     if not text:
         raise ValidationError(f"{field}不能为空")
@@ -92,6 +99,7 @@ _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 
 
 def _clean_sha256(value: Any, field: str = "SHA256") -> str:
+    """执行 clean_sha256。"""
     text = "" if value is None else str(value).strip().lower()
     if not text:
         raise ValidationError(f"{field}不能为空")
@@ -101,6 +109,7 @@ def _clean_sha256(value: Any, field: str = "SHA256") -> str:
 
 
 def _clean_url(value: Any) -> str:
+    """执行 clean_url。"""
     text = _clean_text(value, "下载 URL", max_len=512)
     if not (text.startswith("http://") or text.startswith("https://") or text.startswith("/")):
         raise ValidationError("下载 URL 需以 http://、https:// 或 / 开头")
@@ -108,14 +117,17 @@ def _clean_url(value: Any) -> str:
 
 
 def _try_binding(conn: Conn, device_id: str, product: str | None):
+    """执行 try_binding。"""
     return binding_repo.try_binding(conn, device_id, product)
 
 
 def _binding_count(conn: Conn, device_id: str) -> int:
+    """执行 binding_count。"""
     return binding_repo.binding_count(conn, device_id)
 
 
 def _binding_or_404(conn: Conn, device_id: str, product: str | None):
+    """执行 binding_or_404。"""
     binding = _try_binding(conn, device_id, product)
     if binding is None:
         if not product and _binding_count(conn, device_id) > 1:
@@ -126,6 +138,7 @@ def _binding_or_404(conn: Conn, device_id: str, product: str | None):
 
 
 def _resolve_product(conn: Conn, device_id: str, product: str | None, workpiece_product: str | None) -> str:
+    """执行 resolve_product。"""
     if workpiece_product:
         return str(workpiece_product).strip()
     if product:
@@ -138,10 +151,12 @@ def _resolve_product(conn: Conn, device_id: str, product: str | None, workpiece_
 # 程序下发
 # -----------------------------------------------------------------------------
 def list_bindings() -> list[dict]:
+    """列出bindings。"""
     return binding_repo.list_bindings()
 
 
 def replace_bindings(rows: Iterable[dict]) -> int:
+    """替换bindings。"""
     cleaned: list[dict] = []
     seen: set[tuple[str, str]] = set()
     for index, raw in enumerate(rows, start=1):
@@ -169,6 +184,7 @@ def replace_bindings(rows: Iterable[dict]) -> int:
 
 
 def upsert_binding(device_id, product, program_version, download_url, sha256) -> dict:
+    """执行 upsert_binding。"""
     device_id = _clean_text(device_id, "设备标识")
     product = _clean_text(product, "产品型号")
     program_version = _clean_text(program_version, "程序版本", max_len=64)
@@ -192,6 +208,7 @@ def upsert_binding(device_id, product, program_version, download_url, sha256) ->
 
 
 def publish_program_file(device_id, product, program_version, filename, content) -> dict:
+    """执行 publish_program_file。"""
     device_id = _clean_text(device_id, "设备标识")
     product = _clean_text(product, "产品型号")
     program_version = _clean_text(program_version, "程序版本", max_len=64)
@@ -207,6 +224,7 @@ def publish_program_file(device_id, product, program_version, filename, content)
 
 
 def record_program_pull(device_id: str, product: str | None) -> dict:
+    """记录program_pull。"""
     device_id = _clean_text(device_id, "设备标识")
     now = db.utc_now_iso()
     with _tx() as conn:
@@ -229,6 +247,7 @@ def record_program_pull(device_id: str, product: str | None) -> dict:
 
 
 def report_program_status(device_id, product, reported_version, reported_sha256, sha256_ok=None) -> dict:
+    """上报program_status。"""
     device_id = _clean_text(device_id, "设备标识")
     version = (reported_version or "").strip()
     sha = (reported_sha256 or "").strip().lower()
@@ -275,6 +294,7 @@ def report_program_status(device_id, product, reported_version, reported_sha256,
 
 
 def program_drift() -> list[dict]:
+    """执行 program_drift。"""
     rows = binding_repo.program_drift()
     drifts: list[dict] = []
     for row in rows:
@@ -294,10 +314,12 @@ def program_drift() -> list[dict]:
 
 
 def list_program_pulls(limit: int = 50) -> list[dict]:
+    """列出program_pulls。"""
     return binding_repo.list_pull_logs(limit=limit)
 
 
 def list_program_status_logs(limit: int = 50) -> list[dict]:
+    """列出program_status_logs。"""
     return binding_repo.list_status_logs(limit=limit)
 
 
@@ -316,6 +338,7 @@ def _evaluate_trust(conn: Conn, device_id: str, product: str | None, reported_ve
 
 
 def device_program_trust(device_id: str, product: str | None = None) -> dict:
+    """执行 device_program_trust。"""
     with _read() as conn:
         trusted, reason, binding = _evaluate_trust(conn, device_id, product)
         return {
@@ -328,24 +351,29 @@ def device_program_trust(device_id: str, product: str | None = None) -> dict:
 
 
 def _get_workpiece(conn: Conn, workpiece: str):
+    """执行 get_workpiece。"""
     return workpiece_repo.get_workpiece(conn, workpiece)
 
 
 def _workpiece_public(conn: Conn, workpiece: str) -> dict:
+    """执行 workpiece_public。"""
     return workpiece_repo.public_workpiece(conn, workpiece)
 
 
 def _upstream_devices(conn: Conn, product: str, device_id: str) -> list[str]:
+    """执行 upstream_devices。"""
     return upstream_repo.upstream_devices(conn, product, device_id)
 
 
 def _has_trusted_pass(conn: Conn, workpiece: str, device_id: str, product: str) -> bool:
+    """执行 has_trusted_pass。"""
     return upstream_repo.has_trusted_pass(
         conn, workpiece=workpiece, device_id=device_id, product=product
     )
 
 
 def _lock_workpiece(conn: Conn, workpiece, device_id, reason, now) -> None:
+    """执行 lock_workpiece。"""
     workpiece_repo.lock_workpiece(
         conn, workpiece=workpiece, device_id=device_id, reason=reason, now=now
     )
@@ -353,6 +381,7 @@ def _lock_workpiece(conn: Conn, workpiece, device_id, reason, now) -> None:
 
 def report_test_result(*, workpiece, device_id, test_item, result, measured_value=None,
                        program_version=None, program_sha256=None, product=None, tested_at=None) -> dict:
+    """上报test_result。"""
     workpiece = _clean_text(workpiece, "工件码", max_len=128)
     device_id = _clean_text(device_id, "设备 ID")
     test_item = _clean_text(test_item, "测试项", max_len=128)
@@ -393,6 +422,7 @@ def report_test_result(*, workpiece, device_id, test_item, result, measured_valu
 
 
 def interlock_check(workpiece: str, device_id: str | None = None, product: str | None = None) -> dict:
+    """执行 interlock_check。"""
     workpiece = _clean_text(workpiece, "工件码", max_len=128)
     with _read() as conn:
         wp_row = _get_workpiece(conn, workpiece)
@@ -451,10 +481,12 @@ def interlock_check(workpiece: str, device_id: str | None = None, product: str |
 
 
 def list_locked_workpieces() -> list[dict]:
+    """列出locked_workpieces。"""
     return workpiece_repo.list_locked()
 
 
 def unlock_workpiece(workpiece, operator, reason, confirmed=False, target_step=None, note=None) -> dict:
+    """解锁workpiece。"""
     workpiece = _clean_text(workpiece, "工件码", max_len=128)
     operator = _clean_text(operator, "解锁人", max_len=64)
     reason = _clean_text(reason, "解锁原因", max_len=512)
@@ -475,14 +507,17 @@ def unlock_workpiece(workpiece, operator, reason, confirmed=False, target_step=N
 
 
 def list_unlock_logs(limit: int = 50) -> list[dict]:
+    """列出unlock_logs。"""
     return log_repo.list_unlock_logs(limit=limit)
 
 
 def list_upstream_rules() -> list[dict]:
+    """列出upstream_rules。"""
     return upstream_repo.list_rules()
 
 
 def replace_upstream_rules(rows: Iterable[dict]) -> int:
+    """替换upstream_rules。"""
     cleaned: list[dict] = []
     seen: set[tuple[str, str, str]] = set()
     for index, raw in enumerate(rows, start=1):
@@ -502,13 +537,25 @@ def replace_upstream_rules(rows: Iterable[dict]) -> int:
 
 
 def list_devices() -> list[str]:
+    """列出devices。"""
     return upstream_repo.list_devices()
+
+
+def station_summary(device_id: str) -> dict | None:
+    """按设备读取看板汇总；供 UI 通过 HTTP 获取。"""
+    return station_repo.get_by_device(device_id)
+
+
+def station_fail_details(device_id: str, limit: int = 50) -> list[dict]:
+    """按设备读取失败项明细；供 UI 通过 HTTP 获取。"""
+    return station_repo.list_fail_details(device_id, limit=limit)
 
 
 # -----------------------------------------------------------------------------
 # 看板统计
 # -----------------------------------------------------------------------------
 def dashboard_snapshot(device_filter: str | None = None) -> dict:
+    """执行 dashboard_snapshot。"""
     start, end = db.today_bounds_utc()
     device = (device_filter or "").strip() or None
     snap = dashboard_repo.snapshot(None, start=start, end=end, device=device)
@@ -567,6 +614,7 @@ _VARIABLE_NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_.-]{0,63}$")
 
 
 def coerce_variable_value(type_name: str, value: Any) -> str:
+    """执行 coerce_variable_value。"""
     type_name = (type_name or "").strip()
     if type_name not in VARIABLE_TYPES:
         raise ValidationError("变量类型只能是 int / float / str / bool")
@@ -606,6 +654,7 @@ def coerce_variable_value(type_name: str, value: Any) -> str:
 
 
 def typed_variable_value(type_name: str, stored: str | None) -> str | int | bool | None:
+    """执行 typed_variable_value。"""
     if stored is None:
         return None
     if type_name == "int":
@@ -624,6 +673,7 @@ def typed_variable_value(type_name: str, stored: str | None) -> str | int | bool
 
 
 def _variable_public(row) -> dict:
+    """执行 variable_public。"""
     return {
         "name": row["name"],
         "type": row["type"],
@@ -635,10 +685,12 @@ def _variable_public(row) -> dict:
 
 
 def list_variables(prefix: str = "") -> list[dict]:
+    """列出variables。"""
     return [_variable_public(row) for row in variable_repo.list_variables(prefix=prefix)]
 
 
 def get_variable(name: str, device_id: str | None = None) -> dict:
+    """获取variable。"""
     name = _clean_text(name, "变量名", max_len=64)
     device_id = (device_id or "").strip()
     with _tx() as conn:
@@ -655,6 +707,7 @@ def get_variable(name: str, device_id: str | None = None) -> dict:
 
 
 def add_variable(name: str, type_name: str, value: Any = None) -> dict:
+    """执行 add_variable。"""
     name = _validate_variable_name(name)
     stored = coerce_variable_value(type_name, value)
     now = db.utc_now_iso()
@@ -667,6 +720,7 @@ def add_variable(name: str, type_name: str, value: Any = None) -> dict:
 
 
 def set_variable(name: str, value: Any, device_id: str) -> dict:
+    """设置variable。"""
     name = _clean_text(name, "变量名", max_len=64)
     device_id = _clean_text(device_id, "写入设备", max_len=128)
     with _tx() as conn:
@@ -685,6 +739,7 @@ def set_variable(name: str, value: Any, device_id: str) -> dict:
 
 
 def _validate_variable_name(name: str) -> str:
+    """执行 validate_variable_name。"""
     name = "" if name is None else str(name).strip()
     if not name:
         raise ValidationError("变量名不能为空")
@@ -694,6 +749,7 @@ def _validate_variable_name(name: str) -> str:
 
 
 def delete_variable(name: str) -> dict:
+    """删除variable。"""
     name = _clean_text(name, "变量名", max_len=64)
     with _tx() as conn:
         if not variable_repo.exists(conn, name):
@@ -703,6 +759,7 @@ def delete_variable(name: str) -> dict:
 
 
 def rename_variable(old_name: str, new_name: str) -> dict:
+    """执行 rename_variable。"""
     old_name = _clean_text(old_name, "原变量名", max_len=64)
     new_name = _validate_variable_name(new_name)
     if old_name == new_name:
@@ -781,6 +838,7 @@ def variables_tree_from_api(prefix: str = "") -> dict:
 
 
 def list_variable_logs(*, action: str | None = None, limit: int = 30) -> list[dict]:
+    """列出variable_logs。"""
     return variable_repo.list_logs(action=action, limit=limit)
 
 
@@ -789,10 +847,12 @@ def list_variable_logs(*, action: str | None = None, limit: int = 30) -> list[di
 # 产品查询/追溯（只读；解绑复用 unlock_workpiece）
 # -----------------------------------------------------------------------------
 def query_workpieces(**kwargs) -> list[dict]:
+    """查询workpieces。"""
     return product_query_repo.list_workpieces(**kwargs)
 
 
 def workpiece_detail(workpiece: str) -> dict | None:
+    """执行 workpiece_detail。"""
     return product_query_repo.get_workpiece(workpiece)
 
 
@@ -805,10 +865,12 @@ def workpiece_test_history(workpiece: str) -> list[dict]:
 
 
 def workpiece_unlock_history(workpiece: str) -> list[dict]:
+    """执行 workpiece_unlock_history。"""
     return product_query_repo.unlock_history(workpiece)
 
 
 def product_route_detail(product_model: str) -> dict:
+    """执行 product_route_detail。"""
     return {
         "info": product_query_repo.product_info(product_model),
         "route": product_query_repo.product_route(product_model),
@@ -816,6 +878,7 @@ def product_route_detail(product_model: str) -> dict:
 
 
 def distinct_products() -> list[str]:
+    """执行 distinct_products。"""
     return product_query_repo.distinct_products()
 
 
@@ -823,15 +886,18 @@ def distinct_products() -> list[str]:
 # 工位操作台：产品 -> 工艺 -> 载具 -> 条码入站
 # -----------------------------------------------------------------------------
 def _split_csv(value: Any) -> list[str]:
+    """执行 split_csv。"""
     return [item.strip() for item in str(value or "").split(",") if item.strip()]
 
 
 def _route_sort_key(route: dict) -> tuple[int, int | str]:
+    """执行 route_sort_key。"""
     step_no = str(route.get("step_no") or "")
     return (0, int(step_no)) if step_no.isdigit() else (1, step_no)
 
 
 def _workbench_recipe(conn: Conn, product_model: str) -> dict:
+    """执行 workbench_recipe。"""
     product = next(
         (
             item

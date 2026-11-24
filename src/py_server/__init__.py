@@ -9,6 +9,7 @@ __version__ = "0.1.0"
 
 
 def main() -> None:
+    """执行 main。"""
     print(
         "旁路式小型 MES\n"
         "  初始化演示数据： python -m py_server.seed --reset --demo\n"

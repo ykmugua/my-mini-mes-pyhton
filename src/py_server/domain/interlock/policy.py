@@ -10,6 +10,7 @@ from ..workpiece.model import Workpiece
 
 
 class InterlockReason(str, Enum):
+    """InterlockReason 类。"""
     DEVICE_UNTRUSTED = "DEVICE_UNTRUSTED"
     WORKPIECE_LOCKED = "WORKPIECE_LOCKED"
     WORKPIECE_FAILED = "WORKPIECE_FAILED"
@@ -22,6 +23,7 @@ class InterlockReason(str, Enum):
 
 @dataclass(frozen=True)
 class InterlockDecision:
+    """InterlockDecision 类。"""
     allowed: bool
     reason: InterlockReason
     detail: str = ""
@@ -46,6 +48,7 @@ class InterlockPolicy:
         product_mismatch: str = "",
     ) -> InterlockDecision:
         # device_id 省略且工件无最近设备 → 直接 DEVICE_UNTRUSTED
+        """执行 evaluate。"""
         if not device_id:
             return InterlockDecision(
                 False,

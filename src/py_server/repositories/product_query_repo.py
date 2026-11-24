@@ -118,6 +118,7 @@ def list_workpieces(
 
 
 def get_workpiece(workpiece: str, conn: Conn | None = None) -> dict | None:
+    """获取workpiece。"""
     if conn is None:
         with with_read_conn() as c:
             return get_workpiece(workpiece, c)
@@ -166,6 +167,7 @@ def product_route(product_model: str, conn: Conn | None = None) -> list[dict]:
 
 
 def product_info(product_model: str, conn: Conn | None = None) -> dict | None:
+    """执行 product_info。"""
     if conn is None:
         with with_read_conn() as c:
             return product_info(product_model, c)
@@ -176,6 +178,7 @@ def product_info(product_model: str, conn: Conn | None = None) -> dict | None:
 
 
 def unlock_history(workpiece: str, conn: Conn | None = None) -> list[dict]:
+    """解锁history。"""
     if conn is None:
         with with_read_conn() as c:
             return unlock_history(workpiece, c)
@@ -189,6 +192,7 @@ def unlock_history(workpiece: str, conn: Conn | None = None) -> list[dict]:
 
 
 def distinct_products(conn: Conn | None = None) -> list[str]:
+    """执行 distinct_products。"""
     if conn is None:
         with with_read_conn() as c:
             return distinct_products(c)

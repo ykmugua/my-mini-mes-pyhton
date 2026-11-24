@@ -14,6 +14,7 @@ from ..services import ServiceError
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    """执行 lifespan。"""
     db.init_db()
     config.program_dir()
     yield
@@ -29,6 +30,7 @@ app = FastAPI(
 
 @app.exception_handler(ServiceError)
 async def service_error_handler(_: Request, exc: ServiceError) -> JSONResponse:
+    """执行 service_error_handler。"""
     return JSONResponse(status_code=exc.status_code, content={"detail": str(exc)})
 
 

@@ -8,6 +8,8 @@ import pandas as pd
 import streamlit as st
 
 from . import _common as master
+from . import registry_helpers as helpers
+from .constants import ENABLED_OPTIONS, ROLE_EDIT, ROLE_VIEW
 
 DEVICE_COLUMNS = ["设备编号", "设备名称", "设备型号", "启用", "备注"]
 DELETE_CLICK_KEY = "device_delete_click"
@@ -15,15 +17,12 @@ PENDING_DELETE_KEY = "pending_device_delete"
 
 
 def _text(value: Any) -> str:
-    if value is None:
-        return ""
-    if isinstance(value, float) and pd.isna(value):
-        return ""
-    text = str(value).strip()
-    return "" if text.lower() in {"nan", "none", "nat"} else text
+    """统一空值清洗，复用注册页公共实现。"""
+    return helpers.clean_text(value)
 
 
 def _device_frame(devices: list[dict[str, Any]], *, include_delete: bool) -> pd.DataFrame:
+    """执行 device_frame。"""
     records = [
         {
             "设备编号": device["device_id"],
@@ -43,11 +42,12 @@ def _device_frame(devices: list[dict[str, Any]], *, include_delete: bool) -> pd.
 
 
 def _device_config(*, include_delete: bool) -> dict[str, Any]:
+    """执行 device_config。"""
     config: dict[str, Any] = {
         "设备编号": st.column_config.TextColumn("设备编号", required=True, width="medium"),
         "设备名称": st.column_config.TextColumn("设备名称", required=True, width="medium"),
         "设备型号": st.column_config.TextColumn("设备型号", required=True, width="medium"),
-        "启用": st.column_config.CheckboxColumn("启用", default=True, width="small"),
+        "启用": helpers.enabled_column(),
         "备注": st.column_config.TextColumn("备注", width="large"),
     }
     if include_delete:
@@ -59,6 +59,7 @@ def _device_config(*, include_delete: bool) -> dict[str, Any]:
 
 
 def _validate_devices(rows: list[dict[str, Any]]) -> tuple[list[dict[str, Any]] | None, str | None]:
+    """执行 validate_devices。"""
     devices: list[dict[str, Any]] = []
     device_ids: set[str] = set()
     for row in rows:
@@ -79,9 +80,7 @@ def _validate_devices(rows: list[dict[str, Any]]) -> tuple[list[dict[str, Any]] 
             "device_name": device_name,
             "device_model": device_model,
             "enabled": (
-                True if raw_enabled is None
-                or (isinstance(raw_enabled, float) and pd.isna(raw_enabled))
-                else bool(raw_enabled)
+                helpers.enabled_from_cell(raw_enabled)
             ),
             "remark": remark,
         })
@@ -89,21 +88,18 @@ def _validate_devices(rows: list[dict[str, Any]]) -> tuple[list[dict[str, Any]] 
 
 
 def _request_device_delete() -> None:
-    click = st.session_state.get(DELETE_CLICK_KEY)
-    if click is None:
-        return
-    row_index = int(click["row"])
-    devices = st.session_state.get("devices", [])
-    if 0 <= row_index < len(devices):
-        st.session_state[PENDING_DELETE_KEY] = str(devices[row_index]["device_id"])
+    """把删除按钮点击转换成 pending state。"""
+    helpers.request_delete(DELETE_CLICK_KEY, PENDING_DELETE_KEY, "devices", "device_id")
 
 
 def _clear_pending_delete() -> None:
-    st.session_state.pop(PENDING_DELETE_KEY, None)
+    """执行 clear_pending_delete。"""
+    helpers.clear_pending(PENDING_DELETE_KEY)
 
 
 @st.dialog("确认删除设备", icon=":material/delete_forever:", on_dismiss=_clear_pending_delete)
 def _confirm_delete_device(device: dict[str, Any]) -> None:
+    """执行 confirm_delete_device。"""
     st.write(f"确定删除设备 **{device['device_id']} - {device['device_name']}** 吗？")
     with st.container(horizontal=True, horizontal_alignment="left"):
         if st.button("取消", key="cancel_delete_device"):
@@ -122,7 +118,7 @@ def _confirm_delete_device(device: dict[str, Any]) -> None:
 def render_page() -> None:
     """页面渲染入口。"""
     master.ensure_master_data()
-    read_only = st.session_state.get("role", "工程师") == "只读"
+    read_only = not helpers.is_editable()
     devices: list[dict[str, Any]] = st.session_state.devices
 
     st.title("🖥️ 设备注册")
@@ -153,7 +149,7 @@ def render_page() -> None:
                         "备注", key="new_device_remark", placeholder="可选，用于填写现场说明",
                     )
                     new_device_enabled_text = enabled_col.selectbox(
-                        "启用", options=["是", "否"], key="new_device_enabled_text",
+                        "启用", options=list(ENABLED_OPTIONS), key="new_device_enabled_text",
                     )
                     submitted = st.form_submit_button("添加设备")
 
@@ -163,17 +159,14 @@ def render_page() -> None:
                         "设备编号": new_device_id.strip(),
                         "设备名称": new_device_name.strip(),
                         "设备型号": new_device_model.strip(),
-                        "启用": new_device_enabled_text == "是",
+                        "启用": helpers.enabled_from_text(new_device_enabled_text),
                         "备注": new_device_remark.strip(),
                     })
                     validated, error = _validate_devices(proposed_rows)
                     if error:
                         st.error(error)
                     else:
-                        st.session_state.devices = validated
-                        master.save_key("devices")
-                        st.toast("设备已添加")
-                        st.rerun()
+                        helpers.save_rows("devices", validated, "设备已添加")
 
     # 区块 2：设备列表
     with st.container(border=True):

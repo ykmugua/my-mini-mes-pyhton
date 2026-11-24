@@ -33,15 +33,19 @@ def test_no_runtime_sql_outside_repositories():
 
 
 def test_ui_pages_only_import_client():
-    pages = SRC / "ui" / "pages"
-    if pages.exists():
-        for path in pages.rglob("*.py"):
-            assert "repositories" not in path.read_text(encoding="utf-8")
-    for name in ("page_program.py", "page_interlock.py", "page_variables.py"):
-        text = (SRC / "ui" / name).read_text(encoding="utf-8")
-        for kw in ("sqlite3", "sqlalchemy", "repositories", "from .. import services"):
-            assert kw not in text, (name, kw)
-        assert "from . import client" in text, name
+    """UI 层只能通过 client.py 走 HTTP，不允许直连数据层或 services。"""
+    forbidden = (
+        "repositories", "sqlite3", "sqlalchemy", "create_engine",
+        "get_engine", "get_conn", "from .. import services",
+        "from py_server import services", "from py_server.services",
+    )
+    ui_root = SRC / "ui"
+    for path in ui_root.rglob("*.py"):
+        if path.name == "client.py":
+            continue
+        text = path.read_text(encoding="utf-8")
+        for kw in forbidden:
+            assert kw not in text, (path.relative_to(SRC).as_posix(), kw)
 
 
 def test_dashboard_config_static():
@@ -49,8 +53,7 @@ def test_dashboard_config_static():
     text = (SRC / "ui" / "page_dashboard.py").read_text(encoding="utf-8")
     assert "refresh_interval = 1000" in text
     assert "DEFAULT_COLS = 6" in text
-    assert "station_repo.get_by_device" in text
-    assert "station_summary" in text
+    assert "client.station_summary" in text
     for color in ("#888888", "#4287f5", "#28a745", "#dc3545", "#333333"):
         assert color in text
     assert "@st.fragment(run_every=refresh_interval)" in text
@@ -81,3 +84,17 @@ def test_no_unused_ui_thin_wrappers():
     """guards/sidebar 只是无人使用的 re-export，统一由 common 提供。"""
     assert not (SRC / "ui" / "guards.py").exists()
     assert not (SRC / "ui" / "sidebar.py").exists()
+
+
+def test_registry_pages_share_common_helpers():
+    """四类注册页必须复用同一套公共逻辑和常量。"""
+    helper = (SRC / "ui" / "pages" / "registry_helpers.py").read_text(encoding="utf-8")
+    constants = (SRC / "ui" / "pages" / "constants.py").read_text(encoding="utf-8")
+    for name in ("clean_text", "is_editable", "make_frame", "request_delete", "save_rows"):
+        assert f"def {name}" in helper
+    for name in ("ROLE_EDIT", "ROLE_VIEW", "ENABLED_OPTIONS", "EMPTY_TEXT_VALUES"):
+        assert name in constants
+    for page in ("device_registration.py", "tray_registration.py", "step_registration.py", "product_management.py"):
+        text = (SRC / "ui" / "pages" / page).read_text(encoding="utf-8")
+        assert "registry_helpers" in text, page
+        assert "from .constants import" in text, page

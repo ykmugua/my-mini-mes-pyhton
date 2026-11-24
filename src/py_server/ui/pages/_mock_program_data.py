@@ -377,6 +377,7 @@ def initialize_program_state() -> None:
 def step_by_no(
     steps: list[dict[str, Any]], step_no: int | str | None
 ) -> dict[str, Any] | None:
+    """执行 step_by_no。"""
     for step in steps:
         if str(step["step_no"]) == str(step_no):
             return step
@@ -387,6 +388,7 @@ def step_label(
     steps: list[dict[str, Any]],
     step_no: int | str | None,
 ) -> str:
+    """执行 step_label。"""
     step = step_by_no(steps, step_no)
     if step is None:
         return "未配置工序"
@@ -394,12 +396,14 @@ def step_label(
 
 
 def enabled_steps(steps: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """执行 enabled_steps。"""
     return [step for step in steps if bool(step.get("enabled"))]
 
 
 def program_select_label(
     program: dict[str, Any], steps: list[dict[str, Any]]
 ) -> str:
+    """执行 program_select_label。"""
     step = step_by_no(steps, program.get("step_no"))
     step_name = str(step["step_name"]) if step else "未配置工序"
     return (
@@ -410,6 +414,7 @@ def program_select_label(
 def program_component_count(
     program_id: int | str, program_components: list[dict[str, Any]]
 ) -> int:
+    """执行 program_component_count。"""
     return sum(
         1
         for item in program_components
@@ -418,6 +423,7 @@ def program_component_count(
 
 
 def program_type(component_count: int) -> str:
+    """执行 program_type。"""
     if component_count == 0:
         return "未关联"
     if component_count == 1:
@@ -429,6 +435,7 @@ def available_program_versions(
     programs: list[dict[str, Any]],
     program_versions: list[dict[str, Any]],
 ) -> list[str]:
+    """执行 available_program_versions。"""
     versions: list[str] = []
     for item in program_versions:
         version = str(item["program_version"])
@@ -447,6 +454,7 @@ def program_version_description(
     program_id: int | str,
     version: str,
 ) -> str:
+    """执行 program_version_description。"""
     for item in program_versions:
         if (
             str(item["program_id"]) == str(program_id)
@@ -463,4 +471,5 @@ def program_version_description(
 
 
 def next_program_id(programs: list[dict[str, Any]]) -> int:
+    """执行 next_program_id。"""
     return max((int(program["program_id"]) for program in programs), default=0) + 1

@@ -15,6 +15,7 @@ tr = engine.test_results
 
 
 def get_workpiece(conn: Conn, workpiece: str) -> Any | None:
+    """获取workpiece。"""
     return conn.execute(select(wp).where(wp.c.workpiece == workpiece)).fetchone()
 
 
@@ -37,6 +38,7 @@ def delete_workpiece_if_no_tests(conn: Conn, workpiece: str) -> bool:
 
 
 def public_workpiece(conn: Conn, workpiece: str) -> dict:
+    """执行 public_workpiece。"""
     row = get_workpiece(conn, workpiece)
     if row is None:
         return {"workpiece": workpiece, "exists": False}
@@ -47,6 +49,7 @@ def public_workpiece(conn: Conn, workpiece: str) -> dict:
 
 
 def insert_workpiece_ignore(conn: Conn, *, workpiece: str, product: str | None, now: str) -> None:
+    """插入workpiece_ignore。"""
     stmt = (
         dialect_insert(wp)
         .values(
@@ -58,6 +61,7 @@ def insert_workpiece_ignore(conn: Conn, *, workpiece: str, product: str | None, 
 
 
 def set_workpiece_product(conn: Conn, workpiece: str, product: str, now: str) -> None:
+    """设置workpiece_product。"""
     conn.execute(
         wp.update().where(wp.c.workpiece == workpiece).values(product=product, updated_at=now)
     )
@@ -74,6 +78,7 @@ def insert_test_result_ignore(conn: Conn, row: dict) -> int:
 
 
 def get_test_result(conn: Conn, workpiece: str, device_id: str, test_item: str) -> Any | None:
+    """获取test_result。"""
     stmt = select(tr).where(
         tr.c.workpiece == workpiece,
         tr.c.device_id == device_id,
@@ -83,6 +88,7 @@ def get_test_result(conn: Conn, workpiece: str, device_id: str, test_item: str) 
 
 
 def latest_tested_at(conn: Conn, workpiece: str, exclude_id: int) -> Any | None:
+    """执行 latest_tested_at。"""
     from sqlalchemy import func
 
     stmt = select(func.max(tr.c.tested_at)).where(
@@ -92,6 +98,7 @@ def latest_tested_at(conn: Conn, workpiece: str, exclude_id: int) -> Any | None:
 
 
 def lock_workpiece(conn: Conn, *, workpiece: str, device_id, reason: str, now: str) -> None:
+    """锁定workpiece。"""
     stmt = (
         wp.update()
         .where(
@@ -104,6 +111,7 @@ def lock_workpiece(conn: Conn, *, workpiece: str, device_id, reason: str, now: s
 
 
 def fail_workpiece(conn: Conn, *, workpiece: str, device_id: str, reason: str, now: str) -> None:
+    """标记失败workpiece。"""
     conn.execute(
         wp.update()
         .where(wp.c.workpiece == workpiece)
@@ -119,6 +127,7 @@ def fail_workpiece(conn: Conn, *, workpiece: str, device_id: str, reason: str, n
 
 
 def pass_workpiece(conn: Conn, *, workpiece: str, device_id: str, now: str) -> None:
+    """标记通过workpiece。"""
     conn.execute(
         wp.update()
         .where(
@@ -130,6 +139,7 @@ def pass_workpiece(conn: Conn, *, workpiece: str, device_id: str, now: str) -> N
 
 
 def list_locked(conn: Conn | None = None) -> list[dict]:
+    """列出locked。"""
     if conn is None:
         with with_read_conn() as c:
             return list_locked(c)
@@ -144,6 +154,7 @@ def list_locked(conn: Conn | None = None) -> list[dict]:
 def unlock_workpiece_row(
     conn: Conn, *, workpiece: str, operator: str, reason: str, now: str
 ) -> None:
+    """解锁workpiece_row。"""
     conn.execute(
         wp.update()
         .where(wp.c.workpiece == workpiece)

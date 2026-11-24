@@ -32,6 +32,7 @@ STATUS_LABELS = {
 
 
 def _joined(values: list[Any]) -> str:
+    """执行 joined。"""
     unique = [
         str(value).strip()
         for value in values
@@ -41,11 +42,13 @@ def _joined(values: list[Any]) -> str:
 
 
 def _status_label(value: Any) -> str:
+    """执行 status_label。"""
     status = str(value or "")
     return STATUS_LABELS.get(status, status)
 
 
 def _aggregate_trays(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """执行 aggregate_trays。"""
     grouped: dict[str, list[dict[str, Any]]] = {}
     for row in rows:
         traycode = str(row.get("traycode") or "")
@@ -81,6 +84,7 @@ def _aggregate_trays(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
 def _status_frame(
     trays: list[dict[str, Any]], *, include_delete: bool
 ) -> pd.DataFrame:
+    """执行 status_frame。"""
     records = [
         {
             column: row.get(column, "")
@@ -97,6 +101,7 @@ def _status_frame(
 
 
 def _column_config(*, include_delete: bool) -> dict[str, Any]:
+    """执行 column_config。"""
     config: dict[str, Any] = {
         "载具号": st.column_config.TextColumn("载具号", width="small"),
         "条码数量": st.column_config.NumberColumn("条码数量", width="small"),
@@ -120,6 +125,7 @@ def _column_config(*, include_delete: bool) -> dict[str, Any]:
 
 
 def _request_delete() -> None:
+    """执行 request_delete。"""
     click = st.session_state.get(DELETE_CLICK_KEY)
     if click is None:
         return
@@ -130,6 +136,7 @@ def _request_delete() -> None:
 
 
 def _clear_pending_delete() -> None:
+    """执行 clear_pending_delete。"""
     st.session_state.pop(PENDING_DELETE_KEY, None)
 
 
@@ -139,6 +146,7 @@ def _clear_pending_delete() -> None:
     on_dismiss=_clear_pending_delete,
 )
 def _confirm_delete(tray: dict[str, Any]) -> None:
+    """执行 confirm_delete。"""
     traycode = str(tray.get("载具号") or "")
     barcodes = str(tray.get("产品条码") or "")
     st.write(f"确定删除托盘 **{traycode}** 的当前入线状态吗？")

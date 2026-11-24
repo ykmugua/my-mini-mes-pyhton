@@ -9,6 +9,7 @@ from pydantic import AliasChoices, BaseModel, Field, field_validator
 
 
 class ProgramStatusIn(BaseModel):
+    """ProgramStatusIn 类。"""
     device_id: str = Field(min_length=1)
     product: str | None = None
     program_version: str | None = Field(
@@ -30,6 +31,7 @@ class ProgramStatusIn(BaseModel):
 
 
 class TestResultIn(BaseModel):
+    """TestResultIn 类。"""
     workpiece: str = Field(
         min_length=1,
         validation_alias=AliasChoices("workpiece", "workpiece_code", "workpiece_id"),
@@ -52,6 +54,7 @@ class TestResultIn(BaseModel):
     @field_validator("result")
     @classmethod
     def _normalize_result(cls, value: str) -> str:
+        """执行 normalize_result。"""
         value = (value or "").strip().upper()
         if value not in ("PASS", "FAIL"):
             raise ValueError("result 只能是 PASS 或 FAIL")
@@ -59,6 +62,7 @@ class TestResultIn(BaseModel):
 
 
 class VariableWriteIn(BaseModel):
+    """VariableWriteIn 类。"""
     value: Any = None
     device_id: str = Field(
         min_length=1,
@@ -67,20 +71,24 @@ class VariableWriteIn(BaseModel):
 
 
 class BindingsIn(BaseModel):
+    """BindingsIn 类。"""
     rows: list[dict] = Field(default_factory=list)
 
 
 class UpstreamRulesIn(BaseModel):
+    """UpstreamRulesIn 类。"""
     rows: list[dict] = Field(default_factory=list)
 
 
 class VariableCreateIn(BaseModel):
+    """VariableCreateIn 类。"""
     name: str = Field(min_length=1)
     type: str = Field(min_length=1)
     value: Any = None
 
 
 class UnlockIn(BaseModel):
+    """UnlockIn 类。"""
     workpiece: str = Field(min_length=1)
     operator: str = Field(min_length=1)
     reason: str = Field(min_length=1)
@@ -89,10 +97,12 @@ class UnlockIn(BaseModel):
     confirmed: bool = False
 
 class MasterDataIn(BaseModel):
+    """MasterDataIn 类。"""
     rows: list[dict] = Field(default_factory=list)
 
 
 class WorkbenchInboundIn(BaseModel):
+    """WorkbenchInboundIn 类。"""
     product: str = Field(min_length=1)
     step_no: str = Field(min_length=1)
     traycode: str = Field(min_length=1)
@@ -101,15 +111,18 @@ class WorkbenchInboundIn(BaseModel):
 
 
 class WorkbenchTrayUnbindIn(BaseModel):
+    """WorkbenchTrayUnbindIn 类。"""
     traycode: str = Field(min_length=1)
     operator: str = Field(min_length=1)
     confirmed: bool = False
 
 
 class VariableRenameIn(BaseModel):
+    """VariableRenameIn 类。"""
     name: str = Field(min_length=1)
 
 
 class VariableUpdateIn(BaseModel):
+    """VariableUpdateIn 类。"""
     type: str | None = None
     value: Any = None

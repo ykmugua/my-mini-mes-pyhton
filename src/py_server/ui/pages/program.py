@@ -97,6 +97,7 @@ COLUMN_ORDER_LOCK_SCRIPT = """
 
 
 def _text(value: Any) -> str:
+    """执行 text。"""
     if value is None:
         return ""
     if isinstance(value, float) and pd.isna(value):
@@ -106,6 +107,7 @@ def _text(value: Any) -> str:
 
 
 def _integer(value: Any) -> int | None:
+    """执行 integer。"""
     if value is None or (isinstance(value, float) and pd.isna(value)):
         return None
     try:
@@ -117,6 +119,7 @@ def _integer(value: Any) -> int | None:
 
 
 def _pull_log_frame(records: list[dict[str, Any]]) -> pd.DataFrame:
+    """执行 pull_log_frame。"""
     rows = []
     for item in records:
         sha256 = _text(item.get("sha256"))
@@ -133,6 +136,7 @@ def _pull_log_frame(records: list[dict[str, Any]]) -> pd.DataFrame:
 
 
 def _status_log_frame(records: list[dict[str, Any]]) -> pd.DataFrame:
+    """执行 status_log_frame。"""
     rows = []
     for item in records:
         rows.append(
@@ -159,6 +163,7 @@ def _validate_program_rows(
     list[dict[str, Any]] | None,
     str | None,
 ]:
+    """执行 validate_program_rows。"""
     current_by_id = {int(item["program_id"]): item for item in current}
     valid_steps = {str(item["step_no"]) for item in steps}
     updated: list[dict[str, Any]] = []
@@ -228,6 +233,7 @@ def _upsert_version_description(
     sha256: str = "",
     download_url: str = "",
 ) -> None:
+    """执行 upsert_version_description。"""
     for item in program_versions:
         if (
             str(item["program_id"]) == str(program_id)
@@ -251,6 +257,7 @@ def _upsert_version_description(
 
 
 def _read_components(edited: pd.DataFrame) -> list[str]:
+    """执行 read_components。"""
     return [
         component_no
         for value in edited.get("component_no", pd.Series(dtype="string")).tolist()
@@ -419,6 +426,7 @@ def render_page() -> None:
         st.session_state["_program_names"] = names
 
         def _version_meta(prog: dict[str, Any], version: str) -> tuple[str, str, str]:
+            """执行 version_meta。"""
             for v in program_versions:
                 if str(v["program_id"]) == str(prog["program_id"]) and v["program_version"] == version:
                     return (
@@ -636,6 +644,7 @@ def _on_program_editor_change() -> None:
 
 
 def _request_program_delete() -> None:
+    """执行 request_program_delete。"""
     click = st.session_state.get("program_delete_click")
     if click is None:
         return
@@ -646,6 +655,7 @@ def _request_program_delete() -> None:
 
 
 def _request_program_version_delete() -> None:
+    """执行 request_program_version_delete。"""
     click = st.session_state.get("program_version_delete_click")
     if click is None:
         return
@@ -656,11 +666,13 @@ def _request_program_version_delete() -> None:
 
 
 def _clear_pending_program_delete() -> None:
+    """执行 clear_pending_program_delete。"""
     st.session_state.pop("pending_program_delete", None)
 
 
 @st.dialog("确认删除程序", icon=":material/delete_forever:", on_dismiss=_clear_pending_program_delete)
 def _confirm_delete_program(prog: dict[str, Any]) -> None:
+    """执行 confirm_delete_program。"""
     name = prog["program_name"]
     st.write(f"确定删除程序 **{name}** 及其所有版本吗？")
     st.caption("删除后该程序的版本记录将一并移除。")
@@ -683,11 +695,13 @@ def _confirm_delete_program(prog: dict[str, Any]) -> None:
 
 
 def _clear_pending_history_program_delete() -> None:
+    """执行 clear_pending_history_program_delete。"""
     st.session_state.pop("pending_history_program_delete", None)
 
 
 @st.dialog("确认删除程序版本", icon=":material/delete_forever:", on_dismiss=_clear_pending_history_program_delete)
 def _confirm_delete_history_version(pending: dict[str, Any]) -> None:
+    """执行 confirm_delete_history_version。"""
     st.write(f"确定删除程序 **{pending['program_name']}** 的版本 **{pending['version']}** 吗？")
     st.caption("删除后该历史版本记录将被移除。")
     with st.container(horizontal=True, horizontal_alignment="left"):
@@ -706,11 +720,13 @@ def _confirm_delete_history_version(pending: dict[str, Any]) -> None:
 
 
 def _clear_pending_program_version_delete() -> None:
+    """执行 clear_pending_program_version_delete。"""
     st.session_state.pop("pending_program_version_delete", None)
 
 
 @st.dialog("确认删除程序版本", icon=":material/delete_forever:", on_dismiss=_clear_pending_program_version_delete)
 def _confirm_delete_program_version(program_name: str, version: str) -> None:
+    """执行 confirm_delete_program_version。"""
     st.write(f"确定删除程序 **{program_name}** 的版本 **{version}** 吗？")
     st.caption("删除后该版本记录将从程序和版本库中一并移除。")
     with st.container(horizontal=True, horizontal_alignment="left"):

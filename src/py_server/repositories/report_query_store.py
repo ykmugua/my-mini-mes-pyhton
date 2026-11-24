@@ -12,6 +12,7 @@ from typing import Any, Iterator
 from sqlalchemy import text
 
 from .. import config, engine as eg
+from ..constants import ALL_OPTION, BOARD_LOCK, BOARD_NORMAL, RESULT_FAIL, RESULT_PASS, TRUE_TEXT
 from . import master_data_repo, report_details_store
 from .base import with_read_conn
 
@@ -25,6 +26,7 @@ def report_engines() -> Iterator[tuple[str, Any]]:
 
 
 def step_exists(step_no: str) -> bool:
+    """执行 step_exists。"""
     if not _STEP_NAME_RE.fullmatch(step_no or ""):
         return False
     with with_read_conn() as conn:
@@ -35,6 +37,7 @@ def step_exists(step_no: str) -> bool:
 
 
 def list_report_index(barcode: str | None = None, step_no: str | None = None) -> list[dict]:
+    """列出report_index。"""
     rows: list[dict] = report_details_store.list_overview(barcode, step_no=step_no)
     rows.sort(key=lambda row: row.get("id", 0), reverse=True)
     return rows
@@ -133,6 +136,7 @@ def query_reports(
     last_report_device: str | None = None,
     limit: int = 200,
 ) -> list[dict]:
+    """查询reports。"""
     if step_no and not _STEP_NAME_RE.fullmatch(step_no):
         return []
     filtered: list[dict] = []
@@ -155,10 +159,10 @@ def query_reports(
             continue
         if board_status:
             report_result = str(item.get("result") or "")
-            is_final = str(item.get("isfinalreport") or "").lower() == "true"
-            if board_status == "normal" and (report_result != "PASS" or is_final):
+            is_final = str(item.get("isfinalreport") or "").lower() == TRUE_TEXT
+            if board_status == BOARD_NORMAL and (report_result != RESULT_PASS or is_final):
                 continue
-            if board_status == "lock" and report_result != "FAIL":
+            if board_status == BOARD_LOCK and report_result != RESULT_FAIL:
                 continue
             if board_status == "final" and not is_final:
                 continue

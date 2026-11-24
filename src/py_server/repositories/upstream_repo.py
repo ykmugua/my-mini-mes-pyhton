@@ -11,6 +11,7 @@ u = engine.upstream_devices
 
 
 def list_rules(conn: Conn | None = None) -> list[dict]:
+    """列出rules。"""
     if conn is None:
         with with_read_conn() as c:
             return list_rules(c)
@@ -19,12 +20,14 @@ def list_rules(conn: Conn | None = None) -> list[dict]:
 
 
 def replace_rules(conn: Conn, cleaned: list[dict]) -> None:
+    """替换rules。"""
     conn.execute(delete(u))
     if cleaned:
         conn.execute(u.insert(), cleaned)
 
 
 def upstream_devices(conn: Conn, product: str, device_id: str) -> list[str]:
+    """执行 upstream_devices。"""
     stmt = (
         select(u.c.upstream_device_id)
         .where(u.c.device_id == device_id, (u.c.product == product) | (u.c.product == ""))
@@ -41,6 +44,7 @@ def upstream_devices(conn: Conn, product: str, device_id: str) -> list[str]:
 
 
 def has_trusted_pass(conn: Conn, *, workpiece: str, device_id: str, product: str) -> bool:
+    """检查trusted_pass。"""
     from sqlalchemy import func
 
     tr = engine.test_results
@@ -60,6 +64,7 @@ def has_trusted_pass(conn: Conn, *, workpiece: str, device_id: str, product: str
 
 
 def list_devices(conn: Conn | None = None) -> list[str]:
+    """列出devices。"""
     if conn is None:
         with with_read_conn() as c:
             return list_devices(c)

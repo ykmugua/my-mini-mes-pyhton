@@ -16,6 +16,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
 def _env_path(name: str, default: Path) -> Path:
+    """执行 env_path。"""
     raw = os.environ.get(name, "").strip()
     return Path(raw).expanduser().resolve() if raw else default
 
@@ -28,6 +29,7 @@ def data_dir() -> Path:
 
 
 def db_path() -> Path:
+    """执行 db_path。"""
     return _env_path("MES_DB_PATH", data_dir() / "mes.db")
 
 
@@ -59,6 +61,7 @@ def timezone() -> ZoneInfo:
 
 
 def api_port() -> int:
+    """执行 api_port。"""
     return int(os.environ.get("MES_API_PORT", "8000"))
 
 

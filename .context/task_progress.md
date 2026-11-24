@@ -1,11 +1,11 @@
 # 当前进度
 
-- 项目 README.md 已按当前架构重写：双进程、HTTP-only UI、单数据库文件多工序表、目录结构、配置、接口、业务规则与验证命令。
-- 测试报告数据库统一为 data/TestReport.db，按工序拆为 report_index_1/2/3 多张总览表；每张报告使用工序隔离的 SN 明细表，details 不再混工序。
-- 数据库已清空并通过 seed --reset --demo 重建规则一致的演示数据。
-- 测试履历 tag 页只显示当前选中产品实际有测试数据的工序页签，空工序不再显示。
-- 删除入站状态时释放 ProductFlow 与无测试数据的工件占位；已有测试报告/测试结果不被删除；入站占用只看 ProductFlow 当前总览。
-- 组件注册组件号、程序注册当前运行程序程序名、工艺列表工艺号均支持修改；主键改名在 API 层同步更新关联引用。
-- 已清理旧 app_pages 原型前端、过时 UI 测试、无用薄封装与运行期缓存。
-- 全量测试 115 passed；8000/8501 已重启并验证 api=200、streamlit=ok。
-- 本轮改动执行 `/sync-save` 与本地 git commit。
+- README.md 已按当前架构重写。
+- 测试报告数据库统一为 data/TestReport.db，按工序拆为 report_index_1/2/3 多张总览表；每张报告使用工序隔离的 SN 明细表。
+- 测试履历 tag 页只显示当前选中产品实际有测试数据的工序页签。
+- 删除入站状态释放 ProductFlow 与无测试数据的工件占位，已有测试数据保留。
+- 组件号/程序名/工艺号支持修改，主键改名在 API 层同步关联引用。
+- 四类注册页统一复用 registry_helpers.py 与 constants.py；新增跨层 constants.py 清理魔术字符串；所有函数/类已补 docstring。
+- 新增 docs/CODEBASE_GUIDE.md：函数职责、设计模式、框架、数据库和测试说明。
+- 全量测试 116 passed。
+- 本轮注释/注册页统一/文档任务尚未 `/sync-save`，尚未提交 git。

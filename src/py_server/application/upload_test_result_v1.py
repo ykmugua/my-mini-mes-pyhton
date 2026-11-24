@@ -10,6 +10,19 @@ import time
 from datetime import datetime
 
 from .. import config, db, engine as eg
+from ..constants import (
+    BOARD_FINAL,
+    BOARD_LOCK,
+    BOARD_NORMAL,
+    DETAIL_RESULT_FAIL,
+    DETAIL_RESULT_PASS,
+    FINAL_REPORT_FALSE,
+    FINAL_REPORT_TRUE,
+    NEXT_END,
+    NEXT_LOCK,
+    RESULT_FAIL,
+    RESULT_PASS,
+)
 from ..repositories import product_flow_store, report_details_store, report_repo, report_route, station_repo
 from ..repositories.base import with_conn
 
@@ -54,18 +67,20 @@ def execute(
     barcode = payload["barcode"].strip()
     station = payload["station"].strip()
     result = payload["result"].strip().upper()
-    if result not in ("PASS", "FAIL"):
-        raise UploadValidationError("result 只能是 PASS 或 FAIL")
+    if result not in (RESULT_PASS, RESULT_FAIL):
+        raise UploadValidationError(f"result 只能是 {RESULT_PASS} 或 {RESULT_FAIL}")
     is_final_report = str(
-        payload.get("isfinalreport") or "false"
+        payload.get("isfinalreport") or FINAL_REPORT_FALSE
     ).strip().lower()
-    if is_final_report not in ("true", "false"):
-        raise UploadValidationError("isfinalreport 只能是 true 或 false")
+    if is_final_report not in (FINAL_REPORT_TRUE, FINAL_REPORT_FALSE):
+        raise UploadValidationError(
+            f"isfinalreport 只能是 {FINAL_REPORT_TRUE} 或 {FINAL_REPORT_FALSE}"
+        )
     details = payload["details"]
     if not details:
         raise UploadValidationError("details 不得为空")
     for d in details:
-        if d["TestResult"] not in ("true", "false"):
+        if d["TestResult"] not in (DETAIL_RESULT_PASS, DETAIL_RESULT_FAIL):
             raise UploadValidationError(f"明细 TestResult 不合法：{d['TestResult']}")
 
     # 幂等：主表按 request_id 查
@@ -106,7 +121,7 @@ def execute(
             workpiece=barcode,
             device_id=device_id,
             test_item=detail["TestStep"],
-            result="PASS" if detail["TestResult"] == "true" else "FAIL",
+            result=RESULT_PASS if detail["TestResult"] == DETAIL_RESULT_PASS else RESULT_FAIL,
             measured_value=detail["MeasureValue"],
             program_version=payload["programversion"],
             program_sha256=None,
@@ -148,7 +163,7 @@ def execute(
             conn, report=report, details=detail_rows, step_no=step_no, report_engine=report_engine
         )
     # 总览表（details.db）：failed_step = 失败项 TestStep（成功为空）
-    failed_steps = [d["TestStep"] for d in details if d["TestResult"] == "false"]
+    failed_steps = [d["TestStep"] for d in details if d["TestResult"] == DETAIL_RESULT_FAIL]
     overview_report = dict(report)
     overview_report["traycode"] = str(payload.get("traycode") or "")
     report_details_store.insert_overview(
@@ -163,18 +178,18 @@ def execute(
     if step_info:
         current_step = str(step_info["step_no"])
         step_value = str(step_info["step_no"])
-        if result == "FAIL":
-            next_step = "LOCK"
-        elif is_final_report == "true":
-            next_step = "END"
+        if result == RESULT_FAIL:
+            next_step = NEXT_LOCK
+        elif is_final_report == FINAL_REPORT_TRUE:
+            next_step = NEXT_END
         else:
             next_step = str(int(step_value) + 1) if step_value.isdigit() else ""
         board_status = (
-            "lock"
-            if result == "FAIL"
-            else "final"
-            if is_final_report == "true"
-            else "normal"
+            BOARD_LOCK
+            if result == RESULT_FAIL
+            else BOARD_FINAL
+            if is_final_report == FINAL_REPORT_TRUE
+            else BOARD_NORMAL
         )
         product_flow_store.upsert_flow(
             barcode=barcode,
@@ -184,12 +199,12 @@ def execute(
             step_no=current_step,
             next_step=next_step,
             device=station,
-            note="test pass" if result == "PASS" else "test fail",
+            note="test pass" if result == RESULT_PASS else "test fail",
             changed_at=db.utc_now_iso(),
         )
 
     # 维护看板汇总
-    failed_items = [d["TestItem"] for d in details if d["TestResult"] == "false"]
+    failed_items = [d["TestItem"] for d in details if d["TestResult"] == DETAIL_RESULT_FAIL]
     with with_conn() as conn:
         station_repo.apply_result(
             conn,

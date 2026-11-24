@@ -10,6 +10,8 @@ import pandas as pd
 import streamlit as st
 
 from . import _common as master
+from . import registry_helpers as helpers
+from .constants import ENABLED_OPTIONS, STEP_NO_PATTERN
 
 STEP_COLUMNS = ["工序号", "工序名", "启用", "备注"]
 DELETE_CLICK_KEY = "step_delete_click"
@@ -17,17 +19,14 @@ PENDING_DELETE_KEY = "pending_step_delete"
 
 
 def _text(value: Any) -> str:
-    if value is None:
-        return ""
-    if isinstance(value, float) and pd.isna(value):
-        return ""
-    text = str(value).strip()
-    return "" if text.lower() in {"nan", "none", "nat"} else text
+    """统一空值清洗。"""
+    return helpers.clean_text(value)
 
 
 def _step_frame(
     steps: list[dict[str, Any]], *, include_delete: bool
 ) -> pd.DataFrame:
+    """执行 step_frame。"""
     records = [
         {
             "工序号": step["step_no"],
@@ -46,24 +45,21 @@ def _step_frame(
 
 
 def _step_config(*, include_delete: bool) -> dict[str, Any]:
+    """执行 step_config。"""
     config: dict[str, Any] = {
         "工序号": st.column_config.TextColumn(
             "工序号",
             help="必填，全厂唯一；只能包含英文字母和数字。",
             required=True,
             width="small",
-            validate=r"^[A-Za-z0-9]+$",
+            validate=rf"^{STEP_NO_PATTERN}$",
         ),
         "工序名": st.column_config.TextColumn(
             "工序名",
             required=True,
             width="medium",
         ),
-        "启用": st.column_config.CheckboxColumn(
-            "启用",
-            default=True,
-            width="small",
-        ),
+        "启用": helpers.enabled_column(),
         "备注": st.column_config.TextColumn("备注", width="large"),
     }
     if include_delete:
@@ -80,6 +76,7 @@ def _step_config(*, include_delete: bool) -> dict[str, Any]:
 def _validate_steps(
     rows: list[dict[str, Any]],
 ) -> tuple[list[dict[str, Any]] | None, str | None]:
+    """执行 validate_steps。"""
     steps: list[dict[str, Any]] = []
     step_nos: set[str] = set()
     step_names: set[str] = set()
@@ -100,7 +97,7 @@ def _validate_steps(
             return None, "工序号和工序名不能为空"
 
         step_no = _text(raw_step_no)
-        if not re.fullmatch(r"[A-Za-z0-9]+", step_no):
+        if not re.fullmatch(STEP_NO_PATTERN, step_no):
             return None, "工序号只能包含英文字母和数字"
         if not step_name:
             return None, "工序号和工序名不能为空"
@@ -116,10 +113,7 @@ def _validate_steps(
                 "step_no": step_no,
                 "step_name": step_name,
                 "enabled": (
-                    True
-                    if raw_enabled is None
-                    or (isinstance(raw_enabled, float) and pd.isna(raw_enabled))
-                    else bool(raw_enabled)
+                helpers.enabled_from_cell(raw_enabled)
                 ),
                 "remark": remark,
             }
@@ -129,17 +123,13 @@ def _validate_steps(
 
 
 def _request_step_delete() -> None:
-    click = st.session_state.get(DELETE_CLICK_KEY)
-    if click is None:
-        return
-    row_index = int(click["row"])
-    steps = st.session_state.get("steps", [])
-    if 0 <= row_index < len(steps):
-        st.session_state[PENDING_DELETE_KEY] = str(steps[row_index]["step_no"])
+    """记录待删除工序号。"""
+    helpers.request_delete(DELETE_CLICK_KEY, PENDING_DELETE_KEY, "steps", "step_no")
 
 
 def _clear_pending_delete() -> None:
-    st.session_state.pop(PENDING_DELETE_KEY, None)
+    """执行 clear_pending_delete。"""
+    helpers.clear_pending(PENDING_DELETE_KEY)
 
 
 @st.dialog(
@@ -148,6 +138,7 @@ def _clear_pending_delete() -> None:
     on_dismiss=_clear_pending_delete,
 )
 def _confirm_delete_step(step: dict[str, Any]) -> None:
+    """执行 confirm_delete_step。"""
     st.write(
         f"确定删除工序 **{step['step_no']} - {step['step_name']}** 吗？"
     )
@@ -176,7 +167,7 @@ def _confirm_delete_step(step: dict[str, Any]) -> None:
 
 def render_page() -> None:
     """页面渲染入口（app_pages 脚本包装）。"""
-    read_only = st.session_state.get("role", "工程师") == "只读"
+    read_only = not helpers.is_editable()
     master.ensure_master_data()
     steps: list[dict[str, Any]] = st.session_state.steps
 
@@ -212,7 +203,7 @@ def render_page() -> None:
                     placeholder="可选，用于填写现场说明",
                 )
                 new_step_enabled_text = enabled_col.selectbox(
-                    "启用", options=["是", "否"], key="new_step_enabled_text",
+                    "启用", options=list(ENABLED_OPTIONS), key="new_step_enabled_text",
                 )
                 # 第三行：新增按钮（左侧单独一行）
                 submitted = st.form_submit_button("新增工序")
@@ -225,7 +216,7 @@ def render_page() -> None:
                     {
                         "工序号": new_step_no.strip(),
                         "工序名": new_step_name.strip(),
-                        "启用": new_step_enabled_text == "是",
+                        "启用": helpers.enabled_from_text(new_step_enabled_text),
                         "备注": new_step_remark.strip(),
                     }
                 )
@@ -233,10 +224,7 @@ def render_page() -> None:
                 if error:
                     st.error(error)
                 else:
-                    st.session_state.steps = validated
-                    master.save_key("steps")
-                    st.toast("工序已新增")
-                    st.rerun()
+                    helpers.save_rows("steps", validated, "工序已新增")
 
 
     # -----------------------------------------------------------------------------

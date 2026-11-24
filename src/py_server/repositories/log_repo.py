@@ -11,10 +11,12 @@ logs = engine.unlock_logs
 
 
 def insert_unlock_log(conn: Conn, row: dict) -> None:
+    """插入unlock_log。"""
     conn.execute(logs.insert().values(**row))
 
 
 def list_unlock_logs(conn: Conn | None = None, limit: int = 50) -> list[dict]:
+    """列出unlock_logs。"""
     if conn is None:
         with with_read_conn() as c:
             return list_unlock_logs(c, limit)

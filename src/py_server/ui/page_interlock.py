@@ -11,6 +11,7 @@ from . import common
 
 
 def _locked_frame(locked: list[dict]) -> pd.DataFrame:
+    """执行 locked_frame。"""
     return pd.DataFrame(
         [
             {
@@ -27,6 +28,7 @@ def _locked_frame(locked: list[dict]) -> pd.DataFrame:
 
 
 def _render_locked(locked: list[dict]) -> None:
+    """执行 render_locked。"""
     st.subheader("当前锁定工件")
     if not locked:
         st.success("当前没有锁定工件。")
@@ -35,6 +37,7 @@ def _render_locked(locked: list[dict]) -> None:
 
 
 def _render_unlock(locked: list[dict]) -> None:
+    """执行 render_unlock。"""
     st.subheader("人工解锁")
     st.caption("解锁必须填写原因并勾选确认；解锁后工件放行状态恢复，动作全部留痕。")
     if not locked:
@@ -88,6 +91,7 @@ def _render_unlock(locked: list[dict]) -> None:
 
 
 def _render_unlock_logs() -> None:
+    """执行 render_unlock_logs。"""
     with st.expander("解锁留痕（最近 50 条）"):
         logs = client.list_unlock_logs(50) or []
         if not logs:
@@ -110,6 +114,7 @@ def _render_unlock_logs() -> None:
 
 
 def _cell(value) -> str:
+    """执行 cell。"""
     if value is None:
         return ""
     if isinstance(value, float) and pd.isna(value):
@@ -119,6 +124,7 @@ def _cell(value) -> str:
 
 
 def _render_upstream_rules() -> None:
+    """执行 render_upstream_rules。"""
     st.subheader("前道关键设备配置")
     st.caption(
         "“前道关键设备”不写死在代码里：在此维护设备的前道依赖，保存后立即生效。"
@@ -179,6 +185,7 @@ def _render_upstream_rules() -> None:
 
 
 def _render_interlock_check() -> None:
+    """执行 render_interlock_check。"""
     st.subheader("放行状态自检")
     st.caption("现场调试时可直接模拟设备查询，检查规则是否按预期放行。")
     with st.form("interlock_check_form"):
@@ -206,6 +213,7 @@ def _render_interlock_check() -> None:
 
 
 def render() -> None:
+    """执行 render。"""
     st.title("🔒 工序锁")
     st.caption(
         "规则：① 前道关键设备无 PASS 记录 → 拒绝启动；② FAIL 工件后续设备拦截；"

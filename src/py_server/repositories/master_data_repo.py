@@ -15,6 +15,7 @@ from .base import Conn, dialect_insert, rows_to_dicts, with_read_conn, with_conn
 
 
 def _rows(conn: Conn, table, order_by=None) -> list[dict]:
+    """执行 rows。"""
     stmt = select(table)
     if order_by is not None:
         stmt = stmt.order_by(order_by)
@@ -22,6 +23,7 @@ def _rows(conn: Conn, table, order_by=None) -> list[dict]:
 
 
 def _replace(conn: Conn, table, rows: list[dict], keys: list[str]) -> None:
+    """执行 replace。"""
     conn.execute(delete(table))
     if rows:
         conn.execute(table.insert(), rows)
@@ -29,6 +31,7 @@ def _replace(conn: Conn, table, rows: list[dict], keys: list[str]) -> None:
 
 # --- steps ---
 def list_steps(conn: Conn | None = None) -> list[dict]:
+    """列出steps。"""
     if conn is None:
         with with_read_conn() as c:
             return list_steps(c)
@@ -39,15 +42,18 @@ def list_steps(conn: Conn | None = None) -> list[dict]:
 
 
 def replace_steps(conn: Conn, rows: list[dict]) -> None:
+    """替换steps。"""
     _replace(conn, eg.steps, rows, ["step_no"])
 
 
 def delete_step(conn: Conn, step_no: str | int) -> None:
+    """删除step。"""
     conn.execute(delete(eg.steps).where(eg.steps.c.step_no == step_no))
 
 
 # --- devices ---
 def list_devices(conn: Conn | None = None) -> list[dict]:
+    """列出devices。"""
     if conn is None:
         with with_read_conn() as c:
             return list_devices(c)
@@ -58,11 +64,13 @@ def list_devices(conn: Conn | None = None) -> list[dict]:
 
 
 def replace_devices(conn: Conn, rows: list[dict]) -> None:
+    """替换devices。"""
     _replace(conn, eg.devices, rows, ["device_id"])
 
 
 # --- trays ---
 def list_trays(conn: Conn | None = None) -> list[dict]:
+    """列出trays。"""
     if conn is None:
         with with_read_conn() as c:
             return list_trays(c)
@@ -73,11 +81,13 @@ def list_trays(conn: Conn | None = None) -> list[dict]:
 
 
 def replace_trays(conn: Conn, rows: list[dict]) -> None:
+    """替换trays。"""
     _replace(conn, eg.trays, rows, ["traycode"])
 
 
 # --- programs ---
 def list_programs(conn: Conn | None = None) -> list[dict]:
+    """列出programs。"""
     if conn is None:
         with with_read_conn() as c:
             return list_programs(c)
@@ -92,6 +102,7 @@ def replace_programs(conn: Conn, rows: list[dict]) -> None:
 
 
 def list_program_versions(conn: Conn | None = None) -> list[dict]:
+    """列出program_versions。"""
     if conn is None:
         with with_read_conn() as c:
             return list_program_versions(c)
@@ -99,11 +110,13 @@ def list_program_versions(conn: Conn | None = None) -> list[dict]:
 
 
 def replace_program_versions(conn: Conn, rows: list[dict]) -> None:
+    """替换program_versions。"""
     _replace(conn, eg.program_versions, rows, ["program_id", "program_version"])
 
 
 # --- processes ---
 def list_processes(conn: Conn | None = None) -> list[dict]:
+    """列出processes。"""
     if conn is None:
         with with_read_conn() as c:
             return list_processes(c)
@@ -114,11 +127,13 @@ def list_processes(conn: Conn | None = None) -> list[dict]:
 
 
 def replace_processes(conn: Conn, rows: list[dict]) -> None:
+    """替换processes。"""
     _replace(conn, eg.processes, rows, ["process_code"])
 
 
 # --- process_routes ---
 def list_process_routes(conn: Conn | None = None) -> list[dict]:
+    """列出process_routes。"""
     if conn is None:
         with with_read_conn() as c:
             return list_process_routes(c)
@@ -126,11 +141,13 @@ def list_process_routes(conn: Conn | None = None) -> list[dict]:
 
 
 def replace_process_routes(conn: Conn, rows: list[dict]) -> None:
+    """替换process_routes。"""
     _replace(conn, eg.process_routes, rows, ["process_code", "step_no"])
 
 
 # --- process_step_resources ---
 def list_process_step_resources(conn: Conn | None = None) -> list[dict]:
+    """列出process_step_resources。"""
     if conn is None:
         with with_read_conn() as c:
             return list_process_step_resources(c)
@@ -138,11 +155,13 @@ def list_process_step_resources(conn: Conn | None = None) -> list[dict]:
 
 
 def replace_process_step_resources(conn: Conn, rows: list[dict]) -> None:
+    """替换process_step_resources。"""
     _replace(conn, eg.process_step_resources, rows, ["process_code", "step_no"])
 
 
 # --- products ---
 def list_products(conn: Conn | None = None) -> list[dict]:
+    """列出products。"""
     if conn is None:
         with with_read_conn() as c:
             return list_products(c)
@@ -150,6 +169,7 @@ def list_products(conn: Conn | None = None) -> list[dict]:
 
 
 def replace_products(conn: Conn, rows: list[dict]) -> None:
+    """替换products。"""
     _replace(conn, eg.products, rows, ["product_model"])
 
 

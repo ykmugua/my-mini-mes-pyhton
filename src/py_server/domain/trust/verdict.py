@@ -7,6 +7,7 @@ from enum import Enum
 
 
 class TrustReason(str, Enum):
+    """TrustReason 类。"""
     NOT_BOUND = "NOT_BOUND"
     NO_REPORT = "NO_REPORT"
     SELF_CHECK_FAILED = "SELF_CHECK_FAILED"
@@ -18,6 +19,7 @@ class TrustReason(str, Enum):
 
 @dataclass(frozen=True)
 class TrustVerdict:
+    """TrustVerdict 类。"""
     trusted: bool
     reason: TrustReason
     reasons: tuple[TrustReason, ...] = ()
@@ -25,4 +27,5 @@ class TrustVerdict:
 
     @classmethod
     def ok(cls) -> "TrustVerdict":
+        """执行 ok。"""
         return cls(trusted=True, reason=TrustReason.OK)

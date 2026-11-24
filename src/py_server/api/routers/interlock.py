@@ -16,21 +16,25 @@ def get_interlock(
     device_id: str | None = Query(default=None),
     product: str | None = Query(default=None),
 ) -> dict:
+    """获取interlock。"""
     return services.interlock_check(workpiece=workpiece, device_id=device_id, product=product)
 
 
 @router.get("/api/ui/workpieces/locked")
 def ui_locked() -> list[dict]:
+    """执行 ui_locked。"""
     return services.list_locked_workpieces()
 
 
 @router.get("/api/ui/unlock-logs")
 def ui_unlock_logs(limit: int = 50) -> list[dict]:
+    """执行 ui_unlock_logs。"""
     return services.list_unlock_logs(limit)
 
 
 @router.post("/api/ui/unlock")
 def ui_unlock(payload: UnlockIn) -> dict:
+    """执行 ui_unlock。"""
     return services.unlock_workpiece(
         workpiece=payload.workpiece,
         operator=payload.operator,
@@ -43,9 +47,11 @@ def ui_unlock(payload: UnlockIn) -> dict:
 
 @router.get("/api/ui/upstream")
 def ui_upstream() -> list[dict]:
+    """执行 ui_upstream。"""
     return services.list_upstream_rules()
 
 
 @router.post("/api/ui/upstream")
 def ui_replace_upstream(payload: UpstreamRulesIn) -> dict:
+    """执行 ui_replace_upstream。"""
     return {"count": services.replace_upstream_rules(payload.rows)}

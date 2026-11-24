@@ -7,6 +7,7 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class Binding:
+    """Binding 类。"""
     device_id: str
     product: str
     program_version: str
@@ -18,6 +19,7 @@ class Binding:
 
     @classmethod
     def from_row(cls, row) -> "Binding":
+        """执行 from_row。"""
         data = dict(row)
         return cls(
             device_id=data["device_id"],
@@ -32,4 +34,5 @@ class Binding:
 
     @property
     def self_check_failed(self) -> bool:
+        """执行 self_check_failed。"""
         return self.program_ok == 0

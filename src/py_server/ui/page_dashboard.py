@@ -12,7 +12,7 @@ import plotly.graph_objects as go
 import streamlit as st
 from streamlit_sortables import sort_items
 
-from ..repositories import station_repo
+from . import client
 
 DEFAULT_COLS = 6
 refresh_interval = 1000
@@ -31,6 +31,7 @@ MON_DEL_PENDING = "mon_device_delete_pending"
 
 
 def _request_mon_delete() -> None:
+    """执行 request_mon_delete。"""
     click = st.session_state.get(MON_DEL_CLICK)
     if click is None:
         return
@@ -41,11 +42,13 @@ def _request_mon_delete() -> None:
 
 
 def _clear_mon_delete() -> None:
+    """执行 clear_mon_delete。"""
     st.session_state.pop(MON_DEL_PENDING, None)
 
 
 @st.dialog("确认移除监控设备", icon=":material/delete_forever:", on_dismiss=_clear_mon_delete)
 def _confirm_mon_delete(dev: dict) -> None:
+    """执行 confirm_mon_delete。"""
     st.write(f"确定从监控中移除 **{dev['name']} ({dev['device_id']})** 吗？")
     st.caption("仅从监控列表移除，不会删除设备注册页中的设备。")
     with st.container(horizontal=True, horizontal_alignment="left"):
@@ -90,6 +93,7 @@ def _load_config_devices() -> list[dict]:
 
 
 def _save_config_devices(devices: list[dict]) -> None:
+    """执行 save_config_devices。"""
     data = {"devices": devices}
     DEVICE_CONFIG.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
@@ -104,6 +108,7 @@ def _registered_devices() -> list[dict]:
 
 
 def _step_names() -> dict:
+    """执行 step_names。"""
     from . import client
     try:
         return {str(d["step_no"]): d.get("step_name") or str(d["step_no"]) for d in client.master_list("steps")}
@@ -112,19 +117,22 @@ def _step_names() -> dict:
 
 
 def _read_summary(device_id: str) -> dict | None:
+    """通过 HTTP 读取单设备汇总。"""
     try:
-        return station_repo.get_by_device(device_id)
+        return client.station_summary(device_id)
     except Exception as exc:
-        st.error(f"数据库读取失败：{exc}")
+        st.error(f"读取看板汇总失败：{exc}")
         st.stop()
 
 
 def _fmt_hms(seconds) -> str:
+    """执行 fmt_hms。"""
     s = max(0, int(seconds or 0))
     return f"{s // 3600:02d}:{(s % 3600) // 60:02d}:{s % 60:02d}"
 
 
 def _status_seconds(data: dict) -> int:
+    """执行 status_seconds。"""
     status = str(data.get("status", "禁用"))
     if status in ("通过", "失败"):
         return int(data.get("test_duration") or 0)
@@ -133,6 +141,7 @@ def _status_seconds(data: dict) -> int:
 
 
 def _status_block(status: str, seconds: int = 0) -> str:
+    """执行 status_block。"""
     label = STATUS_LABELS.get(status, "禁用")
     color = STATUS_COLORS.get(status, STATUS_COLORS["禁用"])
     t = _fmt_hms(seconds)
@@ -146,6 +155,7 @@ def _status_block(status: str, seconds: int = 0) -> str:
 
 
 def _chart(data: dict):
+    """执行 chart。"""
     total = int(data.get("total", 0) or 0)
     values, texts = [], []
     for item in METRIC_ITEMS:
@@ -167,6 +177,7 @@ def _chart(data: dict):
 
 
 def _render_card(device: dict, data: dict | None) -> None:
+    """执行 render_card。"""
     name = device.get("name") or device.get("device_id")
     device_id = device.get("device_id", "")
     # 不设固定高度，避免右侧滚动条
@@ -197,7 +208,7 @@ def _render_card(device: dict, data: dict | None) -> None:
                 st.plotly_chart(_chart(data), width="stretch", config={"displayModeBar": False}, alt=f"{name} 测试数据统计柱状图")
         with tab_fail:
             with st.container(height=TAB_BODY_H, border=False):
-                details = station_repo.list_fail_details(device_id)
+                details = client.station_fail_details(device_id)
                 if details:
                     frame = pd.DataFrame([{"条码": d["barcode"], "失败信息": d["test_item"]} for d in details])
                     st.dataframe(frame, hide_index=True, width="stretch", alt=f"{name} 失败项明细列表")
@@ -338,6 +349,7 @@ def _parse_stat_time(value) -> datetime | None:
 
 
 def _clear_stat_inputs() -> None:
+    """执行 clear_stat_inputs。"""
     st.session_state["stat_time_start"] = None
     st.session_state["stat_time_end"] = None
 
@@ -355,10 +367,8 @@ def _apply_stat_range() -> None:
 
 def _stats_for_range(device_id: str, start: datetime, end: datetime, step_no: str | None = None) -> dict:
     """按生效时间区间，从统一测试报告库 report_index 统计该设备的数据。"""
-    from ..repositories import report_details_store
-
     records: list[dict] = []
-    rows = report_details_store.list_overview(None, step_no=step_no)
+    rows = client.report_index(None, step_no)
     for row in rows:
         if str(row.get("station") or "") == str(device_id):
             pass
@@ -408,6 +418,7 @@ def _device_stats(device_id: str, applied) -> dict:
 
 
 def _range_caption() -> str:
+    """执行 range_caption。"""
     applied = st.session_state.get("applied_stat_range")
     if not applied:
         return "统计区间：未筛选（全部汇总数据）"
@@ -553,6 +564,7 @@ def _render_step_fragment() -> None:
 
 
 def render() -> None:
+    """执行 render。"""
     st.html(COMPACT_CSS)
     st.title("产线测试工站监控｜设备主动上报")
 

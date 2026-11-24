@@ -26,6 +26,7 @@ UNLOCK_TOKEN_KEY = "workbench_unlock_token"
 
 
 def _text(value: Any) -> str:
+    """执行 text。"""
     if value is None:
         return ""
     text = str(value).strip()
@@ -36,6 +37,7 @@ def _eligible_products(
     products: list[dict],
     processes: list[dict],
 ) -> list[str]:
+    """执行 eligible_products。"""
     enabled_process_components = {
         str(process.get("component_no") or "")
         for process in processes
@@ -50,6 +52,7 @@ def _eligible_products(
 
 
 def _bound_product_frame(rows: list[dict]) -> pd.DataFrame:
+    """执行 bound_product_frame。"""
     return pd.DataFrame(
         [
             {
@@ -96,6 +99,7 @@ def _focus_scan_input(
 
 
 def _reset_inbound_batch() -> None:
+    """执行 reset_inbound_batch。"""
     st.session_state[TRAY_INPUT_KEY] = ""
     st.session_state.pop(INBOUND_TRAY_KEY, None)
     st.session_state.pop(INBOUND_CAPACITY_KEY, None)
@@ -108,16 +112,19 @@ def _reset_inbound_batch() -> None:
 
 
 def _reset_inbound_for_product_change() -> None:
+    """执行 reset_inbound_for_product_change。"""
     st.session_state.pop(INBOUND_STEP_KEY, None)
     st.session_state.pop(INBOUND_STEP_NO_KEY, None)
     _reset_inbound_batch()
 
 
 def _reset_inbound_for_step_change() -> None:
+    """执行 reset_inbound_for_step_change。"""
     _reset_inbound_batch()
 
 
 def _barcode_keys(token: int, capacity: int) -> list[tuple[int, str, str]]:
+    """执行 barcode_keys。"""
     return [
         (
             index,
@@ -135,6 +142,7 @@ def _barcode_widget_key(
     enabled: bool,
     submitted: bool,
 ) -> str:
+    """执行 barcode_widget_key。"""
     if submitted:
         return f"workbench_barcode_locked_{token}_{index}"
     prefix = "workbench_barcode_input" if enabled else "workbench_barcode_disabled"
@@ -142,6 +150,7 @@ def _barcode_widget_key(
 
 
 def _preview_capacity(trays: list[dict], allowed_models: list[str]) -> int:
+    """执行 preview_capacity。"""
     allowed = {model.casefold() for model in allowed_models}
     capacities = [
         int(tray.get("capacity") or 0)
@@ -158,6 +167,7 @@ def _handle_tray_change(
     trays: list[dict],
     allowed_models: list[str],
 ) -> None:
+    """执行 handle_tray_change。"""
     value = str(st.session_state.get(tray_input_key) or "").strip()
     if not value:
         return
@@ -220,6 +230,7 @@ def _handle_tray_change(
 
 
 def _clear_inbound_inputs() -> None:
+    """执行 clear_inbound_inputs。"""
     st.session_state[TRAY_INPUT_KEY] = ""
     st.session_state[INBOUND_SUBMITTED_KEY] = False
     st.session_state.pop(INBOUND_TRAY_KEY, None)
@@ -241,6 +252,7 @@ def _submit_or_focus_next_barcode(
     traycode: str,
     operator: str,
 ) -> None:
+    """执行 submit_or_focus_next_barcode。"""
     slots = _barcode_keys(token, capacity)
     enabled_slots = [
         (index, text_key)
@@ -306,6 +318,7 @@ def _handle_barcode_change(
     product_model: str,
     operator: str,
 ) -> None:
+    """执行 handle_barcode_change。"""
     if st.session_state.get(INBOUND_SUBMITTED_KEY):
         return
     st.session_state[value_key] = str(
@@ -329,6 +342,7 @@ def _handle_enabled_change(
     product_model: str,
     operator: str,
 ) -> None:
+    """执行 handle_enabled_change。"""
     if st.session_state.get(INBOUND_SUBMITTED_KEY):
         return
     _submit_or_focus_next_barcode(
@@ -346,6 +360,7 @@ def _handle_unlock_scan(
     step_labels: dict[str, str],
     operator: str,
 ) -> None:
+    """执行 handle_unlock_scan。"""
     barcode = str(st.session_state.get(scan_key) or "").strip()
     st.session_state[scan_key] = ""
     if not barcode:
@@ -400,6 +415,7 @@ def _render_inbound(
     trays: list[dict],
     read_only: bool,
 ) -> None:
+    """执行 render_inbound。"""
     if not product_options:
         st.warning("没有已启用且绑定工艺的产品型号，请先维护组件与工艺配置。")
         return
@@ -593,6 +609,7 @@ def _render_inbound(
 
 
 def _render_tray_unbind(*, trays: list[dict], read_only: bool) -> None:
+    """执行 render_tray_unbind。"""
     tray_options = [str(tray["traycode"]) for tray in trays]
     if not tray_options:
         st.info("暂无已注册载具。")
@@ -649,6 +666,7 @@ def _render_tray_unbind(*, trays: list[dict], read_only: bool) -> None:
 
 
 def _render_product_unlock(*, steps: list[dict], read_only: bool) -> None:
+    """执行 render_product_unlock。"""
     step_labels = {
         f"{step['step_no']} · {step.get('step_name') or ''}": str(step["step_no"])
         for step in steps
@@ -679,6 +697,7 @@ def _render_product_unlock(*, steps: list[dict], read_only: bool) -> None:
 
 
 def render() -> None:
+    """执行 render。"""
     common.init_session()
     st.title("🛠️ 工位操作台")
     st.caption("现场工位的一站式操作：扫码入站、查看入线状态、托盘解绑、扫码解锁。")

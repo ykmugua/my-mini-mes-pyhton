@@ -347,6 +347,7 @@ def get_details_engine() -> Engine:
 
         @event.listens_for(engine, "connect")
         def _details_sqlite_pragmas(dbapi_conn, _):
+            """执行 details_sqlite_pragmas。"""
             cur = dbapi_conn.cursor()
             cur.execute("PRAGMA journal_mode=WAL")
             cur.execute("PRAGMA synchronous=NORMAL")
@@ -366,6 +367,7 @@ def _open_engine(path: Path | str, *, foreign_keys: bool = False) -> Engine:
 
     @event.listens_for(eng, "connect")
     def _pragmas(dbapi_conn, _):
+        """执行 pragmas。"""
         cur = dbapi_conn.cursor()
         cur.execute("PRAGMA journal_mode=WAL")
         cur.execute("PRAGMA synchronous=NORMAL")
@@ -403,6 +405,7 @@ def get_engine() -> Engine:
 
         @event.listens_for(engine, "connect")
         def _sqlite_pragmas(dbapi_conn, _):
+            """执行 sqlite_pragmas。"""
             cur = dbapi_conn.cursor()
             cur.execute("PRAGMA journal_mode=WAL")
             cur.execute("PRAGMA synchronous=NORMAL")

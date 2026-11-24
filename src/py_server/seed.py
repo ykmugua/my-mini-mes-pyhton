@@ -272,6 +272,7 @@ def seed_station_summary() -> None:
             ))
 
 def seed(reset: bool = False, with_demo: bool = False) -> None:
+    """执行 seed。"""
     db.init_db()
     existing = 0
     existing = dashboard_repo.business_data_count()
@@ -423,6 +424,7 @@ def _seed_demo_runs() -> None:
 
 
 def main() -> None:
+    """执行 main。"""
     parser = argparse.ArgumentParser(description="初始化旁路 MES 演示数据")
     parser.add_argument("--reset", action="store_true", help="清空本系统全部业务数据后重建")
     parser.add_argument("--demo", action="store_true", help="生成今天的演示测试数据")

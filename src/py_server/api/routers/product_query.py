@@ -18,6 +18,7 @@ router = APIRouter(tags=["product_query"])
 
 @router.get("/api/ui/product/options")
 def ui_product_options() -> list[str]:
+    """执行 ui_product_options。"""
     return services.distinct_products()
 
 
@@ -33,6 +34,7 @@ def ui_query_workpieces(
     date_to: str | None = Query(default=None),
     limit: int = Query(default=200),
 ) -> list[dict]:
+    """执行 ui_query_workpieces。"""
     return services.query_workpieces(
         product=product, workpiece=workpiece, device=device,
         board_status=board_status, current_step=current_step, test_step=test_step,
@@ -42,6 +44,7 @@ def ui_query_workpieces(
 
 @router.get("/api/ui/product/workpiece/{workpiece}/detail")
 def ui_workpiece_detail(workpiece: str) -> dict:
+    """执行 ui_workpiece_detail。"""
     data = services.workpiece_detail(workpiece)
     if data is None:
         raise NotFoundError(f"工件 {workpiece} 不存在")
@@ -50,6 +53,7 @@ def ui_workpiece_detail(workpiece: str) -> dict:
 
 @router.get("/api/ui/product/workpiece/{workpiece}/history")
 def ui_workpiece_history(workpiece: str) -> dict:
+    """执行 ui_workpiece_history。"""
     return {
         "tests": services.workpiece_test_history(workpiece),
         "unlocks": services.workpiece_unlock_history(workpiece),
@@ -58,6 +62,7 @@ def ui_workpiece_history(workpiece: str) -> dict:
 
 @router.get("/api/ui/product/route/{product_model}")
 def ui_product_route(product_model: str) -> dict:
+    """执行 ui_product_route。"""
     return services.product_route_detail(product_model)
 
 
@@ -66,6 +71,7 @@ def ui_report_index(
     barcode: str | None = Query(default=None),
     step_no: str | None = Query(default=None),
 ) -> list[dict]:
+    """执行 ui_report_index。"""
     return report_query_store.list_report_index(barcode=barcode, step_no=step_no)
 
 
@@ -125,6 +131,7 @@ def ui_product_flow_overview(
     board_status: str | None = Query(default=None),
     current_step: str | None = Query(default=None),
 ) -> list[dict]:
+    """执行 ui_product_flow_overview。"""
     return product_flow_store.list_overview(
         barcode=barcode, componentcode=componentcode, traycode=traycode, device=device,
         board_status=board_status, current_step=current_step,
@@ -133,36 +140,43 @@ def ui_product_flow_overview(
 
 @router.get("/api/ui/product/flow-details")
 def ui_product_flow_details(flow_table: str = Query(min_length=3)) -> list[dict]:
+    """执行 ui_product_flow_details。"""
     return product_flow_store.list_flow(flow_table)
 
 
 @router.delete("/api/ui/product/flow")
 def ui_delete_product_flow(barcode: str = Query(min_length=1)) -> dict:
+    """执行 ui_delete_product_flow。"""
     return services.delete_product_flow(barcode=barcode)
 
 
 @router.delete("/api/ui/product/tray-flow")
 def ui_delete_tray_flow(traycode: str = Query(min_length=1)) -> dict:
+    """执行 ui_delete_tray_flow。"""
     return services.delete_tray_flow(traycode=traycode)
 
 
 @router.post("/api/ui/product/repair-tray-report-fields")
 def ui_repair_tray_report_fields() -> dict:
+    """执行 ui_repair_tray_report_fields。"""
     return services.repair_tray_operation_report_fields()
 
 
 @router.get("/api/ui/product/step-options")
 def ui_step_options() -> list[dict]:
+    """执行 ui_step_options。"""
     return master_data_repo.list_steps()
 
 
 @router.get("/api/ui/workbench/recipe")
 def ui_workbench_recipe(product: str = Query(min_length=1)) -> dict:
+    """执行 ui_workbench_recipe。"""
     return services.workbench_recipe(product)
 
 
 @router.post("/api/ui/workbench/inbound")
 def ui_workbench_inbound(payload: WorkbenchInboundIn) -> dict:
+    """执行 ui_workbench_inbound。"""
     return services.manual_inbound(
         product=payload.product,
         step_no=payload.step_no,
@@ -174,6 +188,7 @@ def ui_workbench_inbound(payload: WorkbenchInboundIn) -> dict:
 
 @router.post("/api/ui/workbench/tray-unbind")
 def ui_workbench_tray_unbind(payload: WorkbenchTrayUnbindIn) -> dict:
+    """执行 ui_workbench_tray_unbind。"""
     return services.unbind_tray(
         traycode=payload.traycode,
         operator=payload.operator,

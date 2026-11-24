@@ -12,6 +12,7 @@ from ._mock_program_data import enabled_steps
 
 
 def _text(value: Any) -> str:
+    """执行 text。"""
     if value is None:
         return ""
     if isinstance(value, float) and pd.isna(value):
@@ -21,10 +22,12 @@ def _text(value: Any) -> str:
 
 
 def _split(value: Any) -> list[str]:
+    """执行 split。"""
     return [x.strip() for x in str(value or "").split(",") if x.strip()]
 
 
 def _join(items: Any) -> str:
+    """执行 join。"""
     if items is None:
         return ""
     if isinstance(items, str):
@@ -33,11 +36,13 @@ def _join(items: Any) -> str:
 
 
 def _save(key: str, rows: list[dict[str, Any]]) -> None:
+    """执行 save。"""
     st.session_state[key] = rows
     master.save_key(key)
 
 
 def _request_process_delete() -> None:
+    """执行 request_process_delete。"""
     click = st.session_state.get("process_delete_click")
     if click is None:
         return
@@ -48,6 +53,7 @@ def _request_process_delete() -> None:
 
 
 def _request_route_delete() -> None:
+    """执行 request_route_delete。"""
     click = st.session_state.get("route_delete_click")
     if click is None:
         return
@@ -64,6 +70,7 @@ def _request_route_delete() -> None:
 
 
 def _request_resource_delete() -> None:
+    """执行 request_resource_delete。"""
     click = st.session_state.get("res_delete_click")
     if click is None:
         return
@@ -80,6 +87,7 @@ def _request_resource_delete() -> None:
 
 
 def render_page() -> None:
+    """渲染page。"""
     master.ensure_master_data()
     read_only = st.session_state.get("role", "工程师") == "只读"
     processes: list[dict[str, Any]] = st.session_state.get("processes", [])
@@ -322,11 +330,13 @@ def render_page() -> None:
 
 
 def _clear_pending_process_delete() -> None:
+    """执行 clear_pending_process_delete。"""
     st.session_state.pop("pending_process_delete", None)
 
 
 @st.dialog("确认删除工艺", icon=":material/delete_forever:", on_dismiss=_clear_pending_process_delete)
 def _confirm_delete_process(proc: dict[str, Any]) -> None:
+    """执行 confirm_delete_process。"""
     code = proc["process_code"]
     st.write(f"确定删除工艺 **{code} - {proc.get('process_name','')}** 吗？")
     st.caption("删除后其工序路线与工序资源会一并删除，绑定的组件将不再有工艺配置。")
@@ -346,15 +356,18 @@ def _confirm_delete_process(proc: dict[str, Any]) -> None:
 
 
 def _clear_pending_route_delete() -> None:
+    """执行 clear_pending_route_delete。"""
     st.session_state.pop("pending_route_delete", None)
 
 
 def _clear_pending_resource_delete() -> None:
+    """执行 clear_pending_resource_delete。"""
     st.session_state.pop("pending_resource_delete", None)
 
 
 @st.dialog("确认删除工序路线", icon=":material/delete_forever:", on_dismiss=_clear_pending_route_delete)
 def _confirm_delete_route(target: dict[str, Any]) -> None:
+    """执行 confirm_delete_route。"""
     code = target["process_code"]
     step = target["step_no"]
     st.write(f"确定删除工艺 **{code}** 中工序 **{step}** 的路线配置吗？")
@@ -376,6 +389,7 @@ def _confirm_delete_route(target: dict[str, Any]) -> None:
 
 @st.dialog("确认删除工序资源", icon=":material/delete_forever:", on_dismiss=_clear_pending_resource_delete)
 def _confirm_delete_resource(target: dict[str, Any]) -> None:
+    """执行 confirm_delete_resource。"""
     code = target["process_code"]
     step = target["step_no"]
     st.write(f"确定删除工艺 **{code}** 中工序 **{step}** 的资源配置吗？")

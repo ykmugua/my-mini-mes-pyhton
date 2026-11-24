@@ -15,6 +15,7 @@ status_logs = engine.program_status_logs
 
 
 def list_bindings(conn: Conn | None = None) -> list[dict]:
+    """列出bindings。"""
     if conn is None:
         with with_read_conn() as c:
             return list_bindings(c)
@@ -35,6 +36,7 @@ def try_binding(conn: Conn, device_id: str, product: str | None) -> Any | None:
 
 
 def binding_count(conn: Conn, device_id: str) -> int:
+    """执行 binding_count。"""
     from sqlalchemy import func
 
     stmt = select(func.count()).select_from(pb).where(pb.c.device_id == device_id)
@@ -42,11 +44,13 @@ def binding_count(conn: Conn, device_id: str) -> int:
 
 
 def binding_products(conn: Conn, device_id: str) -> list[str]:
+    """执行 binding_products。"""
     stmt = select(pb.c.product).where(pb.c.device_id == device_id).order_by(pb.c.product)
     return [str(row[0]) for row in conn.execute(stmt).fetchall()]
 
 
 def upsert_binding(conn: Conn, row: dict, now: str) -> None:
+    """执行 upsert_binding。"""
     stmt = dialect_insert(pb).values(
         device_id=row["device_id"],
         product=row["product"],
@@ -85,6 +89,7 @@ def replace_bindings(conn: Conn, cleaned: list[dict], now: str) -> None:
 
 
 def mark_pulled(conn: Conn, binding_id: int, now: str) -> None:
+    """执行 mark_pulled。"""
     stmt = (
         pb.update()
         .where(pb.c.id == binding_id)
@@ -94,10 +99,12 @@ def mark_pulled(conn: Conn, binding_id: int, now: str) -> None:
 
 
 def insert_pull_log(conn: Conn, row: dict) -> None:
+    """插入pull_log。"""
     conn.execute(pulls.insert().values(**row))
 
 
 def update_reported_status(conn: Conn, binding_id: int, *, version, sha, reported_at, program_ok, now) -> None:
+    """更新reported_status。"""
     stmt = (
         pb.update()
         .where(pb.c.id == binding_id)
@@ -113,10 +120,12 @@ def update_reported_status(conn: Conn, binding_id: int, *, version, sha, reporte
 
 
 def insert_status_log(conn: Conn, row: dict) -> None:
+    """插入status_log。"""
     conn.execute(status_logs.insert().values(**row))
 
 
 def program_drift(conn: Conn | None = None) -> list[dict]:
+    """执行 program_drift。"""
     from sqlalchemy import or_
 
     if conn is None:
@@ -139,6 +148,7 @@ def program_drift(conn: Conn | None = None) -> list[dict]:
 
 
 def list_pull_logs(conn: Conn | None = None, limit: int = 50) -> list[dict]:
+    """列出pull_logs。"""
     if conn is None:
         with with_read_conn() as c:
             return list_pull_logs(c, limit)
@@ -147,6 +157,7 @@ def list_pull_logs(conn: Conn | None = None, limit: int = 50) -> list[dict]:
 
 
 def list_status_logs(conn: Conn | None = None, limit: int = 50) -> list[dict]:
+    """列出status_logs。"""
     if conn is None:
         with with_read_conn() as c:
             return list_status_logs(c, limit)

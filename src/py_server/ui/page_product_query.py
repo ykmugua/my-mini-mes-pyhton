@@ -13,6 +13,7 @@ STATUS_OPTIONS = ["全部", "PENDING", "PASS", "FAIL"]
 
 
 def _status_text(row: dict) -> str:
+    """执行 status_text。"""
     parts = [row.get("status") or ""]
     if row.get("lock_reason"):
         parts.append("🔒")
@@ -35,6 +36,7 @@ def _result_frame(results: list[dict], *, report_trays: dict[str, str]) -> pd.Da
 
 
 def _report_query_frame(results: list[dict]) -> pd.DataFrame:
+    """执行 report_query_frame。"""
     return pd.DataFrame([{
         "step_no": r.get("step_no") or "",
         "source_db": r.get("source_db") or "",
@@ -61,6 +63,7 @@ def _render_report_query() -> None:
         return
 
     def opts(values):
+        """执行 opts。"""
         return ["全部"] + sorted({str(v) for v in values if v not in (None, "")})
 
     product_options = opts(options.get("products", []))
@@ -199,6 +202,7 @@ def _render_report_query() -> None:
 
 
 def _render_selected_report_detail(selected: dict | None = None) -> None:
+    """执行 render_selected_report_detail。"""
     if selected is None:
         return
     barcode = str(selected.get("barcode") or "")
@@ -256,6 +260,7 @@ def _render_selected_report_detail(selected: dict | None = None) -> None:
 
 
 def _render_query() -> list[dict]:
+    """执行 render_query。"""
     try:
         report_trays = client.latest_report_traycodes()
     except ServiceError:
@@ -269,6 +274,7 @@ def _render_query() -> list[dict]:
         except ServiceError:
             all_wps = []
         def opts(values):
+            """执行 opts。"""
             return ["全部"] + sorted({str(v) for v in values if v not in (None, "")})
         products = opts([r.get("componentcode") for r in all_wps])
         traycodes = opts(report_trays.values())
@@ -351,6 +357,7 @@ def _render_query() -> list[dict]:
 
 
 def _render_results(results: list[dict]) -> None:
+    """执行 render_results。"""
     with st.container(border=True):
         st.subheader("查询结果")
         if not results:
@@ -480,6 +487,7 @@ def _render_product_flow(barcode: str | None = None) -> None:
 
 
 def _render_detail(wp_id: str) -> None:
+    """执行 render_detail。"""
     editable = common.can_edit()
     try:
         detail = client.workpiece_detail(wp_id)
@@ -565,6 +573,7 @@ def _render_detail(wp_id: str) -> None:
 
 
 def render() -> None:
+    """执行 render。"""
     st.title("🔎 产品查询｜追溯与解绑")
     st.caption("按产品/工件/状态/时间查询工件，点击结果行查看追溯详情，并对锁定工件执行人工解绑放行。")
     common.render_flash()
