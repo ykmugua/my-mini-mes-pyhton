@@ -705,3 +705,6 @@
 2026-11-24：按用户要求删除全部旧兼容。删除 /api/test-result 单条上报接口与 TestResultIn schema；删除只测旧接口的测试，保留业务规则测试并迁移到 V1.3 helper；examples/device_client.py 改为 V1.3 整单上报；删除 config.report_db_path 兼容别名、db.py 原始 sqlite 连接兼容函数、ui/client.py 未使用 _FALLBACK、repositories/base.py 旧 _tx 别名；更新 README/CODEBASE_GUIDE 移除旧单条上报描述。V1.3 内部单条上报改为用 TestItem 作为测试项、用解析后的 ISO 时间作为 tested_at、可信性改用设备 /api/program/status 指纹。全量测试 110 passed。
 
 - 产品流转当前态与历史分离：当前态存 `product_overview`，历史存每产品 `F_<barcode>_<hash>` 表。托盘解绑写历史并删除当前态，允许重新入站。
+
+- FastAPI 路由按调用方分目录：routers/device、routers/ui、routers/common；旧顶层路由文件仅 re-export，避免外部 import 中断。
+- `active_products` 是 mes.db 中当前在制产品表；ProductFlow.db 继续维护 product_overview 与每产品历史表。

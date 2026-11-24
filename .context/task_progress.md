@@ -1,7 +1,7 @@
-- 当前阶段：注册配置命名统一、工位操作台/托盘解绑/入线状态交互调整、主数据种子同步、文档目录整理。
-- 托盘解绑语义已改为：扫码托盘码 → 写一条 `托盘解绑` 流转历史 → 清除当前入站总览 → 条码可重新入站；不解绑测试报告/工件档案。
-- 入线状态页已改成当前已绑定托盘列表，字段：载具号/条码数量/产品条码/当前工序；不再提供删除按钮。
-- 托盘解绑页已删除列表，只保留扫描托盘码输入。
-- `src/py_server/master_data.json` 已导出为当前 `data/mes.db` 的主数据；测试使用 `tests/fixtures/master_data.json` 旧 fixture 保持既有测试稳定。
-- `design_data` 内容已移动到 `docs/`，旧目录删除；`seed.py` 路径已同步。
-- 全量测试最后一次：`109 passed`。
+- 当前阶段：FastAPI 路由按调用方分组、当前在制表 active_products 接入、产品流转历史与当前态分离、托盘解绑语义、看板时间/数据源规则、文档整理与 onboarding。
+- 路由分组：routers/device 为设备接口，routers/ui 为 UI 接口，routers/common 为双方共用；旧 routers/*.py 仅 re-export；URL 保持不变。
+- active_products 维护当前在制产品；ProductFlow.db 的 product_overview 与 F_<barcode>_<hash> 作为当前总览/历史体系保留；解绑写历史、清当前在制、不清测试数据。
+- V1.3 上报 x-device-sn 是设备号，必须等于请求体 station，不是 barcode。
+- 看板卡片测试数据固定来自 TestReport.db report_index_<step>；时间为空默认当日 00:00 至现在；设置范围后按范围筛选；无 station_summary 记录也渲染统计。
+- 新增文档 docs/PROJECT_ONBOARDING.md，README 已链接。
+- 全量测试最近一次：109 passed。

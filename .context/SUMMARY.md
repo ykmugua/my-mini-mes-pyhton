@@ -1,1 +1,1 @@
-注册配置命名统一；工位操作台入线状态/托盘解绑交互调整；托盘解绑写入流转历史并释放当前入站；主数据种子同步当前数据库；文档目录从 design_data 迁移到 docs；pytest 临时目录统一到 .pytest_tmp。
+FastAPI 路由按设备/UI/共用分组；active_products 当前在制表接入；托盘解绑写历史并下线产品；看板统计固定读 TestReport.db；时间筛选支持默认当日与自定义范围；整理项目文档并新增 onboarding；修正 x-device-sn 为设备号并与 station 校验。

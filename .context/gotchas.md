@@ -289,3 +289,7 @@ SQLAlchemy 2.1.8 中 `Insert.on_conflict_do_update()` 不再接受 `constraint=`
 - 托盘解绑不能只清空 `traycode`：那会导致条码仍被重复入站校验拦截。当前正确语义是「结束当前流转 + 写解绑流转历史」，保留产品流转明细和测试数据。
 - `master_data.json` 是 seed 文件，不是 UI 运行时数据；UI 修改写数据库，不会回写 JSON。测试使用 `MES_MASTER_SEED_FILE` 指向旧 fixture，避免生产种子数据影响测试。
 - Streamlit `ButtonColumn` 当前版本不支持 `disabled`；只读模式下必须不渲染该列。
+
+- `x-device-sn` 是设备 SN，与 V1.3 请求体 `station` 一致；不要把请求头设置成 barcode。
+- 托盘解绑/扫码解绑以 `mes.db.active_products` 判断当前占用；ProductFlow 历史写一条 `托盘解绑`，当前在制删除，测试报告不清。
+- `station_summary` 缺失不能再把卡片置为禁用；统计数据必须来自 TestReport.db。
