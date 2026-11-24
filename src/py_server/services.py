@@ -26,6 +26,7 @@ from .domain.trust.binding import Binding
 from .domain.trust.policy import ProgramTrustPolicy
 from .domain.workpiece.model import Workpiece
 from .repositories import (
+    active_product_repo,
     binding_repo,
     dashboard_repo,
     log_repo,
@@ -1100,7 +1101,8 @@ def unbind_tray(*, traycode: str, operator: str, confirmed: bool) -> dict:
     operator = _clean_text(operator, "操作员", max_len=64)
     if not confirmed:
         raise ValidationError("必须勾选确认后才能解绑托盘")
-    if not product_flow_store.list_overview(traycode=traycode):
+    active_rows = active_product_repo.list_active(traycode=traycode)
+    if not active_rows:
         raise NotFoundError(f"载具 {traycode} 当前未绑定产品")
     affected = _station_workbench_uc.unbind_tray(
         traycode=traycode,
@@ -1108,7 +1110,7 @@ def unbind_tray(*, traycode: str, operator: str, confirmed: bool) -> dict:
         now=db.utc_now_iso(),
     )
     if not affected:
-        raise NotFoundError(f"载具 {traycode} 当前未绑定产品")
+        affected = active_rows
     return {
         "traycode": traycode,
         "count": len(affected),

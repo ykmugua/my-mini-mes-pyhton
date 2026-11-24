@@ -72,7 +72,7 @@ def test_dashboard_repo_sql_excludes_untrusted():
 
 def test_report_query_orchestration_lives_in_repository():
     """测试报告跨库扫描/筛选属于 repository；路由只做参数与响应。"""
-    router = (SRC / "api" / "routers" / "product_query.py").read_text(encoding="utf-8")
+    router = (SRC / "api" / "routers" / "ui" / "product_query.py").read_text(encoding="utf-8")
     store = (SRC / "repositories" / "report_query_store.py").read_text(encoding="utf-8")
     assert "report_query_store." in router
     assert "SELECT " not in router.upper()

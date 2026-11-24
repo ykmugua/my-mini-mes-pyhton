@@ -77,7 +77,7 @@ def push_result(
         "/api/v1/test-results",
         json=payload,
         headers={
-            "x-device-sn": workpiece,
+            "x-device-sn": device_id,
             "x-timestamp": "1763978400000",
             "x-request-id": uuid.uuid4().hex,
         },

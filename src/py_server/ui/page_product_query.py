@@ -276,7 +276,7 @@ def _render_query() -> list[dict]:
         st.subheader(QUERY_CONDITIONS_SECTION)
         # 选项来自产品流转总览表
         try:
-            all_wps = client.product_flow_overview()
+            all_wps = client.query_workpieces(limit=500)
         except ServiceError:
             all_wps = []
         def opts(values):
@@ -306,12 +306,14 @@ def _render_query() -> list[dict]:
 
     # 结果常驻 session_state：首次进入自动加载全部；之后只在点“查询”时更新
     if "pq_results" not in st.session_state:
-        st.session_state["pq_results"] = client.product_flow_overview()
+        st.session_state["pq_results"] = client.query_workpieces(limit=500)
         st.session_state["pq_results"] = [
             {
                 **row,
+                "barcode": row.get("workpiece") or "",
+                "componentcode": row.get("product") or "",
                 "traycode": report_trays.get(
-                    str(row.get("barcode") or ""), ""
+                    str(row.get("workpiece") or ""), ""
                 ),
             }
             for row in st.session_state["pq_results"]
@@ -330,18 +332,21 @@ def _render_query() -> list[dict]:
         if test_step != "全部":
             params["test_step"] = test_step
         try:
-            new_results = client.product_flow_overview(
-                barcode=None if workpiece == "全部" else workpiece,
-                componentcode=None if product == "全部" else product,
+            new_results = client.query_workpieces(
+                workpiece=None if workpiece == "全部" else workpiece,
+                product=None if product == "全部" else product,
                 device=None if device == "全部" else device,
                 board_status=None if board_status == "全部" else board_status,
                 current_step=None if test_step == "全部" else test_step,
+                limit=500,
             )
             st.session_state["pq_results"] = [
                 {
                     **row,
+                    "barcode": row.get("workpiece") or "",
+                    "componentcode": row.get("product") or "",
                     "traycode": report_trays.get(
-                        str(row.get("barcode") or ""), ""
+                        str(row.get("workpiece") or ""), ""
                     ),
                 }
                 for row in new_results
@@ -354,7 +359,7 @@ def _render_query() -> list[dict]:
                 ]
             # 已选工件若仍在新结果中则保留；否则清掉，避免详情指向旧数据
             current = st.session_state.get("pq_current")
-            ids = [r["barcode"] for r in new_results]
+            ids = [r.get("workpiece") or r.get("barcode") or "" for r in new_results]
             if current and current not in ids:
                 st.session_state.pop("pq_current", None)
         except ServiceError as exc:

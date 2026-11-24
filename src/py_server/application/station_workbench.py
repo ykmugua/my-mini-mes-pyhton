@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from ..repositories import product_flow_store, workpiece_repo
+from ..repositories import active_product_repo, product_flow_store, workpiece_repo
 from ..repositories.base import with_conn
 
 
@@ -21,6 +21,13 @@ def manual_inbound(
                 now=now,
             )
     product_flow_store.create_inbound(rows, changed_at=now)
+    for row in rows:
+        active_product_repo.upsert({
+            **row,
+            "current_step": row.get("step_no") or "",
+            "flow_table": product_flow_store.flow_table_name(str(row["barcode"])),
+            "updated_at": now,
+        })
 
 
 def unbind_tray(*, traycode: str, operator: str, now: str) -> list[dict]:
@@ -31,11 +38,7 @@ def unbind_tray(*, traycode: str, operator: str, now: str) -> list[dict]:
         note=f"托盘解绑（操作员：{operator}）",
         changed_at=now,
     )
-    with with_conn() as conn:
-        for row in deleted:
-            barcode = str(row.get("barcode") or "")
-            if barcode:
-                workpiece_repo.delete_workpiece_if_no_tests(conn, barcode)
+    active_product_repo.delete_tray(traycode)
     return deleted
 
 
@@ -44,6 +47,7 @@ def delete_product_flow(*, barcode: str) -> dict | None:
     deleted = product_flow_store.delete_product(barcode)
     if deleted is None:
         return None
+    active_product_repo.delete_barcodes([barcode])
     with with_conn() as conn:
         workpiece_repo.delete_workpiece_if_no_tests(conn, barcode)
     return deleted
@@ -54,6 +58,7 @@ def delete_tray_flow(*, traycode: str) -> list[dict]:
     deleted = product_flow_store.delete_tray(traycode)
     if not deleted:
         return deleted
+    active_product_repo.delete_tray(traycode)
     with with_conn() as conn:
         for row in deleted:
             barcode = str(row.get("barcode") or "")

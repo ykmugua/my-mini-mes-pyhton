@@ -153,7 +153,7 @@ class DeviceClient:
             "/api/v1/test-results",
             json=payload,
             headers={
-                "x-device-sn": payload["barcode"],
+                "x-device-sn": payload["station"],
                 "x-timestamp": str(int(time.time() * 1000)),
                 "x-request-id": request_id,
             },

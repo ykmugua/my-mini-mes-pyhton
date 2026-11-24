@@ -8,7 +8,9 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from .. import config, db
-from .routers import dashboard, interlock, master_data, product_query, program, test_result, variable
+from .routers.common import interlock, variable
+from .routers.device import program, test_result
+from .routers.ui import dashboard, master_data, product_query
 from ..services import ServiceError
 
 
@@ -34,10 +36,13 @@ async def service_error_handler(_: Request, exc: ServiceError) -> JSONResponse:
     return JSONResponse(status_code=exc.status_code, content={"detail": str(exc)})
 
 
+# 设备接口
 app.include_router(program.router)
 app.include_router(test_result.router)
+# 共同接口
 app.include_router(interlock.router)
 app.include_router(variable.router)
+# UI 接口
 app.include_router(dashboard.router)
 app.include_router(master_data.router)
 app.include_router(product_query.router)

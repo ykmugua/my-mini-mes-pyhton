@@ -55,12 +55,17 @@ def save_key(key: str) -> bool:
     except client.ApiError as exc:
         st.error(f"保存失败：{exc}")
         return False
+    reload_key(key)
     return True
 
 
 def reload_key(key: str) -> None:
     """从后端重新拉取某个 key，覆盖 session_state。"""
     try:
-        st.session_state[key] = client.master_list(key)
+        rows = client.master_list(key)
+        st.session_state[key] = rows
+        cache = st.session_state.get("ui_cache_master")
+        if isinstance(cache, dict) and key in cache:
+            cache[key] = rows
     except client.ApiError as exc:
         st.error(f"刷新失败：{exc}")

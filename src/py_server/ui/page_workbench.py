@@ -76,7 +76,7 @@ def _handle_unbind_scan() -> None:
     if not traycode:
         return
     try:
-        rows = client.product_flow_overview(traycode=traycode)
+        rows = client.active_products(traycode=traycode)
     except ServiceError as exc:
         st.session_state[UNBIND_PENDING_KEY] = ""
         st.error(f"读取托盘绑定失败：{exc}")
@@ -234,7 +234,7 @@ def _handle_tray_change(
         st.session_state.pop(INBOUND_ERROR_KEY, None)
         return
     try:
-        bound_rows = client.product_flow_overview(traycode=actual_traycode)
+        bound_rows = client.active_products(traycode=actual_traycode)
     except ServiceError as exc:
         st.session_state[INBOUND_ERROR_KEY] = f"检查载具占用失败：{exc}"
         st.session_state[tray_input_key] = ""
@@ -703,25 +703,28 @@ def _render_product_unlock(*, steps: list[dict], read_only: bool) -> None:
         for step in steps
         if bool(step.get("enabled", True))
     }
-    st.selectbox(
-        "解锁后所在工序",
-        ["保持当前工序", *step_labels],
-        key="workbench_unlock_next_step",
-        disabled=read_only,
-    )
     error = st.session_state.pop(UNLOCK_ERROR_KEY, "")
     if error:
         st.error(error)
     token = int(st.session_state.get(UNLOCK_TOKEN_KEY, 0))
     scan_key = f"workbench_unlock_scan_{token}"
-    st.text_input(
-        "扫描产品条码",
-        key=scan_key,
-        placeholder="扫描已锁定产品条码后回车",
-        on_change=_handle_unlock_scan,
-        args=(scan_key, step_labels, common.operator()),
-        disabled=read_only,
-    )
+    barcode_col, step_col = st.columns([2, 1], vertical_alignment="bottom")
+    with barcode_col:
+        st.text_input(
+            "扫描产品条码",
+            key=scan_key,
+            placeholder="扫描已锁定产品条码后回车",
+            on_change=_handle_unlock_scan,
+            args=(scan_key, step_labels, common.operator()),
+            disabled=read_only,
+        )
+    with step_col:
+        st.selectbox(
+            "解锁后所在工序",
+            ["保持当前工序", *step_labels],
+            key="workbench_unlock_next_step",
+            disabled=read_only,
+        )
     if not read_only:
         _focus_scan_input(scan_key, f"unlock-{token}")
     st.caption("解锁原因自动记录为“工位操作台扫码解锁”，操作员取自左侧边栏。")

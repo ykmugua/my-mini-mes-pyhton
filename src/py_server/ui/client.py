@@ -370,6 +370,16 @@ def product_flow_overview(
     return _request("GET", "/api/ui/product/flow-overview", params=params or None)
 
 
+def active_products(*, barcode: str | None = None, traycode: str | None = None) -> list[dict]:
+    """读取当前在制产品表。"""
+    params = {}
+    if barcode:
+        params["barcode"] = barcode
+    if traycode:
+        params["traycode"] = traycode
+    return _request("GET", "/api/ui/product/active-products", params=params or None)
+
+
 def product_flow_details(flow_table: str) -> list[dict]:
     """执行 product_flow_details。"""
     return _request("GET", "/api/ui/product/flow-details", params={"flow_table": flow_table})

@@ -8,7 +8,7 @@ from py_server.repositories import report_details_store, station_repo
 
 
 HEADERS = {
-    "x-device-sn": "SN-V1-001",
+    "x-device-sn": "TEST-V1",
     "x-timestamp": "1745310935000",
 }
 

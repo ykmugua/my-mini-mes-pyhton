@@ -5,7 +5,7 @@ from __future__ import annotations
 from .. import db
 from ..domain import InvariantViolation
 from ..domain.workpiece.model import Workpiece, UnlockOutcome
-from ..repositories import log_repo, product_flow_store, report_route, workpiece_repo
+from ..repositories import active_product_repo, log_repo, product_flow_store, report_route, workpiece_repo
 from ..repositories.base import with_conn
 
 
@@ -66,6 +66,16 @@ def execute(*, wp_row, operator: str, reason: str, confirmed: bool, now: str, ta
             note=(note or reason or "unlock"),
             changed_at=now,
         )
+        active_product_repo.upsert({
+            "barcode": outcome.workpiece,
+            "componentcode": wp_row.get("product") or "",
+            "board_status": "normal",
+            "current_step": str(target_step) if target_step else ((info or {}).get("step_no") or ""),
+            "last_report_device": "手动解锁",
+            "last_report_note": (note or reason or "unlock"),
+            "flow_table": product_flow_store.flow_table_name(outcome.workpiece),
+            "updated_at": now,
+        }, conn=conn)
 
         data = workpiece_repo.public_workpiece(conn, outcome.workpiece)
         data["previous_lock_reason"] = outcome.previous_lock_reason

@@ -479,12 +479,19 @@ def auto_unbind_terminal_trays(*, changed_at: str) -> list[str]:
             WHERE traycode <> '' AND board_status IN ('lock', 'final')
             ORDER BY traycode
         """)).fetchall()
+        barcodes = [str(row[0]) for row in conn.execute(text("""
+            SELECT DISTINCT barcode
+            FROM product_overview
+            WHERE traycode <> '' AND board_status IN ('lock', 'final')
+        """)).fetchall()]
         traycodes = [str(row[0]) for row in rows]
         for traycode in traycodes:
             _unbind_tray_in_conn(
                 conn,
                 traycode=traycode,
             )
+        from . import active_product_repo
+        active_product_repo.delete_barcodes(barcodes)
         return traycodes
 
 

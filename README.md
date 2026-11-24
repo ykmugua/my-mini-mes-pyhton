@@ -9,7 +9,7 @@
 | 模块 | 说明 |
 | --- | --- |
 | 测试数据看板 | 按设备/工序查看今日或指定时间区间的测试数据、一次通过率、复测、失败明细；1 秒局部刷新 |
-| 工位操作台 | 手动入站、入线状态、托盘解绑、产品解锁；按产品型号 + 工序校验载具型号；入线状态按托盘聚合 |
+| 工位操作台 | 手动入站、当前已绑定托盘列表、托盘扫码解绑、产品解锁；按产品型号 + 工序校验载具型号 |
 | 产品查询 | 产品流转查询与测试报告查询；报告库统一为 `TestReport.db`，按 `step_no` 保留工序来源 |
 | 程序注册 | 程序新增、当前运行程序、历史版本、程序状态与漂移 |
 | 注册配置 | 一个页面内用标签页维护程序、工序、设备、载具、组件；工序/设备/载具/组件的新增表单支持从模板新建 |
@@ -17,7 +17,9 @@
 | 开放性变量 | 三层变量树、变量定义、前缀筛选、设备读写、读写日志 |
 | 设备接口 | 程序拉取、程序状态上报、V1.3 整单测试上报、放行查询、变量读写 |
 
-技术栈：Python 3.14、FastAPI、Streamlit、SQLAlchemy Core、SQLite、plotly。部署为双进程：FastAPI 提供设备接口，Streamlit 提供内部操作页面；Streamlit 通过 HTTP 客户端访问 FastAPI，不直接写数据库。
+技术栈：Python 3.14、FastAPI、Streamlit、SQLAlchemy Core、SQLite、plotly。部署为双进程：FastAPI 提供设备接口和 UI 接口，Streamlit 提供内部操作页面；Streamlit 通过 HTTP 客户端访问 FastAPI，不直接写数据库。
+
+如果你是第一次了解项目，建议先读 [项目了解路线图](docs/PROJECT_ONBOARDING.md)，再读 [代码详解](docs/CODEBASE_GUIDE.md)。
 
 ---
 
@@ -56,10 +58,10 @@ uv sync
 ```text
 my-mini-mes-pyhton/
 ├─ src/py_server/
-│  ├─ api/                  # FastAPI app、schemas、routers
+│  ├─ api/                  # FastAPI app、schemas、routers（device/ui/common 分组）
 │  ├─ application/          # 多步业务用例：上报、解锁、入站、程序状态
 │  ├─ domain/               # 纯业务规则：可信性、联锁、工件状态
-│  ├─ repositories/         # SQL 与数据库访问；report_query_store 统一报告查询
+│  ├─ repositories/         # SQL 与数据库访问；active_product_repo 维护当前在制表
 │  ├─ ui/                   # Streamlit 页面、HTTP client、公共组件
 │  ├─ config.py             # 配置与路径
 │  ├─ engine.py             # SQLAlchemy Engine 与表定义
@@ -80,7 +82,9 @@ my-mini-mes-pyhton/
 
 ```text
 设备 ──HTTP/JSON──▶ FastAPI :8000
-                     │ routers：参数与响应
+                     │ routers/device：设备接口
+                     │ routers/ui：界面接口
+                     │ routers/common：双方共用接口
                      │ services/application：校验与用例编排
                      │ domain：纯业务规则
                      └ repositories：SQL、SQLite 访问
@@ -94,7 +98,7 @@ my-mini-mes-pyhton/
 - `domain/` 不依赖 FastAPI、Streamlit、SQLAlchemy 或 sqlite3。
 - `repositories/` 是唯一允许写 SQL 的目录。
 - `ui/` 只通过 `client.py` 访问接口，不直接连接数据库。
-- 测试报告库、产品流转库与主库物理分离。
+- `mes.db` 维护主数据、程序、工件、变量与当前在制产品；`ProductFlow.db` 维护当前总览和每产品流转历史；`TestReport.db` 是唯一测试报告库。
 
 ---
 
@@ -104,12 +108,12 @@ my-mini-mes-pyhton/
 
 | 文件 | 用途 |
 | --- | --- |
-| `mes.db` | 主库：主数据、程序绑定、测试结果、工件状态、变量、看板汇总等 |
-| `ProductFlow.db` | 产品流转状态：`product_overview` 与每产品流转表 |
-| `TestReport.db` | **唯一测试报告库**：`report_index` 与每条码 `SN_<条码>_<hash>` 明细表 |
+| `mes.db` | 主库：主数据、程序绑定、工件状态、变量、看板汇总与 `active_products` 当前在制表 |
+| `ProductFlow.db` | 产品流转：`product_overview` 与每产品流转表 `F_<条码>_<hash>` |
+| `TestReport.db` | **唯一测试报告库**：按工序分表 `report_index_<step_no>` 与每工序明细表 `SN_<step>_<条码>_<hash>` |
 | `programs/` | 程序文件静态目录 |
 
-`report_index` 通过 `step_no` 字段保存工序来源，因此不再使用旧的 `db_1.db`、`db_2.db` 等按工序分库。SQLite 使用 WAL；清理或迁移数据时需先停止 8000/8501 服务。
+测试报告统一写入 `TestReport.db`，库内按工序分表；不再使用旧的 `db_1.db`、`db_2.db` 等按工序分库。SQLite 使用 WAL；清理或迁移数据时需先停止 8000/8501 服务。
 
 重建演示数据：
 
@@ -144,7 +148,7 @@ Swagger 文档见 `/docs`。常用接口：
 V1.3 上报请求头：
 
 ```text
-x-device-sn: <barcode>
+x-device-sn: <station>
 x-timestamp: <毫秒时间戳>
 x-request-id: <32 位 UUID，重试保持不变>
 ```
@@ -159,9 +163,10 @@ x-request-id: <32 位 UUID，重试保持不变>
 - 不可信测试结果会写入，但不计入可信合格率，并锁定工件。
 - FAIL 会锁定工件；人工解锁必须填写原因并勾选确认，且写入 `unlock_logs`。
 - 放行顺序：设备程序可信 → 工件未锁定 → 非 FAIL → 人工放行 → 前道设备均有可信 PASS。
-- 产品托盘码：产品查询显示最后一次测试上报托盘码；当前绑定托盘只在工位操作台“正在流转的托盘”展示。
-- 托盘解绑/自动解绑只清当前绑定，不写产品流转明细，也不覆盖最后上报设备和说明。
+- 产品托盘码：产品查询显示最后一次测试上报托盘码；当前绑定托盘在工位操作台“当前已绑定托盘”和托盘扫码解绑页展示。
+- 托盘解绑表示产品下线：写入一条 `托盘解绑` 流转历史，删除 `active_products` 当前在制记录，并兼容清理 `ProductFlow.product_overview`；测试数据和测试报告不会删除。
 - 工位入站按产品型号 + 工序校验允许载具型号。
+- 当前托盘占用以 `mes.db.active_products` 为准，产品流转历史以 `ProductFlow.db` 为准。
 
 ---
 
@@ -187,7 +192,7 @@ x-request-id: <32 位 UUID，重试保持不变>
 .\.venv\Scripts\python.exe -m pytest
 ```
 
-当前测试覆盖：接口边界、V1.3 上报、可信性/联锁/解锁、产品查询、工位操作台、架构约束与 Streamlit AppTest 冒烟。最近一次全量结果：`113 passed`。
+当前测试覆盖：接口边界、V1.3 上报、可信性/联锁/解锁、产品查询、工位操作台、架构约束与 Streamlit AppTest 冒烟。最近一次全量结果：`109 passed`。
 
 ---
 

@@ -71,7 +71,6 @@ def _clear_all() -> None:
             engine.test_results,
             engine.variables,
             engine.upstream_devices,
-            engine.settings,
         ):
             conn.execute(delete(table))
 

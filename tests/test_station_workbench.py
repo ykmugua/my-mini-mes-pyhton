@@ -77,7 +77,7 @@ def _post_v1_result(
             is_final=is_final,
         ),
         headers={
-            "x-device-sn": barcode,
+            "x-device-sn": "TEST-03",
             "x-timestamp": "1763713200000",
             "x-request-id": uuid.uuid4().hex,
         },
@@ -559,6 +559,7 @@ def test_tag_page_lists_status_without_enabled_and_confirms_delete(
         "条码数量",
         "产品条码",
         "当前工序",
+        "操作",
     ]
     assert len(at.dataframe[0].value) == 1
     page_row = at.dataframe[0].value.iloc[0]
@@ -670,13 +671,14 @@ def test_tag_page_shows_only_flowing_trays(
     at.run()
 
     assert not at.exception, [str(item.value) for item in at.exception]
-    assert len(at.dataframe[0].value) == 1
-    page_row = at.dataframe[0].value.iloc[0]
-    assert page_row["载具号"] == "T02002"
-    assert page_row["条码数量"] == 1
-    assert page_row["产品条码"] == bound
-    assert ending not in str(page_row["产品条码"])
-    assert sibling not in str(page_row["产品条码"])
+    rows = at.dataframe[0].value
+    ending_row = rows[rows["载具号"] == "T02001"].iloc[0]
+    assert ending_row["条码数量"] == 1
+    assert ending_row["产品条码"] == sibling
+    assert ending not in str(ending_row["产品条码"])
+    bound_row = rows[rows["载具号"] == "T02002"].iloc[0]
+    assert bound_row["条码数量"] == 1
+    assert bound_row["产品条码"] == bound
 
 
 def test_auto_unbind_terminal_trays_cleans_existing_bindings(

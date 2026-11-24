@@ -95,6 +95,24 @@ workpieces = Table(
 )
 Index("idx_workpieces_locked", workpieces.c.lock_reason, workpieces.c.locked_at)
 
+# 当前在制产品表：只维护当前产线在制/在托盘上的产品；历史仍由 ProductFlow.db 保存。
+active_products = Table(
+    "active_products",
+    metadata,
+    Column("barcode", Text, primary_key=True, nullable=False),
+    Column("componentcode", Text, nullable=False, default="", server_default=""),
+    Column("traycode", Text, nullable=False, default="", server_default=""),
+    Column("board_status", Text, nullable=False, default="normal", server_default="normal"),
+    Column("current_step", Text, nullable=False, default="", server_default=""),
+    Column("next_step", Text, nullable=False, default="", server_default=""),
+    Column("last_report_device", Text, nullable=False, default="", server_default=""),
+    Column("last_report_note", Text, nullable=False, default="", server_default=""),
+    Column("flow_table", Text, nullable=False, default="", server_default=""),
+    Column("created_at", Text, nullable=False),
+    Column("updated_at", Text, nullable=False),
+)
+Index("idx_active_products_traycode", active_products.c.traycode)
+
 unlock_logs = Table(
     "unlock_logs",
     metadata,
@@ -154,16 +172,6 @@ upstream_devices = Table(
     UniqueConstraint("product", "device_id", "upstream_device_id"),
     sqlite_autoincrement=True,
 )
-
-settings = Table(
-    "settings",
-    metadata,
-    Column("key", Text, primary_key=True, nullable=True),
-    Column("value", Text),
-    Column("updated_at", Text, nullable=False),
-)
-
-
 
 # 设备读写变量日志（对应程序页的拉取/上报记录）
 variable_logs = Table(

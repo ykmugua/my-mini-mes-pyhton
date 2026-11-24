@@ -1,4 +1,4 @@
-"""页面：产线测试工站监控（只读 station_summary 汇总表）。"""
+"""页面：产线测试工站监控（设备状态读取汇总表，测试数据统一读取 TestReport.db）。"""
 
 from __future__ import annotations
 
@@ -101,13 +101,28 @@ def _load_config_devices() -> list[dict]:
     except (OSError, ValueError) as exc:
         st.error(f"读取设备配置失败：{exc}")
         return []
-    return [d for d in data.get("devices", []) if d.get("enable") is True]
+    return list(data.get("devices", []))
 
 
 def _save_config_devices(devices: list[dict]) -> None:
     """执行 save_config_devices。"""
     data = {"devices": devices}
     DEVICE_CONFIG.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+def _set_device_enabled(device_id: str, enabled: bool) -> None:
+    """更新设备开启状态，保留其他配置项。"""
+    try:
+        data = json.loads(DEVICE_CONFIG.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        st.error(f"读取设备配置失败：{exc}")
+        return
+    devices = data.get("devices", [])
+    for device in devices:
+        if str(device.get("device_id") or "") == device_id:
+            device["enable"] = bool(enabled)
+            break
+    _save_config_devices(devices)
 
 
 def _registered_devices() -> list[dict]:
@@ -225,7 +240,7 @@ def _fmt_hms(seconds) -> str:
 
 def _status_seconds(data: dict) -> int:
     """执行 status_seconds。"""
-    status = str(data.get("status", "禁用"))
+    status = str(data.get("status") or "空闲")
     if status in ("通过", "失败"):
         return int(data.get("test_duration") or 0)
     since = data.get("status_since")
@@ -234,8 +249,8 @@ def _status_seconds(data: dict) -> int:
 
 def _status_block(status: str, seconds: int = 0) -> str:
     """执行 status_block。"""
-    label = STATUS_LABELS.get(status, "禁用")
-    color = STATUS_COLORS.get(status, STATUS_COLORS["禁用"])
+    label = STATUS_LABELS.get(status, "空闲")
+    color = STATUS_COLORS.get(status, STATUS_COLORS["空闲"])
     t = _fmt_hms(seconds)
     return (
         f'<div style="position:relative;background-color:{color};border-radius:6px;'
@@ -270,28 +285,22 @@ def _chart(data: dict):
 
 def _render_card(device: dict, data: dict | None) -> None:
     """执行 render_card。"""
+    data = data or {}
     name = device.get("name") or device.get("device_id")
     device_id = device.get("device_id", "")
     # 不设固定高度，避免右侧滚动条
     with st.container(border=True):
         st.html(f'<div class="card-title">{name}</div>')
-        barcode = "无数据" if data is None else (
-            "无条码" if (str(data.get("status", "")) == "空闲" or not data.get("barcode"))
-            else data["barcode"]
+        barcode = (
+            "无条码"
+            if (str(data.get("status") or "空闲") == "空闲" or not data.get("barcode"))
+            else str(data["barcode"])
         )
         st.text_input("当前条码", value=str(barcode), disabled=True,
                       key=f"barcode_{device_id}", label_visibility="collapsed")
 
-        if data is None:
-            st.html(_status_block("禁用", 0))
-            st.caption("汇总表无该设备记录，未渲染统计")
-            return
-        status = str(data.get("status", "禁用"))
+        status = str(data.get("status") or "空闲")
         st.html(_status_block(status, _status_seconds(data)))
-
-        if status in STATUS_NO_CHART:
-            st.caption(f"状态为“{STATUS_LABELS.get(status, status)}”，未渲染统计")
-            return
         # 每个页签内容用固定高度容器，保证切换页签时卡片大小不变
         TAB_BODY_H = 150
         tab_stats, tab_fail, tab_ctrl = st.tabs(["统计", "失败详计", "设备控制"])
@@ -308,7 +317,17 @@ def _render_card(device: dict, data: dict | None) -> None:
                     st.caption("暂无失败记录")
         with tab_ctrl:
             with st.container(height=TAB_BODY_H, border=False):
-                st.caption("设备控制功能预留")
+                enabled = bool(device.get("enable", True))
+                with st.container(horizontal=True, vertical_alignment="center"):
+                    st.markdown("设备开启")
+                    st.toggle(
+                        "设备开启",
+                        value=enabled,
+                        key=f"device_enabled_{device_id}",
+                        label_visibility="collapsed",
+                        on_change=_set_device_enabled,
+                        args=(device_id, not enabled),
+                    )
 
 
 def _render_device_manager(config_devices: list[dict]) -> list[dict]:
@@ -463,10 +482,11 @@ def _clear_stat_inputs() -> None:
     """执行 clear_stat_inputs。"""
     st.session_state["stat_time_start"] = None
     st.session_state["stat_time_end"] = None
+    st.session_state["applied_stat_range"] = None
 
 
 def _apply_stat_range() -> None:
-    """点“查询”时计算生效区间：结束空→当前；开始空→结束当天0点；都空→今天0点到现在。"""
+    """点“查询”时计算生效区间：都空→今天0点到现在；设置后严格按时间范围筛选。"""
     start = _parse_stat_time(st.session_state.get("stat_time_start", ""))
     end = _parse_stat_time(st.session_state.get("stat_time_end", ""))
     if end is None:
@@ -476,7 +496,12 @@ def _apply_stat_range() -> None:
     st.session_state["applied_stat_range"] = (start, end)
 
 
-def _stats_for_range(device_id: str, start: datetime, end: datetime, step_no: str | None = None) -> dict:
+def _stats_for_range(
+    device_id: str,
+    start: datetime | None,
+    end: datetime | None,
+    step_no: str | None = None,
+) -> dict:
     """按生效时间区间，从统一测试报告库 report_index 统计该设备的数据。"""
     records: list[dict] = []
     rows = client.report_index(None, step_no)
@@ -488,7 +513,11 @@ def _stats_for_range(device_id: str, start: datetime, end: datetime, step_no: st
         else:
             continue
         ts = _parse_stat_time(str(row.get("testexecutetime") or ""))
-        if ts is None or not (start <= ts <= end):
+        if ts is None:
+            continue
+        if start is not None and ts < start:
+            continue
+        if end is not None and ts > end:
             continue
         records.append({
             "barcode": str(row.get("barcode") or ""),
@@ -518,21 +547,21 @@ def _stats_for_range(device_id: str, start: datetime, end: datetime, step_no: st
 
 
 def _device_stats(device_id: str, applied) -> dict:
-    """设备页与工序页共用的统计来源：有生效区间则按工序库 report_index 统计，否则读 station_summary。"""
+    """卡片测试数据统一来自 TestReport.db 的 report_index；时间区间为空时统计当天。"""
     keys = ("total", "first_pass", "retest_pass", "fail")
     if applied:
-        return {k: int(_stats_for_range(device_id, applied[0], applied[1]).get(k) or 0) for k in keys}
-    row = _read_summary(device_id)
-    if row is None:
-        return {k: 0 for k in keys}
-    return {k: int(row.get(k) or 0) for k in keys}
+        start, end = applied
+    else:
+        end = datetime.now()
+        start = end.replace(hour=0, minute=0, second=0, microsecond=0)
+    return {k: int(_stats_for_range(device_id, start, end).get(k) or 0) for k in keys}
 
 
 def _range_caption() -> str:
     """执行 range_caption。"""
     applied = st.session_state.get("applied_stat_range")
     if not applied:
-        return "统计区间：未筛选（全部汇总数据）"
+        return "统计区间：未筛选（默认当日 00:00 至现在）"
     a, b = applied
     return f"统计区间：{a.strftime(DT_FORMAT)} ~ {b.strftime(DT_FORMAT)}"
 
@@ -601,10 +630,9 @@ def _render_cards_fragment() -> None:
             if idx < len(row):
                 device = row[idx]
                 with col:
-                    data = _read_summary(device["device_id"])
+                    data = _read_summary(device["device_id"]) or {}
                     applied = st.session_state.get("applied_stat_range")
-                    if data is not None:
-                        data = {**data, **_device_stats(device["device_id"], applied)}
+                    data = {**data, **_device_stats(device["device_id"], applied)}
                     _render_card(device, data)
 
 

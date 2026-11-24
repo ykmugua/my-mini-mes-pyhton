@@ -23,7 +23,14 @@ from ..constants import (
     RESULT_FAIL,
     RESULT_PASS,
 )
-from ..repositories import product_flow_store, report_details_store, report_repo, report_route, station_repo
+from ..repositories import (
+    active_product_repo,
+    product_flow_store,
+    report_details_store,
+    report_repo,
+    report_route,
+    station_repo,
+)
 from ..repositories.base import with_conn
 
 
@@ -204,6 +211,20 @@ def execute(
             note="test pass" if result == RESULT_PASS else "test fail",
             changed_at=db.utc_now_iso(),
         )
+        active_product_repo.upsert({
+            "barcode": barcode,
+            "componentcode": payload["componentcode"],
+            "traycode": str(payload.get("traycode") or ""),
+            "board_status": board_status,
+            "current_step": current_step,
+            "next_step": next_step,
+            "last_report_device": station,
+            "last_report_note": "test pass" if result == RESULT_PASS else "test fail",
+            "flow_table": product_flow_store.flow_table_name(barcode),
+            "updated_at": db.utc_now_iso(),
+        })
+        if board_status in (BOARD_LOCK, BOARD_FINAL):
+            active_product_repo.delete_barcodes([barcode])
 
     # 维护看板汇总
     failed_items = [d["TestItem"] for d in details if d["TestResult"] == DETAIL_RESULT_FAIL]

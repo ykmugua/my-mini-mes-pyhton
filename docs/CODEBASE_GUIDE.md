@@ -97,7 +97,7 @@ Streamlit 默认用 `MES_UI_API_BASE=http://127.0.0.1:8000` 访问接口，避�
 - `service_error_handler()`：把 `ServiceError` 转成带 HTTP 状态码的 JSON 错误。
 - `app`：注册所有 router。
 
-#### `api/routers/program.py`
+#### `api/routers/device/program.py`
 
 - `health()`：健康检查。
 - `download_program_file()`：下载程序文件，路径在 repository 中做安全校验。
@@ -105,11 +105,11 @@ Streamlit 默认用 `MES_UI_API_BASE=http://127.0.0.1:8000` 访问接口，避�
 - `post_program_status()`：设备上报程序版本、SHA256、自检结果。
 - `/api/ui/*`：页面读取/保存程序绑定、漂移、日志、发布程序。
 
-#### `api/routers/test_result.py`
+#### `api/routers/device/test_result.py`
 
 - `post_test_results_v1()`：V1.3 整单上报。校验请求头、构造 envelope、调用 `upload_test_result_v1.execute()`。
 
-#### `api/routers/master_data.py`
+#### `api/routers/ui/master_data.py`
 
 - `get_master()`：一次返回所有主数据快照。
 - `get_master_key()` / `save_master_key()`：单项读写主数据。
@@ -118,7 +118,7 @@ Streamlit 默认用 `MES_UI_API_BASE=http://127.0.0.1:8000` 访问接口，避�
   - 程序名改名：同步 `process_step_resources.program_name`；
   - 工艺号改名：同步 `process_routes.process_code` 与 `process_step_resources.process_code`。
 
-#### `api/routers/product_query.py`
+#### `api/routers/ui/product_query.py`
 
 - 产品流转查询、测试报告查询、报告明细、删除入站状态、工位操作台接口都在这里。
 - 复杂查询委托给 `repositories/report_query_store.py`。
@@ -169,7 +169,7 @@ Streamlit 默认用 `MES_UI_API_BASE=http://127.0.0.1:8000` 访问接口，避�
 #### `station_workbench.py`
 
 - `manual_inbound()`：写入工件占位与 ProductFlow 首条流转记录。
-- `unbind_tray()`：整盘解绑，只清当前绑定和写解绑留痕。
+- `unbind_tray()`：整盘解绑，写一条 `托盘解绑` 流转历史，删除 `active_products` 当前在制记录，并兼容清理 ProductFlow 总览。
 - `delete_product_flow()` / `delete_tray_flow()`：删除入站状态，并清理无测试数据的工件占位；测试数据保留。
 
 ### 5.5 领域层：`domain/`
@@ -293,11 +293,11 @@ Streamlit 默认用 `MES_UI_API_BASE=http://127.0.0.1:8000` 访问接口，避�
 - 测试：`test_results`、`test_reports`；
 - 工件：`workpieces`、`unlock_logs`；
 - 变量：`variables`、`variable_logs`；
-- 看板：`station_summary`、`station_fail_detail`。
+- 看板：`station_summary`、`station_fail_detail`；当前在制：`active_products`。
 
 ### `ProductFlow.db`
 
-- `product_overview`：当前入线状态；
+- `product_overview`：ProductFlow 当前入线状态（历史兼容）；
 - `F_<barcode>_<hash>`：每产品流转历史；
 - 状态：`normal`、`lock`、`final`；
 - 终端下站：`LOCK`、`END`。
@@ -376,8 +376,8 @@ POST /api/v1/test-results
           ├─ 每条明细调用单条上报（可信性/联锁）
           ├─ 写 test_reports
           ├─ 写 TestReport.db: SN_<step>_... 明细表
-          ├─ 写 TestReport.db: report_index_<step> 总览
-          ├─ 写 ProductFlow.db 当前状态
+          ├─ 写 TestReport.db: report_index_<step> 工序总览
+          ├─ 写 ProductFlow.db 当前状态和历史明细，并同步 mes.db.active_products
           └─ 更新 station_summary / station_fail_detail
 ```
 
@@ -447,4 +447,4 @@ DELETE /api/ui/product/flow 或 /tray-flow
 - 页面 AppTest 冒烟；
 - 架构约束测试（domain 无框架依赖、UI 不直连数据库、注册页复用公共逻辑）。
 
-最近一次全量测试：`116 passed`。
+最近一次全量测试：`109 passed`。
