@@ -285,3 +285,7 @@ SQLAlchemy 2.1.8 中 `Insert.on_conflict_do_update()` 不再接受 `constraint=`
 
 ## 22. Gotcha：合并测试报告库时必须保留工序来源
 原按工序分库的“工序”信息来自物理文件 db_<step>.db。合并到单库后必须新增/使用 report_index.step_no，否则 query_reports(step_no=...) 无法筛选，筛选框选工序 1 会返回所有工序或空结果。迁移历史数据时可按 station 回填（如 TEST-01→1、TEST-02→2、TEST-03→3），新上报由 upload_test_result_v1 和 seed 显式写入 step_no。
+
+- 托盘解绑不能只清空 `traycode`：那会导致条码仍被重复入站校验拦截。当前正确语义是「结束当前流转 + 写解绑流转历史」，保留产品流转明细和测试数据。
+- `master_data.json` 是 seed 文件，不是 UI 运行时数据；UI 修改写数据库，不会回写 JSON。测试使用 `MES_MASTER_SEED_FILE` 指向旧 fixture，避免生产种子数据影响测试。
+- Streamlit `ButtonColumn` 当前版本不支持 `disabled`；只读模式下必须不渲染该列。

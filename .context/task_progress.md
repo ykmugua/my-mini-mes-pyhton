@@ -1,13 +1,7 @@
-# 当前进度
-
-- README.md 已按当前架构重写。
-- 测试报告数据库统一为 data/TestReport.db，按工序拆为 report_index_1/2/3 多张总览表和工序隔离的 SN 明细表。
-- 测试履历 tag 页只显示当前选中产品实际有测试数据的工序页签。
-- 删除入站状态释放 ProductFlow 与无测试数据的工件占位，已有测试数据保留。
-- 组件号/程序名/工艺号支持修改，主键改名在 API 层同步关联引用。
-- 四类注册页统一复用 registry_helpers.py 与 constants.py；跨层 constants.py 清理魔术字符串；所有函数/类已补 docstring。
-- 新增 docs/CODEBASE_GUIDE.md，说明函数职责、框架、数据库、设计模式和流程。
-- UI 已强制只通过 FastAPI 访问 repositories/数据库，架构测试锁定 ui/ 不直连数据层。
-- 已删除旧兼容：/api/test-result、TestResultIn、旧分库路径别名、db.py 原始 sqlite 兼容函数、旧 _tx 别名、旧测试语义；设备示例改用 V1.3。
-- 全量测试 110 passed。
-- 本轮清理尚未 `/sync-save`，尚未提交 git。
+- 当前阶段：注册配置命名统一、工位操作台/托盘解绑/入线状态交互调整、主数据种子同步、文档目录整理。
+- 托盘解绑语义已改为：扫码托盘码 → 写一条 `托盘解绑` 流转历史 → 清除当前入站总览 → 条码可重新入站；不解绑测试报告/工件档案。
+- 入线状态页已改成当前已绑定托盘列表，字段：载具号/条码数量/产品条码/当前工序；不再提供删除按钮。
+- 托盘解绑页已删除列表，只保留扫描托盘码输入。
+- `src/py_server/master_data.json` 已导出为当前 `data/mes.db` 的主数据；测试使用 `tests/fixtures/master_data.json` 旧 fixture 保持既有测试稳定。
+- `design_data` 内容已移动到 `docs/`，旧目录删除；`seed.py` 路径已同步。
+- 全量测试最后一次：`109 passed`。

@@ -1,9 +1,1 @@
-# 项目上下文索引
-
-> 最后同步: 2026-11-23 07:10:24 | 设备: TEST | Agent: unknown
-
-## 详细主题
-- [task_progress.md](./task_progress.md) — 11 lines
-- [gotchas.md](./gotchas.md) — 287 lines
-- [architecture.md](./architecture.md) — 699 lines
-- [api_notes.md](./api_notes.md) — 11 lines
+注册配置命名统一；工位操作台入线状态/托盘解绑交互调整；托盘解绑写入流转历史并释放当前入站；主数据种子同步当前数据库；文档目录从 design_data 迁移到 docs；pytest 临时目录统一到 .pytest_tmp。
