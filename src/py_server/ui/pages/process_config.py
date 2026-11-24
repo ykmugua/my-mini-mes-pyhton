@@ -1,4 +1,4 @@
-"""工艺配置页面：新增（可派生）/ 工艺列表（可编辑 + 勾选）/ 工艺详情。"""
+"""工艺配置页面：新增（可从模板新建）/ 工艺列表 / 工艺详情。"""
 
 from __future__ import annotations
 
@@ -109,7 +109,7 @@ def render_page() -> None:
     st.title("⚙️ 工艺配置")
 
     # -------------------------------------------------------------------------
-    # 区块 1：新增工艺（空白 / 从已有工艺派生，深拷贝）
+    # 区块 1：新增工艺（空白 / 从原有模板中新建）
     # -------------------------------------------------------------------------
     with st.container(border=True):
         st.subheader("新增工艺")
@@ -121,7 +121,7 @@ def render_page() -> None:
                 new_code = c1.text_input("工艺号", key="new_process_code", placeholder="例如 PROC-003")
                 new_name = c2.text_input("工艺名称", key="new_process_name", placeholder="例如 电源板工艺B")
                 source = c3.selectbox(
-                    "派生自", options=["空白新增"] + [p["process_code"] for p in processes],
+                    "从原有模板中新建", options=["空白新增"] + [p["process_code"] for p in processes],
                     key="new_process_source",
                 )
                 c4, c5, c6 = st.columns([2, 2, 1])
@@ -139,7 +139,6 @@ def render_page() -> None:
                     new_processes = list(processes) + [{
                         "process_code": code, "process_name": new_name.strip() or code,
                         "enabled": enabled_text == "是", "remark": new_remark.strip(),
-                        "source_process_code": "" if source == "空白新增" else source,
                         "component_no": new_component,
                     }]
                     new_routes = list(routes)
@@ -150,7 +149,7 @@ def render_page() -> None:
                     _save("processes", new_processes)
                     _save("process_routes", new_routes)
                     _save("process_step_resources", new_resources)
-                    st.toast(f"工艺 {code} 已新增" + (f"（派生自 {source}）" if source != "空白新增" else ""))
+                    st.toast(f"工艺 {code} 已新增" + (f"（从原有模板 {source} 新建）" if source != "空白新增" else ""))
                     st.rerun()
 
     # -------------------------------------------------------------------------
@@ -165,18 +164,16 @@ def render_page() -> None:
             "工艺号": p["process_code"],
             "工艺名称": p.get("process_name", ""),
             "启用": bool(p.get("enabled", True)),
-            "来源工艺": p.get("source_process_code", "") or "—",
             "绑定组件": p.get("component_no", ""),
             "备注": p.get("remark", ""),
             "删除": "删除",
-        } for p in processes], columns=["选择", "工艺号", "工艺名称", "绑定组件", "启用", "来源工艺", "备注", "删除"])
+        } for p in processes], columns=["选择", "工艺号", "工艺名称", "绑定组件", "启用", "备注", "删除"])
         config = {
             "选择": st.column_config.CheckboxColumn("选择", default=False, width="small",
                                                    help="勾选后在下方查看该工艺详情"),
             "工艺号": st.column_config.TextColumn("工艺号", required=True, width="medium"),
             "工艺名称": st.column_config.TextColumn("工艺名称", required=True, width="medium"),
             "启用": st.column_config.CheckboxColumn("启用", default=True, width="small"),
-            "来源工艺": st.column_config.TextColumn("来源工艺", disabled=True, width="medium"),
             "绑定组件": st.column_config.SelectboxColumn("绑定组件", options=component_options, width="medium"),
             "备注": st.column_config.TextColumn("备注", width="large"),
             "删除": st.column_config.ButtonColumn(
@@ -225,7 +222,6 @@ def render_page() -> None:
                 new_processes.append({
                     "process_code": code, "process_name": _text(row["工艺名称"]),
                     "enabled": bool(row["启用"]), "remark": _text(row["备注"]),
-                    "source_process_code": "" if _text(row["来源工艺"]) == "—" else _text(row["来源工艺"]),
                     "component_no": _text(row["绑定组件"]),
                 })
             if err:

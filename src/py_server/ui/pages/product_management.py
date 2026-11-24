@@ -9,7 +9,14 @@ import streamlit as st
 
 from . import _common as master
 from . import registry_helpers as helpers
-from .constants import ENABLED_OPTIONS
+from .constants import (
+    BLANK_TEMPLATE,
+    COMPONENT_LIST_SECTION,
+    CREATE_COMPONENT_BUTTON,
+    CREATE_COMPONENT_SECTION,
+    ENABLED_OPTIONS,
+    SAVE_COMPONENT_BUTTON,
+)
 
 from ._mock_program_data import enabled_steps, step_label
 
@@ -170,22 +177,19 @@ def render_page() -> None:
     trays: list[dict[str, Any]] = st.session_state.get("trays", [])
     product_trays: list[dict[str, Any]] = st.session_state.get("product_trays", [])
 
-    st.title("📋 组件注册")
-
-
     # -----------------------------------------------------------------------------
     # 区块 1：新增组件
     # -----------------------------------------------------------------------------
     with st.container(border=True):
-        st.subheader("新增组件")
+        st.subheader("组件管理")
         if read_only:
-            with st.expander("新增组件", expanded=False):
+            with st.expander(CREATE_COMPONENT_SECTION, expanded=False):
                 st.info("只读角色不可新增组件。")
         else:
-            with st.expander("新增组件", expanded=False):
+            with st.expander(CREATE_COMPONENT_SECTION, expanded=False):
                 with st.form("product_create_form", clear_on_submit=False, border=False):
-    # 第一行：组件名称 + 组件号
-                    name_col, model_col = st.columns(2)
+                    # 第一行：组件名称 + 组件号 + 从原有模板中新建
+                    name_col, model_col, template_col = st.columns([1, 1, 1])
                     product_name = name_col.text_input(
                         "组件名称",
                         key="new_product_name",
@@ -195,6 +199,11 @@ def render_page() -> None:
                         "组件号",
                         key="new_product_model",
                         placeholder="例如 P-1003",
+                    )
+                    source = template_col.selectbox(
+                        "从原有模板中新建",
+                        options=[BLANK_TEMPLATE, *[str(p["product_model"]) for p in products]],
+                        key="new_product_template",
                     )
                     # 第二行：备注 + 启用（下拉）
                     remark_col, enabled_col = st.columns([3, 1])
@@ -207,34 +216,54 @@ def render_page() -> None:
                         "启用", options=list(ENABLED_OPTIONS), key="new_product_enabled_text",
                     )
                     # 第三行：添加按钮
-                    submitted = st.form_submit_button("添加组件")
+                    submitted = st.form_submit_button(CREATE_COMPONENT_BUTTON)
 
                 if submitted:
-                    clean_model = product_model.strip()
-                    if not clean_model:
-                        st.error("组件不能为空")
-                    elif any(
-                        item["product_model"].casefold() == clean_model.casefold()
-                        for item in products
-                    ):
-                        st.error("组件号不能重复")
+                    if source != BLANK_TEMPLATE:
+                        row = next(p for p in products if str(p["product_model"]) == source)
+                        new_model = helpers.copy_value(source, {str(p["product_model"]) for p in products})
+                        new_row = {
+                            **row,
+                            "product_model": new_model,
+                            "product_name": f"{row.get('product_name', '')} 副本",
+                        }
+                        proposed_products = [*products, new_row]
+                        success_message = f"已从模板 {source} 新建组件 {new_model}"
                     else:
-                        products.append(
+                        clean_model = product_model.strip()
+                        if not clean_model:
+                            st.error("组件不能为空")
+                            return
+                        if any(
+                            item["product_model"].casefold() == clean_model.casefold()
+                            for item in products
+                        ):
+                            st.error("组件号不能重复")
+                            return
+                        proposed_products = [
+                            *products,
                             {
                                 "product_model": clean_model,
                                 "product_name": product_name.strip(),
                                 "enabled": helpers.enabled_from_text(enabled_text),
                                 "remark": remark.strip(),
-                            }
-                        )
-                        helpers.save_rows("products", products, "组件已添加")
+                            },
+                        ]
+                        success_message = "组件已添加"
+                    validated, error = _validate_products(
+                        _product_frame(proposed_products, include_delete=False).to_dict("records")
+                    )
+                    if error:
+                        st.error(error)
+                    else:
+                        helpers.save_rows("products", validated or [], success_message)
 
 
     # -----------------------------------------------------------------------------
     # 区块 2：组件列表
     # -----------------------------------------------------------------------------
     with st.container(border=True):
-        st.subheader("组件列表")
+        st.subheader(COMPONENT_LIST_SECTION)
         edited_products: pd.DataFrame | None = None
         if read_only:
             st.dataframe(
@@ -248,7 +277,7 @@ def render_page() -> None:
             edited_products = st.data_editor(
                 _product_frame(products, include_delete=True),
                 column_config=_product_config(include_delete=True),
-                disabled=["组件"],
+                disabled=["组件号"],
                 hide_index=True,
                 num_rows="fixed",
                 width="stretch",
@@ -260,7 +289,7 @@ def render_page() -> None:
         if not read_only:
             with st.container(horizontal=True, horizontal_alignment="left"):
                 save_products_clicked = st.button(
-                    "保存组件修改",
+                    SAVE_COMPONENT_BUTTON,
                     icon=":material/save:",
                     key="save_products",
                 )

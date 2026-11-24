@@ -19,6 +19,8 @@ import streamlit as st
 
 from . import _common as master
 from .constants import (
+    BLANK_TEMPLATE,
+    COPY_SUFFIX_ALNUM,
     EMPTY_TEXT_VALUES,
     ENABLED_NO,
     ENABLED_OPTIONS,
@@ -112,6 +114,26 @@ def enabled_column(width: str = "small") -> Any:
 def enabled_selectbox(key: str) -> Any:
     """统一的启用下拉选择框。"""
     return st.selectbox("启用", options=list(ENABLED_OPTIONS), key=key)
+
+
+def template_source(key: str, templates: list[str]) -> str:
+    """统一的“从原有模板中新建”下拉框。"""
+    return st.selectbox(
+        "从原有模板中新建",
+        options=[BLANK_TEMPLATE, *templates],
+        key=key,
+    )
+
+
+def copy_value(value: str, existing: set[str], suffix: str = COPY_SUFFIX_ALNUM) -> str:
+    """生成一个不与现有主键/编码重复的副本值。"""
+    base = f"{value}{suffix}" if value else suffix
+    candidate = base
+    index = 2
+    while candidate.casefold() in {item.casefold() for item in existing}:
+        candidate = f"{base}{index}"
+        index += 1
+    return candidate
 
 
 def delete_column(click_key: str, on_click: Callable[[], None]) -> Any:

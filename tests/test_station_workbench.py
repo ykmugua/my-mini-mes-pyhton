@@ -14,6 +14,7 @@ pytest.importorskip("streamlit")
 from streamlit.testing.v1 import AppTest
 
 from py_server import seed, services
+from tests.helpers import push_result
 from py_server.repositories import product_flow_store
 
 UI_DIR = Path(__file__).resolve().parent / "ui_apps"
@@ -443,13 +444,15 @@ def test_workbench_page_is_read_only(workbench_seeded):
 
 
 def test_workbench_unlock_can_choose_target_step(client, workbench_seeded):
-    services.report_test_result(
-        workpiece="WB-LOCK",
-        device_id="TEST-01",
+    push_result(
+        client,
+        "WB-LOCK",
+        "TEST-01",
         test_item="人工解锁测试",
         result="FAIL",
         measured_value="NG",
         program_version="v1.2.0",
+        product="",
     )
     at = AppTest.from_file(
         str(UI_DIR / "workbench_app.py"),

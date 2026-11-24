@@ -114,7 +114,6 @@ class Conn:
         return Result(result)
 
     def commit(self) -> None:
-        # 事务由 with_conn 统一管理；保留接口兼容旧调用。
         """执行 commit。"""
         pass
 
@@ -136,13 +135,6 @@ def with_read_conn() -> Iterator[Conn]:
     """只读连接，不显式开启事务。"""
     with engine.get_engine().connect() as raw:
         yield Conn(raw)
-
-
-@contextmanager
-def _tx() -> Iterator[Conn]:
-    """兼容旧 services 内部使用的别名。"""
-    with with_conn() as conn:
-        yield conn
 
 
 def rows_to_dicts(rows: list[Row]) -> list[dict]:

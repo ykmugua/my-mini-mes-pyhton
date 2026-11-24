@@ -257,7 +257,6 @@ processes = Table(
     Column("process_name", Text, nullable=False),
     Column("enabled", Integer, nullable=False, default=1, server_default="1"),
     Column("remark", Text, nullable=False, default="", server_default=""),
-    Column("source_process_code", Text, nullable=False, default="", server_default=""),
     Column("component_no", Text, nullable=False, default="", server_default=""),
 )
 

@@ -1,6 +1,6 @@
 """唯一的 HTTP 客户端：Streamlit 进程只通过它访问 FastAPI，不碰数据库。
 
-失败降级：请求超时（3s）或报错时返回上次成功数据 + 错误提示。
+失败降级：请求失败时返回上次成功数据 + 错误提示。
 """
 
 from __future__ import annotations
@@ -12,9 +12,6 @@ import httpx
 from .. import config
 
 TIMEOUT_SECONDS = 10.0
-
-# session_state key -> HTTP endpoint / params builder
-_FALLBACK: dict[str, Any] = {}
 
 
 class ApiError(Exception):

@@ -1,55 +1,24 @@
-"""兼容层：时间工具与旧的 db 接口。
+"""时间工具与数据库初始化入口。
 
-表结构定义与连接管理已迁移到 engine.py（SQLAlchemy Engine）。
-这里保留 db.* 的 API 供 seed/旧测试使用；init_db() 现在调用 engine.init_schema()。
+表结构定义与连接管理在 engine.py；本模块保留被各层广泛使用的 UTC 时间工具和
+init_db/reset_for_tests 入口。
 """
 
 from __future__ import annotations
 
-import sqlite3
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from . import config, engine
 
-# 兼容旧代码可能直接引用 db.SCHEMA / db._initialized_paths
-_initialized_paths: set[str] = set()
-
-
 def reset_for_tests() -> None:
     """测试中切换数据库文件时清空缓存（db 与 engine 两层）。"""
-    _initialized_paths.clear()
     engine.reset_for_tests()
 
 
-def connect() -> sqlite3.Connection:
-    """保留旧接口：原始 sqlite3 连接（带 PRAGMA）。"""
-    path = config.db_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(path, timeout=10)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA synchronous=NORMAL")
-    conn.execute("PRAGMA foreign_keys=ON")
-    conn.execute("PRAGMA busy_timeout=5000")
-    return conn
-
-
-def init_db(conn: sqlite3.Connection | None = None) -> None:
+def init_db() -> None:
     """创建缺失的表（只做 create_all）。"""
     engine.init_schema()
-    if conn is not None:
-        conn.commit()
-
-
-def get_conn() -> sqlite3.Connection:
-    """保留旧接口供 services/seed 使用。"""
-    path = str(config.db_path())
-    conn = connect()
-    if path not in _initialized_paths:
-        init_db()
-        _initialized_paths.add(path)
-    return conn
 
 
 # -----------------------------------------------------------------------------
@@ -119,11 +88,3 @@ def today_bounds_utc(now: datetime | None = None) -> tuple[str, str]:
     return to_iso(start_local), to_iso(end_local)
 
 
-def row_to_dict(row: sqlite3.Row | None) -> dict | None:
-    """执行 row_to_dict。"""
-    return dict(row) if row is not None else None
-
-
-def rows_to_dicts(rows: list[sqlite3.Row]) -> list[dict]:
-    """执行 rows_to_dicts。"""
-    return [dict(row) for row in rows]

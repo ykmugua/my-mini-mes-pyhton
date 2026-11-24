@@ -41,7 +41,7 @@ src/py_server/
 ├── config.py             路径/地址/时区配置
 ├── constants.py          跨层业务常量
 ├── engine.py             SQLAlchemy Engine 与表定义
-├── db.py                 时间工具与初始化兼容层
+├── db.py                 时间工具与初始化入口
 ├── services.py           兼容入口：输入校验 + 委托下层
 ├── seed.py               演示数据生成
 └── streamlit_app.py       Streamlit 页面入口
@@ -84,7 +84,6 @@ Streamlit 默认用 `MES_UI_API_BASE=http://127.0.0.1:8000` 访问接口，避�
 - `config.data_dir()`：返回运行期数据目录。
 - `config.db_path()`：主库路径。
 - `config.details_db_path()`：唯一测试报告库路径。
-- `config.report_db_path()`：兼容旧接口，统一返回报告库路径。
 - `config.product_flow_db_path()`：产品流转库路径。
 - `config.ui_api_base()`：Streamlit 调 FastAPI 的地址，默认回环地址。
 - `config.api_public_base()`：设备可访问地址，用于下载 URL。
@@ -108,7 +107,6 @@ Streamlit 默认用 `MES_UI_API_BASE=http://127.0.0.1:8000` 访问接口，避�
 
 #### `api/routers/test_result.py`
 
-- `post_test_result()`：旧单条上报，保留兼容。
 - `post_test_results_v1()`：V1.3 整单上报。校验请求头、构造 envelope、调用 `upload_test_result_v1.execute()`。
 
 #### `api/routers/master_data.py`
@@ -128,7 +126,7 @@ Streamlit 默认用 `MES_UI_API_BASE=http://127.0.0.1:8000` 访问接口，避�
 
 ### 5.3 业务入口层：`services.py`
 
-`services.py` 是历史兼容入口，保留大量对外函数，便于旧测试和页面调用。它主要负责：
+`services.py` 是对外业务入口，负责输入校验并委托下层。它主要负责：
 
 - 输入清洗：`_clean_text()`、`_clean_sha256()`、`_clean_url()`；
 - 领域错误到 HTTP 错误的映射：`ServiceError`、`ValidationError`、`NotFoundError`、`ConflictError`；
@@ -278,8 +276,8 @@ Streamlit 默认用 `MES_UI_API_BASE=http://127.0.0.1:8000` 访问接口，避�
 - `tag_page.py`：入线状态内容与删除弹窗。
 - `page_product_query.py`：产品流转查询、测试报告查询、测试履历。
 - `page_program.py`、`page_variables.py`：旧版/简化页面入口。
-- `pages/device_registration.py`、`tray_registration.py`、`step_registration.py`、`product_management.py`：统一骨架的主数据注册页。
-- `pages/process_config.py`：工艺配置，支持工艺号修改和路线/资源维护。
+- `pages/registration_hub.py`：统一注册入口，用标签页承载程序、工序、设备、载具、组件。
+- `pages/process_config.py`：独立工艺配置页，支持工艺号修改、从模板新建、路线/资源维护。
 - `pages/program.py`：程序注册，支持程序名修改和版本维护。
 
 ---
@@ -310,7 +308,6 @@ Streamlit 默认用 `MES_UI_API_BASE=http://127.0.0.1:8000` 访问接口，避�
 
 - `report_index_1`、`report_index_2`、……：每工序一张总览；
 - `SN_<step>_<barcode>_<hash>`：每工序每条码一张明细；
-- `report_index` 旧单表结构只作为历史兼容，不再作为新数据入口。
 
 ---
 
@@ -319,7 +316,7 @@ Streamlit 默认用 `MES_UI_API_BASE=http://127.0.0.1:8000` 访问接口，避�
 ### 7.1 分层架构（Layered Architecture）
 
 - Router 处理 HTTP；
-- Service 提供兼容入口和输入校验；
+- Service 提供业务入口和输入校验；
 - Application 编排事务；
 - Domain 表达纯业务规则；
 - Repository 封装 SQL；
@@ -327,9 +324,9 @@ Streamlit 默认用 `MES_UI_API_BASE=http://127.0.0.1:8000` 访问接口，避�
 
 好处：规则可测试、SQL 可替换、UI 不依赖数据库。
 
-### 7.2 兼容外观（Facade）
+### 7.2 外观模式（Facade）
 
-`services.py` 是典型 Facade：外部调用者不需要知道 application/domain/repository 的细节，仍可通过 `services.report_test_result()`、`services.manual_inbound()` 等函数完成业务。
+`services.py` 是典型 Facade：调用者不需要知道 application/domain/repository 的细节，可通过 `services.report_test_result()`、`services.manual_inbound()` 等函数完成业务。
 
 ### 7.3 值对象（Value Object）
 

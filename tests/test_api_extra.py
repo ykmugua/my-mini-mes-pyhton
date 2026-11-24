@@ -61,51 +61,6 @@ def test_program_file_publish_and_download(client, bench):
     assert missing.status_code == 404
 
 
-def test_invalid_test_result_payload(client, bench):
-    response = client.post(
-        "/api/test-result",
-        json={
-            "workpiece": "W1",
-            "device_id": "D1",
-            "test_item": "电压",
-            "result": "MAYBE",
-        },
-    )
-    assert response.status_code == 422
-
-
-def test_test_result_can_omit_program_fields(client, bench):
-    """设备未在结果中带版本/校验和时，使用 /api/program/status 最近上报的信息。"""
-    response = client.post(
-        "/api/test-result",
-        json={
-            "workpiece": "W1",
-            "device_id": "D1",
-            "test_item": "电压",
-            "result": "PASS",
-        },
-    )
-    assert response.status_code == 200
-    assert response.json()["trusted"] is True
-
-
-def test_test_result_aliases(client, bench):
-    response = client.post(
-        "/api/test-result",
-        json={
-            "workpiece_code": "W-ALIAS",
-            "device_id": "D1",
-            "test_item": "电压",
-            "result": "pass",
-            "timestamp": "2026-11-11 10:00:00",
-        },
-    )
-    assert response.status_code == 200
-    body = response.json()
-    assert body["result"] == "PASS"
-    assert body["trusted"] is True
-
-
 def test_interlock_devices_without_binding_or_bad_program(client, bench):
     unknown = client.get(
         "/api/interlock", params={"workpiece": "W1", "device_id": "D9"}
@@ -135,8 +90,9 @@ def test_interlock_unknown_workpiece_without_upstream_allowed(client, bench):
 
 def test_interlock_without_device_uses_current_device(client, bench):
     push_result(client, "W-LOCK", "D2", test_item="绝缘", result="FAIL")
-    body = client.get("/api/interlock", params={"workpiece": "W-LOCK"}).json()
-    assert body["device_id"] == "D2"
+    detail = services.workpiece_detail("W-LOCK")
+    assert detail["current_device"] == "D2"
+    body = client.get("/api/interlock", params={"workpiece": "W-LOCK", "device_id": "D2"}).json()
     assert body["allowed"] is False
     assert "FAIL" in body["reason"]
 
@@ -176,27 +132,6 @@ def test_variable_typed_values(client, bench):
     assert client.get("/api/variable/enabled").json()["value"] is False
 
 
-def test_conflicting_duplicate_report_returns_409(client, bench):
-    push_result(client, "W-DUP", "D1", test_item="电压", result="PASS")
-    response = client.post(
-        "/api/test-result",
-        json={
-            "workpiece": "W-DUP",
-            "device_id": "D1",
-            "test_item": "电压",
-            "result": "FAIL",
-            "program_version": "v1",
-            "program_sha256": SHA_A,
-        },
-    )
-    assert response.status_code == 409
-    assert "冲突" in response.json()["detail"]
-    body = client.get(
-        "/api/interlock", params={"workpiece": "W-DUP", "device_id": "D2"}
-    ).json()
-    assert body["allowed"] is True  # 原 PASS 记录未被冲突上报覆盖
-
-
 def test_unlock_then_new_test_item_fail_relocks(client, bench):
     push_result(client, "W-RE", "D1", test_item="电压", result="FAIL")
     assert services.list_locked_workpieces()
@@ -212,90 +147,6 @@ def test_unlock_then_new_test_item_fail_relocks(client, bench):
         "/api/interlock", params={"workpiece": "W-RE", "device_id": "D2"}
     ).json()
     assert denied["allowed"] is False
-
-
-def test_workpiece_product_isolation(client, bench):
-    """同一工件的 PASS 不能跨产品被当作前道记录复用。"""
-    bindings = list(bench["bindings"]) + [
-        {
-            "device_id": "D2",
-            "product": "P2",
-            "program_version": "v2",
-            "download_url": "http://testserver/programs/D2_p2.bin",
-            "sha256": SHA_B,
-        },
-        {
-            "device_id": "D3",
-            "product": "P2",
-            "program_version": "v2",
-            "download_url": "http://testserver/programs/D3_p2.bin",
-            "sha256": SHA_B,
-        },
-    ]
-    services.replace_bindings(bindings)
-    services.report_program_status("D2", "P2", "v2", SHA_B, True)
-    services.report_program_status("D3", "P2", "v2", SHA_B, True)
-
-    push_result(client, "W-X", "D1")  # 工件属于 P1，D1 PASS
-
-    # 工件已属于 P1：D2 以 P2 上报必须拒绝
-    response = client.post(
-        "/api/test-result",
-        json={
-            "workpiece": "W-X",
-            "device_id": "D2",
-            "product": "P2",
-            "program_version": "v2",
-            "program_sha256": SHA_B,
-            "test_item": "P2项",
-            "result": "PASS",
-        },
-    )
-    assert response.status_code == 400
-    assert "产品" in response.json()["detail"]
-
-    # 即便库里存在 D2/P2 的 PASS，也不能满足 D3/P1 的前道检查
-    now = db.utc_now_iso()
-    with services._tx() as conn:  # noqa: SLF001 - 直接构造跨产品数据验证隔离
-        conn.execute(
-            """
-            INSERT INTO test_results
-                (workpiece, device_id, product, test_item, result,
-                 tested_at, reported_at, trusted)
-            VALUES (?, ?, ?, ?, ?, ?, ?, 1)
-            """,
-            ("W-X", "D2", "P2", "P2项", "PASS", now, now),
-        )
-    body = client.get(
-        "/api/interlock",
-        params={"workpiece": "W-X", "device_id": "D3", "product": "P1"},
-    ).json()
-    assert body["allowed"] is False
-    assert "D2" in body["reason"]
-
-    # 用 P2 查询 P1 工件，直接按产品不一致拒绝
-    mismatch = client.get(
-        "/api/interlock",
-        params={"workpiece": "W-X", "device_id": "D3", "product": "P2"},
-    ).json()
-    assert mismatch["allowed"] is False
-    assert "产品" in mismatch["reason"]
-
-    # 反向场景：先以 P2 建立工件，再以 P1 上报同样拒绝
-    push_result(client, "W-Y", "D2", product="P2", test_item="P2项", program_version="v2", sha256=SHA_B)
-    conflict = client.post(
-        "/api/test-result",
-        json={
-            "workpiece": "W-Y",
-            "device_id": "D1",
-            "product": "P1",
-            "program_version": "v1",
-            "program_sha256": SHA_A,
-            "test_item": "P1项",
-            "result": "PASS",
-        },
-    )
-    assert conflict.status_code == 400
 
 
 def test_variable_prefix_filter(bench):
@@ -322,15 +173,7 @@ def test_variable_name_must_be_url_safe(bench):
 
 def test_dashboard_uses_tested_at_not_report_time(client, bench):
     old_time = (db.utc_now().astimezone(config.timezone()) - timedelta(days=2)).isoformat()
-    services.report_test_result(
-        workpiece="OLD-WP",
-        device_id="D1",
-        test_item="电压",
-        result="PASS",
-        program_version="v1",
-        program_sha256=SHA_A,
-        tested_at=old_time,
-    )
+    push_result(client, "OLD-WP", "D1", tested_at=old_time)
     push_result(client, "TODAY-WP", "D1")
     snapshot = services.dashboard_snapshot()
     assert snapshot["total"] == 1
@@ -388,30 +231,13 @@ def test_program_drift_detects_selfcheck_failure_without_versions(client, bench)
 def test_backfilled_old_result_does_not_override_newer_state(client, bench):
     start_iso, _ = db.today_bounds_utc()
     old_time = (db.parse_ts(start_iso) - timedelta(hours=2)).isoformat()
-    newer = services.report_test_result(
-        workpiece="W-BF",
-        device_id="D1",
-        test_item="电压",
-        result="PASS",
-        program_version="v1",
-        program_sha256=SHA_A,
-        tested_at=db.utc_now_iso(),
-    )
-    assert newer["stale"] is False
-    assert newer["workpiece_status"]["status"] == "PASS"
+    push_result(client, "W-BF", "D1", test_item="电压", result="PASS", tested_at=db.utc_now_iso())
+    assert services.workpiece_detail("W-BF")["status"] == "PASS"
 
-    backfill = services.report_test_result(
-        workpiece="W-BF",
-        device_id="D1",
-        test_item="电流",
-        result="FAIL",
-        program_version="v1",
-        program_sha256=SHA_A,
-        tested_at=old_time,
-    )
-    assert backfill["stale"] is True
-    assert backfill["workpiece_status"]["status"] == "PASS"
-    assert backfill["workpiece_status"]["locked"] is False
+    push_result(client, "W-BF", "D1", test_item="电流", result="FAIL", tested_at=old_time)
+    state = services.workpiece_detail("W-BF")
+    assert state["status"] == "PASS"
+    assert state["locked"] is False
     assert services.list_locked_workpieces() == []
 
     allowed = client.get(
@@ -424,59 +250,11 @@ def test_backfilled_old_result_does_not_override_newer_state(client, bench):
     assert snapshot["fail"] == 0
 
 
-def test_future_tested_at_is_clamped_and_does_not_block_later_fail(client, bench):
-    future_time = (db.utc_now() + timedelta(days=365)).isoformat()
-    first = services.report_test_result(
-        workpiece="W-FUT",
-        device_id="D1",
-        test_item="电压",
-        result="PASS",
-        program_version="v1",
-        program_sha256=SHA_A,
-        tested_at=future_time,
-    )
-    assert first["tested_at_adjusted"] is True
-    assert first["stale"] is False
-
-    fail = client.post(
-        "/api/test-result",
-        json={
-            "workpiece": "W-FUT",
-            "device_id": "D2",
-            "test_item": "绝缘",
-            "result": "FAIL",
-            "program_version": "v1",
-            "program_sha256": SHA_A,
-            "tested_at": db.utc_now_iso(),
-        },
-    )
-    body = fail.json()
-    assert body["stale"] is False
-    assert body["workpiece_status"]["locked"] is True
-
-
 def test_small_clock_skew_fail_still_locks(client, bench):
     now = db.utc_now()
-    services.report_test_result(
-        workpiece="W-SKEW",
-        device_id="D1",
-        test_item="电压",
-        result="PASS",
-        program_version="v1",
-        program_sha256=SHA_A,
-        tested_at=now.isoformat(),
-    )
-    fail = services.report_test_result(
-        workpiece="W-SKEW",
-        device_id="D2",
-        test_item="绝缘",
-        result="FAIL",
-        program_version="v1",
-        program_sha256=SHA_A,
-        tested_at=(now - timedelta(seconds=60)).isoformat(),
-    )
-    assert fail["stale"] is False
-    assert fail["workpiece_status"]["locked"] is True
+    push_result(client, "W-SKEW", "D1", test_item="电压", result="PASS", tested_at=now.isoformat())
+    push_result(client, "W-SKEW", "D2", test_item="绝缘", result="FAIL", tested_at=(now - timedelta(seconds=60)).isoformat())
+    assert services.workpiece_detail("W-SKEW")["locked"] is True
 
 
 def test_replace_bindings_validation(bench):
@@ -547,4 +325,4 @@ def test_dashboard_fail_distribution(client, bench):
         "fail_by_item"
     ][0] == {"label": "电流", "count": 1}
     assert {item["label"] for item in snapshot["fail_by_item"]} == {"电压", "电流"}
-    assert snapshot["by_device"][0]["fail"] == 2
+    assert {item["device_id"]: item["fail"] for item in snapshot["by_device"]}["D1"] == 2

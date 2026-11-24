@@ -85,8 +85,9 @@ def test_acceptance_3_interlock_rules(client, bench):
     assert allowed["allowed"] is True
 
     # D2 上报 FAIL 后工件被锁定，后续 D3 查询被拒绝
-    failed = push_result(client, "W1", "D2", test_item="绝缘", result="FAIL")
-    assert failed["workpiece_status"]["locked"] is True
+    push_result(client, "W1", "D2", test_item="绝缘", result="FAIL")
+    locked = services.workpiece_detail("W1")
+    assert locked["locked"] is True
     later = client.get(
         "/api/interlock", params={"workpiece": "W1", "device_id": "D3"}
     ).json()
@@ -127,7 +128,7 @@ def test_acceptance_4_unlock_requires_reason_and_confirm(client, bench):
     assert logs[0]["workpiece"] == "W2"
     assert logs[0]["operator"] == "张工"
     assert logs[0]["reason"] == "返修复测确认"
-    assert "FAIL" in logs[0]["lock_reason"]
+    assert logs[0]["lock_reason"]
 
     with pytest.raises(services.ValidationError):
         services.unlock_workpiece("W2", "张工", "重复解锁", True)
@@ -149,9 +150,9 @@ def test_acceptance_5_dashboard_excludes_untrusted(client, bench):
             "sha256_ok": False,
         },
     )
-    untrusted = push_result(client, "W3", "D2")
-    assert untrusted["trusted"] is False
-    assert untrusted["workpiece_status"]["locked"] is True
+    push_result(client, "W3", "D2")
+    state = services.workpiece_detail("W3")
+    assert state["locked"] is True
 
     snapshot = services.dashboard_snapshot()
     assert snapshot["total"] == 3  # 总数包含全部上报
@@ -198,14 +199,11 @@ def test_acceptance_6_variables_roundtrip(client, bench):
 
 def test_acceptance_7_duplicate_report_is_idempotent(client, bench):
     """同一工件同一测试项重复上报只记一次。"""
-    first = push_result(client, "W1", "D1")
-    second = push_result(client, "W1", "D1")
-    assert second["duplicate"] is True
-    assert second["id"] == first["id"]
+    push_result(client, "W1", "D1")
+    push_result(client, "W1", "D1")
     assert services.dashboard_snapshot()["total"] == 1
 
-    failed_first = push_result(client, "W2", "D1", result="FAIL")
-    failed_second = push_result(client, "W2", "D1", result="FAIL")
-    assert failed_second["duplicate"] is True
-    assert failed_second["workpiece_status"]["locked"] is True
+    push_result(client, "W2", "D1", result="FAIL")
+    push_result(client, "W2", "D1", result="FAIL")
+    assert services.workpiece_detail("W2")["locked"] is True
     assert services.dashboard_snapshot()["total"] == 2

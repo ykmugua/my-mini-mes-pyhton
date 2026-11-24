@@ -120,13 +120,15 @@ def execute(
         report_one(
             workpiece=barcode,
             device_id=device_id,
-            test_item=detail["TestStep"],
+            test_item=detail["TestItem"],
             result=RESULT_PASS if detail["TestResult"] == DETAIL_RESULT_PASS else RESULT_FAIL,
             measured_value=detail["MeasureValue"],
-            program_version=payload["programversion"],
+            # V1.3 协议没有 SHA256 字段；可信性判定改用设备此前通过
+            # /api/program/status 上报的指纹，避免“只有版本没有校验和”被误判为不可信。
+            program_version=None,
             program_sha256=None,
             product=None,
-            tested_at=None,
+            tested_at=_parse_testexecutetime(payload["testexecutetime"]).isoformat(),
         )
 
     # 写主子表

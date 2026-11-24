@@ -27,6 +27,7 @@ import argparse
 import hashlib
 import json
 import sys
+import time
 from pathlib import Path
 from typing import Any
 
@@ -97,7 +98,7 @@ class DeviceClient:
         response.raise_for_status()
         return response.json()
 
-    # -- 测试结果上报（幂等 + 失败入队补传） ------------------------------
+    # -- 测试结果上报（V1.3 整单 + 失败入队补传） ------------------------------
     def report_result(
         self,
         workpiece: str,
@@ -107,22 +108,38 @@ class DeviceClient:
         program_version: str | None = None,
         program_sha256: str | None = None,
     ) -> dict[str, Any]:
+        """上报一条 V1.3 整单测试结果；失败时写入本地 outbox。"""
+        detail_result = "true" if result == "PASS" else "false"
         payload = {
-            "workpiece": workpiece,
-            "device_id": self.device_id,
-            "test_item": test_item,
+            "station": self.device_id,
+            "componentcode": self.product or "",
+            "traycode": "",
+            "barcode": workpiece,
+            "programname": "DEVICE-CLIENT",
+            "programversion": program_version or "v1",
+            "testexecutetime": "2026/11/24 10:00:00.000",
+            "testlongtime": "00:00:01.000",
             "result": result,
-            "measured_value": measured_value,
-            "program_version": program_version,
-            "program_sha256": program_sha256,
+            "isfinalreport": "false",
+            "details": [
+                {
+                    "TestItem": test_item,
+                    "TestStep": test_item,
+                    "StandardValue": "1.00",
+                    "UpperValue": "2.00",
+                    "LowerValue": "0.00",
+                    "MeasureValue": str(measured_value or ""),
+                    "TestResult": detail_result,
+                    "TestBeginTime": "10:00:00.000",
+                    "TestEndTime": "10:00:01.000",
+                }
+            ],
         }
-        if self.product:
-            payload["product"] = self.product
         try:
             return self._post_result(payload)
         except httpx.HTTPStatusError as exc:
             if exc.response.status_code < 500:
-                raise  # 4xx 是数据问题，重试没有意义
+                raise
             self._enqueue(payload)
             return {"queued": True, "reason": f"HTTP {exc.response.status_code}"}
         except httpx.HTTPError as exc:
@@ -130,20 +147,37 @@ class DeviceClient:
             return {"queued": True, "reason": str(exc)}
 
     def _post_result(self, payload: dict[str, Any]) -> dict[str, Any]:
-        response = self.http.post("/api/test-result", json=payload)
+        """向 V1.3 整单接口提交 payload，并返回业务 result。"""
+        request_id = f"client-{payload['barcode']}-{int(time.time() * 1000)}"[:32]
+        response = self.http.post(
+            "/api/v1/test-results",
+            json=payload,
+            headers={
+                "x-device-sn": payload["barcode"],
+                "x-timestamp": str(int(time.time() * 1000)),
+                "x-request-id": request_id,
+            },
+        )
         response.raise_for_status()
-        return response.json()
+        envelope = response.json()
+        if envelope.get("code") != 0:
+            raise httpx.HTTPStatusError(
+                envelope.get("message", "upload failed"),
+                request=response.request,
+                response=response,
+            )
+        return envelope["result"]
 
     def _enqueue(self, payload: dict[str, Any]) -> None:
         """同一工件+设备+测试项只保留一条待补传记录。"""
-        key = (payload["workpiece"], payload["device_id"], payload["test_item"])
+        key = (payload["barcode"], payload["station"], payload["details"][0]["TestStep"])
         records: dict[tuple[str, str, str], dict[str, Any]] = {}
         if self.outbox.exists():
             for line in self.outbox.read_text(encoding="utf-8").splitlines():
                 if not line.strip():
                     continue
                 item = json.loads(line)
-                records[(item["workpiece"], item["device_id"], item["test_item"])] = item
+                records[(item["barcode"], item["station"], item["details"][0]["TestStep"])] = item
         records[key] = payload
         with self.outbox.open("w", encoding="utf-8") as handle:
             for item in records.values():

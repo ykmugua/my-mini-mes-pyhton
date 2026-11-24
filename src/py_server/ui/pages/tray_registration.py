@@ -9,7 +9,14 @@ import streamlit as st
 
 from . import _common as master
 from . import registry_helpers as helpers
-from .constants import ENABLED_OPTIONS
+from .constants import (
+    BLANK_TEMPLATE,
+    CREATE_TRAY_BUTTON,
+    CREATE_TRAY_SECTION,
+    ENABLED_OPTIONS,
+    SAVE_TRAY_BUTTON,
+    TRAY_LIST_SECTION,
+)
 
 TRAY_COLUMNS = ["载具码", "载具名称", "载具型号", "载荷数量", "启用", "备注"]
 DELETE_CLICK_KEY = "tray_delete_click"
@@ -144,24 +151,27 @@ def render_page() -> None:
     read_only = not helpers.is_editable()
     trays: list[dict[str, Any]] = st.session_state.get("trays", [])
 
-    st.title("📦 载具注册")
-
-    # 区块 1：新增载具
+    # 区块 1：新增载具（折叠表单）
     with st.container(border=True):
-        st.subheader("新增载具")
+        st.subheader("载具管理")
         if read_only:
-            with st.expander("新增载具", expanded=False):
+            with st.expander(CREATE_TRAY_SECTION, expanded=False):
                 st.info("只读角色不可新增载具。")
         else:
-            with st.expander("新增载具", expanded=False):
+            with st.expander(CREATE_TRAY_SECTION, expanded=False):
                 with st.form("tray_create_form", clear_on_submit=False, border=False):
                     # 第一行：载具码 + 载具名称 + 载具型号 + 载荷数量
-                    code_col, name_col, model_col, cap_col = st.columns([1, 1, 1, 1])
+                    code_col, name_col, template_col, model_col, cap_col = st.columns([1, 1, 1, 1, 1])
                     new_code = code_col.text_input(
                         "载具码", key="new_tray_code", placeholder="例如 T02001",
                     )
                     new_name = name_col.text_input(
                         "载具名称", key="new_tray_name", placeholder="例如 01号载具",
+                    )
+                    source = template_col.selectbox(
+                        "从原有模板中新建",
+                        options=[BLANK_TEMPLATE, *[str(t["traycode"]) for t in trays]],
+                        key="new_tray_template",
                     )
                     new_model = model_col.text_input(
                         "载具型号", key="new_tray_model", placeholder="例如 TM-A",
@@ -181,27 +191,39 @@ def render_page() -> None:
                         "启用", options=list(ENABLED_OPTIONS), key="new_tray_enabled_text",
                     )
                     # 第三行：添加按钮（左侧单独一行）
-                    submitted = st.form_submit_button("添加载具")
+                    submitted = st.form_submit_button(CREATE_TRAY_BUTTON)
 
                 if submitted:
-                    proposed_rows = _tray_frame(trays, include_delete=False).to_dict("records")
-                    proposed_rows.append({
-                        "载具码": new_code.strip(),
-                        "载具名称": new_name.strip(),
-                        "载具型号": new_model.strip(),
-                        "载荷数量": int(new_capacity),
-                        "启用": helpers.enabled_from_text(new_enabled_text),
-                        "备注": new_remark.strip(),
-                    })
+                    if source != BLANK_TEMPLATE:
+                        row = next(t for t in trays if str(t["traycode"]) == source)
+                        new_code_value = helpers.copy_value(source, {str(t["traycode"]) for t in trays})
+                        new_row = {
+                            **row,
+                            "traycode": new_code_value,
+                            "tray_name": f"{row.get('tray_name', '')} 副本",
+                        }
+                        proposed_rows = _tray_frame([*trays, new_row], include_delete=False).to_dict("records")
+                        success_message = f"已从模板 {source} 新建载具 {new_code_value}"
+                    else:
+                        proposed_rows = _tray_frame(trays, include_delete=False).to_dict("records")
+                        proposed_rows.append({
+                            "载具码": new_code.strip(),
+                            "载具名称": new_name.strip(),
+                            "载具型号": new_model.strip(),
+                            "载荷数量": int(new_capacity),
+                            "启用": helpers.enabled_from_text(new_enabled_text),
+                            "备注": new_remark.strip(),
+                        })
+                        success_message = "载具已添加"
                     validated, error = _validate_trays(proposed_rows)
                     if error:
                         st.error(error)
                     else:
-                        helpers.save_rows("trays", validated, "载具已添加")
+                        helpers.save_rows("trays", validated, success_message)
 
     # 区块 2：载具列表
     with st.container(border=True):
-        st.subheader("载具列表（可直接修改，改完点“保存载具修改”）")
+        st.subheader(TRAY_LIST_SECTION)
         edited: pd.DataFrame | None = None
         if read_only:
             st.dataframe(
@@ -221,7 +243,7 @@ def render_page() -> None:
         if not read_only:
             with st.container(horizontal=True, horizontal_alignment="left"):
                 save_clicked = st.button(
-                    "保存载具修改", icon=":material/save:", key="save_trays",
+                    SAVE_TRAY_BUTTON, icon=":material/save:", key="save_trays",
                 )
 
         if not trays:

@@ -9,7 +9,16 @@ import streamlit as st
 
 from . import _common as master
 from . import registry_helpers as helpers
-from .constants import ENABLED_OPTIONS, ROLE_EDIT, ROLE_VIEW
+from .constants import (
+    BLANK_TEMPLATE,
+    CREATE_DEVICE_BUTTON,
+    CREATE_DEVICE_SECTION,
+    DEVICE_LIST_SECTION,
+    ENABLED_OPTIONS,
+    ROLE_EDIT,
+    ROLE_VIEW,
+    SAVE_DEVICE_BUTTON,
+)
 
 DEVICE_COLUMNS = ["设备编号", "设备名称", "设备型号", "启用", "备注"]
 DELETE_CLICK_KEY = "device_delete_click"
@@ -121,24 +130,27 @@ def render_page() -> None:
     read_only = not helpers.is_editable()
     devices: list[dict[str, Any]] = st.session_state.devices
 
-    st.title("🖥️ 设备注册")
-
-    # 区块 1：新增设备
+    # 区块 1：新增设备（折叠表单）
     with st.container(border=True):
-        st.subheader("设备管理（可直接修改，改完点“保存设备修改”）")
+        st.subheader("设备管理")
         if read_only:
-            with st.expander("新增设备", expanded=False):
+            with st.expander(CREATE_DEVICE_SECTION, expanded=False):
                 st.info("只读角色不可新增设备。")
         else:
-            with st.expander("新增设备", expanded=False):
+            with st.expander(CREATE_DEVICE_SECTION, expanded=False):
                 with st.form("device_create_form", clear_on_submit=False, border=False):
                     # 第一行：设备编号 + 设备名称 + 设备型号
-                    id_col, name_col, model_col = st.columns(3)
+                    id_col, name_col, template_col, model_col = st.columns([1, 1, 1, 1])
                     new_device_id = id_col.text_input(
                         "设备编号", key="new_device_id", placeholder="例如 TEST-05",
                     )
                     new_device_name = name_col.text_input(
                         "设备名称", key="new_device_name", placeholder="例如 包装检测机",
+                    )
+                    source = template_col.selectbox(
+                        "从原有模板中新建",
+                        options=[BLANK_TEMPLATE, *[str(d["device_id"]) for d in devices]],
+                        key="new_device_template",
                     )
                     new_device_model = model_col.text_input(
                         "设备型号", key="new_device_model", placeholder="例如 DM-100",
@@ -151,26 +163,38 @@ def render_page() -> None:
                     new_device_enabled_text = enabled_col.selectbox(
                         "启用", options=list(ENABLED_OPTIONS), key="new_device_enabled_text",
                     )
-                    submitted = st.form_submit_button("添加设备")
+                    submitted = st.form_submit_button(CREATE_DEVICE_BUTTON)
 
                 if submitted:
-                    proposed_rows = _device_frame(devices, include_delete=False).to_dict("records")
-                    proposed_rows.append({
-                        "设备编号": new_device_id.strip(),
-                        "设备名称": new_device_name.strip(),
-                        "设备型号": new_device_model.strip(),
-                        "启用": helpers.enabled_from_text(new_device_enabled_text),
-                        "备注": new_device_remark.strip(),
-                    })
+                    if source != BLANK_TEMPLATE:
+                        row = next(d for d in devices if str(d["device_id"]) == source)
+                        new_id = helpers.copy_value(source, {str(d["device_id"]) for d in devices})
+                        new_row = {
+                            **row,
+                            "device_id": new_id,
+                            "device_name": f"{row.get('device_name', '')} 副本",
+                        }
+                        proposed_rows = _device_frame([*devices, new_row], include_delete=False).to_dict("records")
+                        success_message = f"已从模板 {source} 新建设备 {new_id}"
+                    else:
+                        proposed_rows = _device_frame(devices, include_delete=False).to_dict("records")
+                        proposed_rows.append({
+                            "设备编号": new_device_id.strip(),
+                            "设备名称": new_device_name.strip(),
+                            "设备型号": new_device_model.strip(),
+                            "启用": helpers.enabled_from_text(new_device_enabled_text),
+                            "备注": new_device_remark.strip(),
+                        })
+                        success_message = "设备已添加"
                     validated, error = _validate_devices(proposed_rows)
                     if error:
                         st.error(error)
                     else:
-                        helpers.save_rows("devices", validated, "设备已添加")
+                        helpers.save_rows("devices", validated, success_message)
 
     # 区块 2：设备列表
     with st.container(border=True):
-        st.subheader("设备列表")
+        st.subheader(DEVICE_LIST_SECTION)
         edited_devices: pd.DataFrame | None = None
         if read_only:
             st.dataframe(
@@ -188,7 +212,7 @@ def render_page() -> None:
         save_clicked = False
         if not read_only:
             with st.container(horizontal=True, horizontal_alignment="left"):
-                save_clicked = st.button("保存设备修改", icon=":material/save:", key="save_devices")
+                save_clicked = st.button(SAVE_DEVICE_BUTTON, icon=":material/save:", key="save_devices")
         if not devices:
             st.info("暂无设备，请新增")
         if save_clicked and edited_devices is not None:

@@ -66,7 +66,7 @@ class ConflictError(ServiceError):
 
 
 # -----------------------------------------------------------------------------
-# 连接工具（兼容 seed/测试直接引用 services._tx / services._read）
+# 连接工具：services 内部统一使用 with_conn/with_read_conn
 # -----------------------------------------------------------------------------
 @contextmanager
 def _read():
@@ -327,7 +327,7 @@ def list_program_status_logs(limit: int = 50) -> list[dict]:
 # 程序可信性 & 工序锁
 # -----------------------------------------------------------------------------
 def _evaluate_trust(conn: Conn, device_id: str, product: str | None, reported_version=None, reported_sha256=None):
-    """兼容旧签名：内部委托 application 的领域策略实现。"""
+    """委托 application 的领域策略实现可信性判定。"""
     return _report_test_result_uc.evaluate_trust(
         conn,
         device_id=device_id,

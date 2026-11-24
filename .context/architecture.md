@@ -700,3 +700,6 @@
 
 ## 57. 架构决策：注册页统一骨架与跨层常量
 2026-11-24：设备/载具/工序/组件四类注册页统一复用 `ui/pages/registry_helpers.py` 与 `ui/pages/constants.py`，共享空值清洗、权限判断、启用值转换、DataFrame 生成、删除 pending state、保存提示等逻辑。新增 `src/py_server/constants.py` 集中跨层业务常量（PASS/FAIL、normal/lock/final、LOCK/END、true/false、全部、变量类型、权限等），application/repository/ui 逐步替换散落字符串。批量补全 src/py_server 下所有函数/类 docstring（AST 检查缺失数为 0）。新增 docs/CODEBASE_GUIDE.md，详细说明框架、分层、关键函数、数据库、设计模式、关键流程、魔术值清理与注释规范。
+
+## 58. 架构决策：删除旧兼容接口与旧测试语义
+2026-11-24：按用户要求删除全部旧兼容。删除 /api/test-result 单条上报接口与 TestResultIn schema；删除只测旧接口的测试，保留业务规则测试并迁移到 V1.3 helper；examples/device_client.py 改为 V1.3 整单上报；删除 config.report_db_path 兼容别名、db.py 原始 sqlite 连接兼容函数、ui/client.py 未使用 _FALLBACK、repositories/base.py 旧 _tx 别名；更新 README/CODEBASE_GUIDE 移除旧单条上报描述。V1.3 内部单条上报改为用 TestItem 作为测试项、用解析后的 ISO 时间作为 tested_at、可信性改用设备 /api/program/status 指纹。全量测试 110 passed。

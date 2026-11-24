@@ -11,7 +11,15 @@ import streamlit as st
 
 from . import _common as master
 from . import registry_helpers as helpers
-from .constants import ENABLED_OPTIONS, STEP_NO_PATTERN
+from .constants import (
+    BLANK_TEMPLATE,
+    CREATE_STEP_BUTTON,
+    CREATE_STEP_SECTION,
+    ENABLED_OPTIONS,
+    SAVE_STEP_BUTTON,
+    STEP_LIST_SECTION,
+    STEP_NO_PATTERN,
+)
 
 STEP_COLUMNS = ["工序号", "工序名", "启用", "备注"]
 DELETE_CLICK_KEY = "step_delete_click"
@@ -166,72 +174,82 @@ def _confirm_delete_step(step: dict[str, Any]) -> None:
 
 
 def render_page() -> None:
-    """页面渲染入口（app_pages 脚本包装）。"""
+    """页面渲染入口。"""
     read_only = not helpers.is_editable()
     master.ensure_master_data()
     steps: list[dict[str, Any]] = st.session_state.steps
 
-    st.title("🧱 工序注册")
-
-
     # -----------------------------------------------------------------------------
-    # 区块 1：新增工序
+    # 区块 1：新增工序（折叠表单）
     # -----------------------------------------------------------------------------
-    st.subheader("新增工序")
-    if read_only:
-        with st.expander("新增工序", expanded=False):
-            st.info("只读角色不可新增工序。")
-    else:
-        with st.expander("新增工序", expanded=False):
-            with st.form("step_create_form", clear_on_submit=False, border=False):
-                step_col, name_col = st.columns([1, 2])
-                new_step_no = step_col.text_input(
-                    "工序号",
-                    key="new_step_no",
-                    placeholder="例如 5",
-                )
-                new_step_name = name_col.text_input(
-                    "工序名",
-                    key="new_step_name",
-                    placeholder="例如 包装",
-                )
-                # 第二行：备注 + 启用（文本下拉）
-                remark_col, enabled_col = st.columns([3, 1])
-                new_step_remark = remark_col.text_input(
-                    "备注",
-                    key="new_step_remark",
-                    placeholder="可选，用于填写现场说明",
-                )
-                new_step_enabled_text = enabled_col.selectbox(
-                    "启用", options=list(ENABLED_OPTIONS), key="new_step_enabled_text",
-                )
-                # 第三行：新增按钮（左侧单独一行）
-                submitted = st.form_submit_button("新增工序")
+    with st.container(border=True):
+        with st.expander(CREATE_STEP_SECTION, expanded=False):
+            submitted = False
+            if read_only:
+                st.info("只读角色不可新增工序。")
+            else:
+                with st.form("step_create_form", clear_on_submit=False, border=False):
+                    step_col, name_col, template_col = st.columns([1, 2, 1])
+                    source = template_col.selectbox(
+                        "从原有模板中新建",
+                        options=[BLANK_TEMPLATE, *[str(s["step_no"]) for s in steps]],
+                        key="new_step_template",
+                    )
+                    new_step_no = step_col.text_input(
+                        "工序号",
+                        key="new_step_no",
+                        placeholder="例如 5",
+                    )
+                    new_step_name = name_col.text_input(
+                        "工序名",
+                        key="new_step_name",
+                        placeholder="例如 包装",
+                    )
+                    remark_col, enabled_col = st.columns([3, 1])
+                    new_step_remark = remark_col.text_input(
+                        "备注",
+                        key="new_step_remark",
+                        placeholder="可选，用于填写现场说明",
+                    )
+                    new_step_enabled_text = enabled_col.selectbox(
+                        "启用", options=list(ENABLED_OPTIONS), key="new_step_enabled_text",
+                    )
+                    submitted = st.form_submit_button(CREATE_STEP_BUTTON)
 
-            if submitted:
-                proposed_rows = _step_frame(
-                    steps, include_delete=False
-                ).to_dict("records")
-                proposed_rows.append(
-                    {
-                        "工序号": new_step_no.strip(),
-                        "工序名": new_step_name.strip(),
-                        "启用": helpers.enabled_from_text(new_step_enabled_text),
-                        "备注": new_step_remark.strip(),
-                    }
-                )
-                validated, error = _validate_steps(proposed_rows)
-                if error:
-                    st.error(error)
-                else:
-                    helpers.save_rows("steps", validated, "工序已新增")
+                if submitted:
+                    if source != BLANK_TEMPLATE:
+                        row = next(s for s in steps if str(s["step_no"]) == source)
+                        new_no = helpers.copy_value(source, {str(s["step_no"]) for s in steps})
+                        new_row = {
+                            **row,
+                            "step_no": new_no,
+                            "step_name": f"{row.get('step_name', '')} 副本",
+                        }
+                        proposed_rows = _step_frame([*steps, new_row], include_delete=False).to_dict("records")
+                        success_message = f"已从模板 {source} 新建工序 {new_no}"
+                    else:
+                        proposed_rows = _step_frame(steps, include_delete=False).to_dict("records")
+                        proposed_rows.append(
+                            {
+                                "工序号": new_step_no.strip(),
+                                "工序名": new_step_name.strip(),
+                                "启用": helpers.enabled_from_text(new_step_enabled_text),
+                                "备注": new_step_remark.strip(),
+                            }
+                        )
+                        success_message = "工序已新增"
+                    validated, error = _validate_steps(proposed_rows)
+                    if error:
+                        st.error(error)
+                    else:
+                        helpers.save_rows("steps", validated, success_message)
 
 
     # -----------------------------------------------------------------------------
     # 区块 2：工序列表
     # -----------------------------------------------------------------------------
     with st.container(border=True):
-        st.subheader("工序列表（可直接修改，改完点“保存工序”）")
+        st.subheader(STEP_LIST_SECTION)
         edited_steps: pd.DataFrame | None = None
         if read_only:
             st.dataframe(
@@ -256,7 +274,7 @@ def render_page() -> None:
         if not read_only:
             with st.container(horizontal=True, horizontal_alignment="left"):
                 save_clicked = st.button(
-                    "保存工序",
+                    SAVE_STEP_BUTTON,
                     icon=":material/save:",
                     key="save_steps",
                 )

@@ -11,6 +11,16 @@ import streamlit as st
 
 from . import _common as master
 from .. import client
+from .constants import (
+    ACTIVE_PROGRAMS_SECTION,
+    CREATE_PROGRAM_BUTTON,
+    CREATE_PROGRAM_SECTION,
+    PROGRAM_HISTORY_MANAGEMENT_SECTION,
+    PROGRAM_HISTORY_SECTION,
+    PROGRAM_VERSIONS_SECTION,
+    SAVE_PROGRAM_BUTTON,
+    SAVE_VERSION_DESCRIPTION_BUTTON,
+)
 
 from ._mock_program_data import (
     available_program_versions,
@@ -270,7 +280,7 @@ def _read_components(edited: pd.DataFrame) -> list[str]:
 
 def _render_program_history(read_only: bool, programs: list[dict]) -> None:
     """程序历史管理：选择程序名，列表按新→老展示版本，可删除指定版本。"""
-    st.subheader("程序历史管理")
+    st.subheader(PROGRAM_HISTORY_MANAGEMENT_SECTION)
     pending = st.session_state.get("pending_history_program_delete")
     if pending:
         _confirm_delete_history_version(pending)
@@ -327,94 +337,90 @@ def render_page() -> None:
     program_versions: list[dict[str, Any]] = st.session_state.program_versions
     version_options = available_program_versions(programs, program_versions)
 
-    st.title("📦 程序注册")
-
-
     # -------------------------------------------------------------------------
-    # 区块 1：新增（风格与组件注册一致）
+    # 区块 1：新增程序（折叠表单）
     # -------------------------------------------------------------------------
-    st.subheader("新增")
-    if read_only:
-        with st.expander("新增", expanded=False):
-            st.info("只读角色不可上传程序。")
-    else:
-        with st.expander("新增", expanded=False):
-            with st.form("program_upload_form", clear_on_submit=False, border=False):
-                # 第一行：程序名 + 程序版本
-                name_col, version_col = st.columns(2)
-                program_name = name_col.text_input(
-                    "程序名", key="upload_program_name", placeholder="例如 TEST_MAIN",
-                )
-                program_version = version_col.text_input(
-                    "程序版本", key="upload_program_version", placeholder="例如 v1.2.0",
-                )
-                # 第二行：版本说明 + 启用
-                desc_col, enabled_col = st.columns([3, 1])
-                version_description = desc_col.text_input(
-                    "版本说明", key="upload_version_description",
-                    placeholder="例如：修复型号切换后的参数缓存",
-                )
-                enabled_text = enabled_col.selectbox(
-                    "启用", options=["是", "否"], key="upload_enabled_text",
-                )
-                # 程序文件
-                uploaded_file = st.file_uploader(
-                    "程序文件", type=["zip", "7z"], accept_multiple_files=False,
-                    key="upload_program_file",
-                )
-                # 添加按钮
-                submitted = st.form_submit_button("添加程序")
+    with st.container(border=True):
+        with st.expander(CREATE_PROGRAM_SECTION, expanded=False):
+            submitted = False
+            if read_only:
+                st.info("只读角色不可新增程序。")
+            else:
+                with st.form("program_upload_form", clear_on_submit=False, border=False):
+                    # 第一行：程序名 + 程序版本
+                    name_col, version_col = st.columns(2)
+                    program_name = name_col.text_input(
+                        "程序名", key="upload_program_name", placeholder="例如 TEST_MAIN",
+                    )
+                    program_version = version_col.text_input(
+                        "程序版本", key="upload_program_version", placeholder="例如 v1.2.0",
+                    )
+                    # 第二行：版本说明 + 启用
+                    desc_col, enabled_col = st.columns([3, 1])
+                    version_description = desc_col.text_input(
+                        "版本说明", key="upload_version_description",
+                        placeholder="例如：修复型号切换后的参数缓存",
+                    )
+                    enabled_text = enabled_col.selectbox(
+                        "启用", options=["是", "否"], key="upload_enabled_text",
+                    )
+                    # 程序文件
+                    uploaded_file = st.file_uploader(
+                        "程序文件", type=["zip", "7z"], accept_multiple_files=False,
+                        key="upload_program_file",
+                    )
+                    submitted = st.form_submit_button(CREATE_PROGRAM_BUTTON)
 
-            if submitted:
-                clean_name = program_name.strip()
-                clean_version = program_version.strip()
-                if not clean_name or not clean_version:
-                    st.error("程序名和程序版本不能为空")
-                elif uploaded_file is None:
-                    st.error("请选择要上传的程序文件")
-                else:
-                    suffix = Path(uploaded_file.name).suffix.lower()
-                    if suffix not in {".zip", ".7z"}:
-                        st.error("仅支持 .zip 或 .7z 文件")
-                    elif any(
-                        item["program_name"].casefold() == clean_name.casefold()
-                        for item in programs
-                    ):
-                        st.error("程序名已存在，请使用唯一的程序名")
+                if submitted:
+                    clean_name = program_name.strip()
+                    clean_version = program_version.strip()
+                    if not clean_name or not clean_version:
+                        st.error("程序名和程序版本不能为空")
+                    elif uploaded_file is None:
+                        st.error("请选择要上传的程序文件")
                     else:
-                        digest = hashlib.sha256(uploaded_file.getvalue()).hexdigest()
-                        program_id = next_program_id(programs)
-                        programs.append({
-                            "program_id": program_id,
-                            "program_name": clean_name,
-                            "program_version": clean_version,
-                            "version_description": version_description.strip(),
-                            "sha256": digest,
-                            "download_url": (
-                                "http://192.168.1.50:8000/programs/"
-                                f"{clean_name}_{clean_version}{suffix}"
-                            ),
-                            "step_no": "",
-                            "enabled": enabled_text == "是",
-                        })
-                        st.session_state.programs = programs
-                        master.save_key("programs")
-                        _upsert_version_description(
-                            program_versions, program_id, clean_version,
-                            version_description.strip(), digest,
-                            f"http://192.168.1.50:8000/programs/{clean_name}_{clean_version}{suffix}",
-                        )
-                        st.session_state.program_versions = program_versions
-                        master.save_key("program_versions")
-                        st.toast("程序已添加")
-                        st.rerun()
-        st.caption("仅支持 `.zip` 或 `.7z` 压缩包；上传后计算 SHA256 并自动生成下载地址。")
+                        suffix = Path(uploaded_file.name).suffix.lower()
+                        if suffix not in {".zip", ".7z"}:
+                            st.error("仅支持 .zip 或 .7z 文件")
+                        elif any(
+                            item["program_name"].casefold() == clean_name.casefold()
+                            for item in programs
+                        ):
+                            st.error("程序名已存在，请使用唯一的程序名")
+                        else:
+                            digest = hashlib.sha256(uploaded_file.getvalue()).hexdigest()
+                            program_id = next_program_id(programs)
+                            programs.append({
+                                "program_id": program_id,
+                                "program_name": clean_name,
+                                "program_version": clean_version,
+                                "version_description": version_description.strip(),
+                                "sha256": digest,
+                                "download_url": (
+                                    "http://192.168.1.50:8000/programs/"
+                                    f"{clean_name}_{clean_version}{suffix}"
+                                ),
+                                "step_no": "",
+                                "enabled": enabled_text == "是",
+                            })
+                            st.session_state.programs = programs
+                            master.save_key("programs")
+                            _upsert_version_description(
+                                program_versions, program_id, clean_version,
+                                version_description.strip(), digest,
+                                f"http://192.168.1.50:8000/programs/{clean_name}_{clean_version}{suffix}",
+                            )
+                            st.session_state.program_versions = program_versions
+                            master.save_key("program_versions")
+                            st.toast("程序已新增")
+                            st.rerun()
+            st.caption("仅支持 `.zip` 或 `.7z` 压缩包；上传后计算 SHA256 并自动生成下载地址。")
 
     # -------------------------------------------------------------------------
     # 区块 2：当前运行程序（每行一个程序名，勾选后查看历史/编辑）
     # -------------------------------------------------------------------------
     with st.container(border=True, key="program_list_panel"):
-        st.subheader("当前运行程序")
+        st.subheader(ACTIVE_PROGRAMS_SECTION)
         latest_by_name: dict[str, dict[str, Any]] = {}
         for program in programs:
             name = program["program_name"]
@@ -486,7 +492,7 @@ def render_page() -> None:
         # 直接保存列表里的编辑
         if edited_programs is not None and not read_only:
             with st.container(horizontal=True, horizontal_alignment="left"):
-                if st.button("保存程序修改", icon=":material/save:", key="save_program_edits"):
+                if st.button(SAVE_PROGRAM_BUTTON, icon=":material/save:", key="save_program_edits"):
                     updated = []
                     rename_error = ""
                     for index, row in edited_programs.iterrows():
@@ -534,7 +540,7 @@ def render_page() -> None:
     # 区块 3：历史程序（勾选当前运行程序后显示其所有历史版本，新→老）
     # -------------------------------------------------------------------------
     with st.container(border=True):
-        st.subheader("历史程序")
+        st.subheader(PROGRAM_VERSIONS_SECTION)
         selected = st.session_state.get("program_selected_name")
         if not names:
             st.info("暂无程序，请先在上方新增")
@@ -582,7 +588,7 @@ def render_page() -> None:
                         num_rows="fixed", width="stretch", alt="历史程序版本编辑器",
                         key="program_history_editor",
                     )
-                    if st.button("保存版本说明", key="save_program_versions"):
+                    if st.button(SAVE_VERSION_DESCRIPTION_BUTTON, key="save_program_versions"):
                         descs = dict(zip(edited_hist["版本"], edited_hist["版本说明"]))
                         for p in programs:
                             if p["program_name"] == selected and p["program_version"] in descs:

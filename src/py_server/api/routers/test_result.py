@@ -1,8 +1,4 @@
-"""测试结果上报路由。
-
-- /api/v1/test-results：MES V1.3 整单上传（机台主接口）
-- /api/test-result：旧的单条上报接口（保留供内部/现有测试使用）
-"""
+"""测试结果上报路由：仅保留 V1.3 整单上传主接口。"""
 
 from __future__ import annotations
 
@@ -15,7 +11,6 @@ from ...application.upload_test_result_v1 import (
     UploadValidationError,
     execute as upload_execute,
 )
-from ..schemas import TestResultIn
 from ..schemas_v1 import TestResultUploadIn
 
 router = APIRouter(tags=["test_result"])
@@ -24,25 +19,6 @@ router = APIRouter(tags=["test_result"])
 def _envelope(success: bool, message: str, code: int, result=None) -> dict:
     """执行 envelope。"""
     return {"success": success, "message": message, "code": code, "result": result}
-
-
-# ---------------------------------------------------------------------------
-# 旧接口：单条结果上报（内部/测试兼容）
-# ---------------------------------------------------------------------------
-@router.post("/api/test-result")
-def post_test_result(payload: TestResultIn) -> dict:
-    """执行 post_test_result。"""
-    return services.report_test_result(
-        workpiece=payload.workpiece,
-        device_id=payload.device_id,
-        test_item=payload.test_item,
-        result=payload.result,
-        measured_value=payload.measured_value,
-        program_version=payload.program_version,
-        program_sha256=payload.program_sha256,
-        product=payload.product,
-        tested_at=payload.tested_at,
-    )
 
 
 # ---------------------------------------------------------------------------

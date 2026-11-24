@@ -90,11 +90,15 @@ def test_v1_upload_updates_station_summary(client):
 
 def test_v1_upload_retest_counts_as_retest_pass(client):
     h1 = dict(HEADERS, **{"x-request-id": uuid.uuid4().hex})
-    client.post("/api/v1/test-results", json=_payload(result="FAIL", step="S1"), headers=h1)
+    client.post(
+        "/api/v1/test-results",
+        json=_payload(result="FAIL", step="S1", item="首次温度"),
+        headers=h1,
+    )
     h2 = dict(HEADERS, **{"x-request-id": uuid.uuid4().hex})
     response = client.post(
         "/api/v1/test-results",
-        json=_payload(result="PASS", step="S2"),
+        json=_payload(result="PASS", step="S2", item="复测温度"),
         headers=h2,
     )
     assert response.json()["result"]["retest"] is True

@@ -38,11 +38,6 @@ def details_db_path() -> Path:
     return _env_path("MES_DETAILS_DB_PATH", data_dir() / "TestReport.db")
 
 
-def report_db_path(step_no: str | int) -> Path:
-    """兼容旧调用：所有工序共用同一个测试报告库。"""
-    return details_db_path()
-
-
 def product_flow_db_path() -> Path:
     """产品流转库：ProductFlow.db。"""
     return _env_path("MES_PRODUCT_FLOW_DB_PATH", data_dir() / "ProductFlow.db")
