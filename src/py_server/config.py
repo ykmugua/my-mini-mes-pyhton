@@ -50,6 +50,11 @@ def program_dir() -> Path:
     return path
 
 
+def device_config_path() -> Path:
+    """设备开启状态配置文件路径。"""
+    return _env_path("MES_DEVICE_CONFIG_PATH", PROJECT_ROOT / "config" / "device_config.json")
+
+
 def timezone() -> ZoneInfo:
     """业务时区，用于“今日”统计与时间展示。"""
     return ZoneInfo(os.environ.get("MES_TZ", "Asia/Shanghai"))

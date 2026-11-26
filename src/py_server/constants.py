@@ -29,8 +29,23 @@ NEXT_END = "END"
 
 # 看板显示状态
 DEVICE_STATUS_IDLE = "空闲"
+DEVICE_STATUS_TESTING = "测试中"
+DEVICE_STATUS_OFFLINE = "离线"
+DEVICE_STATUS_DISABLED = "禁用"
 STATUS_PASS_TEXT = "通过"
 STATUS_FAIL_TEXT = "失败"
+
+MISSING_TRAYCODE = "/"
+LEGACY_MISSING_TRAYCODE_VALUES = frozenset({"", "no traycode", "/"})
+
+
+def is_missing_traycode(value: object) -> bool:
+    """判断载具号是否表示“没有载具”；兼容旧数据。"""
+    return str(value or "").strip().casefold() in LEGACY_MISSING_TRAYCODE_VALUES
+
+# 看板状态阈值（秒）
+DEVICE_HEARTBEAT_TIMEOUT_SECONDS = 90
+DEVICE_IDLE_THRESHOLD_SECONDS = 300
 
 # 筛选框“全部”选项
 ALL_OPTION = "全部"

@@ -15,7 +15,7 @@
 | 注册配置 | 一个页面内用标签页维护程序、工序、设备、载具、组件；工序/设备/载具/组件的新增表单支持从模板新建 |
 | 工艺配置 | 独立页面维护工艺号、工艺路线和工序资源；新增工艺支持从原有模板新建 |
 | 开放性变量 | 三层变量树、变量定义、前缀筛选、设备读写、读写日志 |
-| 设备接口 | 程序拉取、程序状态上报、V1.3 整单测试上报、放行查询、变量读写 |
+| 设备接口 | 程序拉取/下载、程序状态上报、V1.3 整单测试上报、放行查询、变量读写、设备开启状态查询 |
 
 技术栈：Python 3.14、FastAPI、Streamlit、SQLAlchemy Core、SQLite、plotly。部署为双进程：FastAPI 提供设备接口和 UI 接口，Streamlit 提供内部操作页面；Streamlit 通过 HTTP 客户端访问 FastAPI，不直接写数据库。
 
@@ -41,6 +41,12 @@ uv sync
 
 # 启动页面
 .\scripts\run_ui.ps1 -BindAddress 0.0.0.0 -Port 8501
+
+# 或一键后台启动接口服务与页面
+.\scripts\start_all.ps1
+
+# 一键停止接口服务与页面
+.\scripts\stop_all.ps1
 ```
 
 访问：
@@ -95,7 +101,7 @@ my-mini-mes-pyhton/
 
 约束：
 
-- `domain/` 不依赖 FastAPI、Streamlit、SQLAlchemy 或 sqlite3。
+- `domain/` 不依赖 FastAPI、Streamlit、SQLAlchemy 或 sqlite3，只保留程序可信、联锁放行、工件状态机三块纯规则；新增流程卡控默认放 services/application。
 - `repositories/` 是唯一允许写 SQL 的目录。
 - `ui/` 只通过 `client.py` 访问接口，不直接连接数据库。
 - `mes.db` 维护主数据、程序、工件、变量与当前在制产品；`ProductFlow.db` 维护当前总览和每产品流转历史；`TestReport.db` 是唯一测试报告库。
@@ -133,10 +139,14 @@ Swagger 文档见 `/docs`。常用接口：
 | --- | --- | --- |
 | GET | `/health` | 健康检查 |
 | GET | `/api/program` | 拉取程序元数据与下载地址 |
+| GET | `/programs/{filename}` | 下载程序文件 |
 | POST | `/api/program/status` | 上报程序版本/SHA256/自检结果 |
 | POST | `/api/v1/test-results` | V1.3 整单测试上报（机台主接口） |
 | GET | `/api/interlock` | 工件放行判定 |
 | GET/POST | `/api/variable/{name}` | 读取/写入开放变量 |
+| GET | `/api/device/enable` | 查询设备是否开启 |
+
+设备端最小 API 集：健康检查、程序元数据、程序文件下载、程序状态上报、放行判定、V1.3 报告上传、变量读写、设备开启状态查询。UI 接口不提供给设备端使用。
 | GET | `/api/ui/master` | 页面主数据快照 |
 | GET | `/api/ui/product/workpieces` | 产品流转查询 |
 | GET | `/api/ui/product/report-query` | 测试报告查询（单库 + step_no 筛选） |

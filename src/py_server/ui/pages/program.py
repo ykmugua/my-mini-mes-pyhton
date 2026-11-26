@@ -31,8 +31,8 @@ from ._mock_program_data import (
     step_label,
 )
 
-PULL_LOG_COLUMNS = ["时间", "设备", "产品", "程序版本", "SHA256"]
-STATUS_LOG_COLUMNS = ["时间", "设备", "产品", "上报版本", "可信", "原因"]
+PULL_LOG_COLUMNS = ["时间", "设备", "产品型号", "程序版本", "SHA256"]
+STATUS_LOG_COLUMNS = ["时间", "设备", "产品型号", "上报版本", "可信", "原因"]
 COLUMN_ORDER_LOCK_SCRIPT = """
 <script>
 (() => {
@@ -137,7 +137,7 @@ def _pull_log_frame(records: list[dict[str, Any]]) -> pd.DataFrame:
             {
                 "时间": _text(item.get("pulled_at")),
                 "设备": _text(item.get("device_id")),
-                "产品": _text(item.get("product")),
+                "产品型号": _text(item.get("product")),
                 "程序版本": _text(item.get("program_version")),
                 "SHA256": f"{sha256[:16]}…" if sha256 else "",
             }
@@ -153,7 +153,7 @@ def _status_log_frame(records: list[dict[str, Any]]) -> pd.DataFrame:
             {
                 "时间": _text(item.get("reported_at")),
                 "设备": _text(item.get("device_id")),
-                "产品": _text(item.get("product")),
+                "产品型号": _text(item.get("product")),
                 "上报版本": _text(item.get("reported_version")),
                 "可信": "是" if item.get("trusted") else "否",
                 "原因": _text(item.get("reason")),

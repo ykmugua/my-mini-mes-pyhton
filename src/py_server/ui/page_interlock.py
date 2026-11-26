@@ -23,7 +23,7 @@ def _locked_frame(locked: list[dict]) -> pd.DataFrame:
         [
             {
                 "工件码": item["workpiece"],
-                "产品": item.get("product") or "",
+                "产品型号": item.get("product") or "",
                 "当前设备": item.get("current_device") or "",
                 "工件状态": item.get("status") or "",
                 "锁定原因": item["lock_reason"],
@@ -46,7 +46,7 @@ def _render_locked(locked: list[dict]) -> None:
 def _render_unlock(locked: list[dict]) -> None:
     """执行 render_unlock。"""
     st.subheader("人工解锁")
-    st.caption("解锁必须填写原因并勾选确认；解锁后工件放行状态恢复，动作全部留痕。")
+    st.caption("解锁必须填写原因并勾选确认；解锁后可重新判定放行，动作全部留痕。")
     if not locked:
         st.caption("暂无需要解锁的工件。")
         return
@@ -70,7 +70,7 @@ def _render_unlock(locked: list[dict]) -> None:
         reason = col2.text_input(
             "解锁原因（必填）",
             key="unlock_reason",
-            placeholder="例如：返修后复测确认，经产线负责人同意放行",
+            placeholder="例如：返修后复测确认，经产线负责人同意解锁",
             disabled=not common.can_edit(),
         )
         confirmed = st.checkbox(
@@ -93,7 +93,7 @@ def _render_unlock(locked: list[dict]) -> None:
     except ServiceError as exc:
         st.error(str(exc))
     else:
-        common.flash("success", f"工件 {result['workpiece']} 已解锁并放行。")
+        common.flash("success", f"工件 {result['workpiece']} 已解锁，可重新判定放行。")
         st.rerun()
 
 

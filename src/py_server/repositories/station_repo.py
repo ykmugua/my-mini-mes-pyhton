@@ -7,6 +7,7 @@ from typing import Any
 from sqlalchemy import select
 
 from .. import db, engine
+from ..constants import DEVICE_STATUS_TESTING, STATUS_FAIL_TEXT, STATUS_PASS_TEXT
 from .base import Conn, rows_to_dicts, with_read_conn
 
 ss = engine.station_summary
@@ -83,7 +84,7 @@ def apply_result(
     from sqlalchemy import func, select
 
     ensure_device(conn, device_id, name)
-    status = "通过" if result == "PASS" else "失败"
+    status = STATUS_PASS_TEXT if result == "PASS" else STATUS_FAIL_TEXT
     if is_retest:
         retest_inc = 1 if result == "PASS" else 0
         first_inc = 0
@@ -116,3 +117,24 @@ def apply_result(
                 failed_at=db.utc_now_iso(),
             )
         )
+
+
+def apply_test_start(
+    conn: Conn,
+    *,
+    device_id: str,
+    name: str,
+    barcode: str | None,
+    status_since: int,
+) -> None:
+    """设备上报测试开始：状态切换为测试中，保留其他统计字段。"""
+    ensure_device(conn, device_id, name)
+    values = {
+        "status": DEVICE_STATUS_TESTING,
+        "status_since": status_since,
+    }
+    if barcode:
+        values["barcode"] = barcode
+    conn.execute(
+        ss.update().where(ss.c.device_id == device_id).values(**values)
+    )

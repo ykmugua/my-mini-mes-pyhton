@@ -105,6 +105,16 @@ def save_master_key(key: str, payload: MasterDataIn) -> dict:
                     changed = True
             if changed:
                 master_data_repo.replace_processes(conn, processes)
+            from sqlalchemy import update
+
+            from ....engine import program_bindings
+
+            for old, new in renames.items():
+                conn.execute(
+                    update(program_bindings)
+                    .where(program_bindings.c.product == old)
+                    .values(product=new)
+                )
         elif key == "programs":
             renames = {
                 str(old.get("program_name") or ""): str(new.get("program_name") or "")

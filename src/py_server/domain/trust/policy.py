@@ -42,6 +42,7 @@ class ProgramTrustPolicy:
         binding: Binding | None,
         reported_version: str | None = None,
         reported_sha256: str | None = None,
+        self_check_failed: bool | None = None,
     ) -> TrustVerdict:
         """按铁律顺序短路判定。"""
         if binding is None:
@@ -51,7 +52,8 @@ class ProgramTrustPolicy:
         if fingerprint.source is FingerprintSource.NONE:
             return TrustVerdict(False, TrustReason.NO_REPORT)
 
-        if binding.self_check_failed:
+        failed = binding.self_check_failed if self_check_failed is None else self_check_failed
+        if failed:
             return TrustVerdict(False, TrustReason.SELF_CHECK_FAILED)
 
         if not fingerprint.version or not fingerprint.sha256:

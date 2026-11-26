@@ -130,7 +130,7 @@ def _clear_pending_delete() -> None:
 def _confirm_delete_tray(tray: dict[str, Any]) -> None:
     """执行 confirm_delete_tray。"""
     st.write(f"确定删除载具 **{tray['traycode']} - {tray.get('tray_name','')}（{tray.get('tray_model','')}）** 吗？")
-    st.caption("删除后，历史数据中的托盘码引用将保留，但不再显示为已注册载具。")
+    st.caption("删除后，历史数据中的载具号引用将保留，但不再显示为已注册载具。")
     with st.container(horizontal=True, horizontal_alignment="left"):
         if st.button("取消", key="cancel_delete_tray"):
             _clear_pending_delete()
@@ -178,7 +178,7 @@ def render_page() -> None:
                     new_capacity = cap_col.number_input(
                         "载荷数量", min_value=1, step=1, value=1,
                         key="new_tray_capacity",
-                        help="一个托盘可放置的板子数量",
+                        help="一个载具可放置的工件数量",
                     )
                     # 第二行：备注 + 启用
                     remark_col, enabled_col = st.columns([3, 1])

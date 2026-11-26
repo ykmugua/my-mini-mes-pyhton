@@ -27,13 +27,17 @@ from .pages.constants import (
 )
 
 DEFAULT_COLS = 6
-refresh_interval = 1000
+status_refresh_interval = "1s"
+step_refresh_interval = "5s"
+DASHBOARD_VIEW_TABS = "dashboard_view_tabs"
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 DEVICE_CONFIG = PROJECT_ROOT / "config" / "device_config.json"
 
 STATUS_LABELS = {"空闲": "空闲", "测试中": "测试中", "通过": "通过", "失败": "失败", "禁用": "禁用"}
 STATUS_COLORS = {"空闲": "#888888", "测试中": "#4287f5", "通过": "#28a745", "失败": "#dc3545", "禁用": "#333333"}
+STATUS_LABELS["离线"] = "离线"
+STATUS_COLORS["离线"] = "#6c757d"
 STATUS_NO_CHART = {"禁用"}
 METRIC_ITEMS = ["测试总数", "一次通过", "复测通过", "失败"]
 FIELD_MAP = {"测试总数": "total", "一次通过": "first_pass", "复测通过": "retest_pass", "失败": "fail"}
@@ -110,8 +114,9 @@ def _save_config_devices(devices: list[dict]) -> None:
     DEVICE_CONFIG.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
-def _set_device_enabled(device_id: str, enabled: bool) -> None:
+def _set_device_enabled(device_id: str) -> None:
     """更新设备开启状态，保留其他配置项。"""
+    enabled = bool(st.session_state.get(f"device_enabled_{device_id}", False))
     try:
         data = json.loads(DEVICE_CONFIG.read_text(encoding="utf-8"))
     except (OSError, ValueError) as exc:
@@ -232,6 +237,15 @@ def _read_summary(device_id: str) -> dict | None:
         st.stop()
 
 
+def _read_display_status(device_id: str) -> dict:
+    """通过 HTTP 读取卡片显示状态。"""
+    try:
+        return client.device_status(device_id)
+    except Exception as exc:
+        st.error(f"读取设备状态失败：{exc}")
+        return {"status": "离线", "elapsed": None, "show_timer": False}
+
+
 def _fmt_hms(seconds) -> str:
     """执行 fmt_hms。"""
     s = max(0, int(seconds or 0))
@@ -247,11 +261,11 @@ def _status_seconds(data: dict) -> int:
     return max(0, int(time.time()) - int(since)) if since else 0
 
 
-def _status_block(status: str, seconds: int = 0) -> str:
+def _status_block(status: str, seconds: int = 0, show_time: bool = True) -> str:
     """执行 status_block。"""
     label = STATUS_LABELS.get(status, "空闲")
     color = STATUS_COLORS.get(status, STATUS_COLORS["空闲"])
-    t = _fmt_hms(seconds)
+    t = _fmt_hms(seconds) if show_time else ""
     return (
         f'<div style="position:relative;background-color:{color};border-radius:6px;'
         f'height:32px;display:flex;align-items:center;justify-content:center;">'
@@ -283,50 +297,113 @@ def _chart(data: dict):
     return fig
 
 
+def _card_stats_signature(data: dict | None, display: dict | None) -> tuple:
+    """柱状图重绘签名：统计值或显示状态变化时才刷新图表。"""
+    data = data or {}
+    display = display or {}
+    return (
+        str(display.get("status") or ""),
+        int(data.get("total") or 0),
+        int(data.get("first_pass") or 0),
+        int(data.get("retest_pass") or 0),
+        int(data.get("fail") or 0),
+    )
+
+
+@st.fragment(run_every=status_refresh_interval)
+def _render_card_status_fragment(device_id: str, container) -> None:
+    """只刷新状态条与计时；不重建输入框、页签、图表和开关。"""
+    display = _read_display_status(device_id)
+    display_status = str(display.get("status") or "离线")
+    elapsed = display.get("elapsed")
+    with container:
+        if elapsed is None or not display.get("show_timer"):
+            st.html(_status_block(display_status, 0, show_time=False))
+        else:
+            st.html(_status_block(display_status, int(elapsed), show_time=True))
+
+
+@st.fragment(run_every=step_refresh_interval)
+def _render_chart_watch_fragment(device_id: str, applied_range) -> None:
+    """只检测统计/状态签名；变化时触发一次完整重绘，不每秒重建卡片。"""
+    chart_key = f"chart_sig_{device_id}"
+    display = _read_display_status(device_id)
+    stats = _device_stats(device_id, applied_range)
+    signature = _card_stats_signature(stats, display)
+    if st.session_state.get(chart_key) != signature:
+        st.session_state[chart_key] = signature
+        st.rerun()
+
+
+@st.fragment
+def _render_one_card_fragment(device: dict) -> None:
+    """每张卡片独立 fragment：toggle 只重绘当前卡片，不影响其他卡片。"""
+    data = _read_summary(device["device_id"]) or {}
+    applied = _effective_stat_range()
+    data = {**data, **_device_stats(device["device_id"], applied)}
+    _render_card(device, data)
+    _render_chart_watch_fragment(device["device_id"], applied)
+
+
 def _render_card(device: dict, data: dict | None) -> None:
-    """执行 render_card。"""
+    """渲染卡片固定外壳；变化区域交给独立 fragment。"""
     data = data or {}
     name = device.get("name") or device.get("device_id")
     device_id = device.get("device_id", "")
     # 不设固定高度，避免右侧滚动条
     with st.container(border=True):
         st.html(f'<div class="card-title">{name}</div>')
+        display = _read_display_status(device_id)
+        display_status = str(display.get("status") or "离线")
         barcode = (
-            "无条码"
-            if (str(data.get("status") or "空闲") == "空闲" or not data.get("barcode"))
+            "无工件条码"
+            if display_status in {"空闲", "离线", "禁用"} or not data.get("barcode")
             else str(data["barcode"])
         )
-        st.text_input("当前条码", value=str(barcode), disabled=True,
+        st.text_input("当前工件条码", value=str(barcode), disabled=True,
                       key=f"barcode_{device_id}", label_visibility="collapsed")
 
-        status = str(data.get("status") or "空闲")
-        st.html(_status_block(status, _status_seconds(data)))
+        status_container = st.container()
+        _render_card_status_fragment(device_id, status_container)
         # 每个页签内容用固定高度容器，保证切换页签时卡片大小不变
         TAB_BODY_H = 150
         tab_stats, tab_fail, tab_ctrl = st.tabs(["统计", "失败详计", "设备控制"])
         with tab_stats:
             with st.container(height=TAB_BODY_H, border=False):
-                st.plotly_chart(_chart(data), width="stretch", config={"displayModeBar": False}, alt=f"{name} 测试数据统计柱状图")
+                chart_key = f"chart_sig_{device_id}"
+                signature = _card_stats_signature(data, display)
+                if st.session_state.get(chart_key) != signature:
+                    st.session_state[chart_key] = signature
+                # 即使签名未变化也必须渲染，否则无数据/重绘后图表和文字会消失。
+                st.plotly_chart(
+                    _chart(data),
+                    width="stretch",
+                    config={"displayModeBar": False},
+                    alt=f"{name} 测试数据统计柱状图",
+                    key=f"chart_{device_id}",
+                )
         with tab_fail:
             with st.container(height=TAB_BODY_H, border=False):
                 details = client.station_fail_details(device_id)
                 if details:
-                    frame = pd.DataFrame([{"条码": d["barcode"], "失败信息": d["test_item"]} for d in details])
+                    frame = pd.DataFrame([{"工件条码": d["barcode"], "失败信息": d["test_item"]} for d in details])
                     st.dataframe(frame, hide_index=True, width="stretch", alt=f"{name} 失败项明细列表")
                 else:
                     st.caption("暂无失败记录")
         with tab_ctrl:
             with st.container(height=TAB_BODY_H, border=False):
                 enabled = bool(device.get("enable", True))
+                toggle_key = f"device_enabled_{device_id}"
+                if toggle_key not in st.session_state:
+                    st.session_state[toggle_key] = enabled
                 with st.container(horizontal=True, vertical_alignment="center"):
                     st.markdown("设备开启")
                     st.toggle(
                         "设备开启",
-                        value=enabled,
-                        key=f"device_enabled_{device_id}",
+                        key=toggle_key,
                         label_visibility="collapsed",
                         on_change=_set_device_enabled,
-                        args=(device_id, not enabled),
+                        args=(device_id,),
                     )
 
 
@@ -392,7 +469,7 @@ def _render_device_manager(config_devices: list[dict]) -> list[dict]:
                         "name": d.get("device_name") or d["device_id"],
                         "step_no": step_no,
                         "step_name": step_name,
-                        "ip": d.get("ip", "127.0.0.1"), "port": d.get("port", 6379), "enable": True,
+                        "enable": True,
                     })
                     _save_config_devices(all_config)
                     st.toast(f"已添加 {d['device_id']}")
@@ -482,18 +559,38 @@ def _clear_stat_inputs() -> None:
     """执行 clear_stat_inputs。"""
     st.session_state["stat_time_start"] = None
     st.session_state["stat_time_end"] = None
-    st.session_state["applied_stat_range"] = None
+    st.session_state["stat_range_mode"] = "default"
 
 
 def _apply_stat_range() -> None:
-    """点“查询”时计算生效区间：都空→今天0点到现在；设置后严格按时间范围筛选。"""
+    """点“查询”时保存时间模式：都空→今天0点到现在；设置后严格按时间范围筛选。"""
     start = _parse_stat_time(st.session_state.get("stat_time_start", ""))
     end = _parse_stat_time(st.session_state.get("stat_time_end", ""))
-    if end is None:
+    if start is None and end is None:
+        st.session_state["stat_range_mode"] = "default"
+        return
+    st.session_state["stat_range_mode"] = "custom"
+    st.session_state["stat_range_start"] = start or datetime.now().replace(
+        hour=0, minute=0, second=0, microsecond=0
+    )
+    st.session_state["stat_range_end"] = end
+
+
+def _effective_stat_range():
+    """每次刷新计算实际区间；默认模式结束时间取刷新时的当前时间。"""
+    if st.session_state.get("stat_range_mode") == "custom":
+        start = st.session_state.get("stat_range_start")
+        end = st.session_state.get("stat_range_end")
+        if start is not None:
+            return start, end
+        if end is not None:
+            default_start = end.replace(hour=0, minute=0, second=0, microsecond=0)
+            return default_start, end
+    if st.session_state.get("stat_range_mode") == "custom":
         end = datetime.now()
-    if start is None:
-        start = end.replace(hour=0, minute=0, second=0, microsecond=0)
-    st.session_state["applied_stat_range"] = (start, end)
+        return end.replace(hour=0, minute=0, second=0, microsecond=0), end
+    end = datetime.now()
+    return end.replace(hour=0, minute=0, second=0, microsecond=0), end
 
 
 def _stats_for_range(
@@ -549,20 +646,19 @@ def _stats_for_range(
 def _device_stats(device_id: str, applied) -> dict:
     """卡片测试数据统一来自 TestReport.db 的 report_index；时间区间为空时统计当天。"""
     keys = ("total", "first_pass", "retest_pass", "fail")
-    if applied:
-        start, end = applied
-    else:
+    start, end = applied
+    if end is None:
         end = datetime.now()
-        start = end.replace(hour=0, minute=0, second=0, microsecond=0)
     return {k: int(_stats_for_range(device_id, start, end).get(k) or 0) for k in keys}
 
 
 def _range_caption() -> str:
     """执行 range_caption。"""
-    applied = st.session_state.get("applied_stat_range")
-    if not applied:
-        return "统计区间：未筛选（默认当日 00:00 至现在）"
-    a, b = applied
+    a, b = _effective_stat_range()
+    if b is None:
+        return f"统计区间：{a.strftime(DT_FORMAT)} ~ now"
+    if st.session_state.get("stat_range_mode") != "custom":
+        return f"统计区间：{a.strftime(DT_FORMAT)} ~ now"
     return f"统计区间：{a.strftime(DT_FORMAT)} ~ {b.strftime(DT_FORMAT)}"
 
 
@@ -603,21 +699,24 @@ def _render_display_order(all_config: list[dict]) -> None:
         c3.button("清空", key="stat_time_clear", on_click=_clear_stat_inputs)
         st.button(QUERY_BUTTON, key="stat_time_query", on_click=_apply_stat_range, type="primary")
 
-        applied = st.session_state.get("applied_stat_range")
-        if applied:
-            a, b = applied
-            st.caption(
-                f"当前生效区间：{a.strftime(DT_FORMAT)} ~ {b.strftime(DT_FORMAT)}"
-                "（修改时间后需点“查询”才会生效）"
+        a, b = _effective_stat_range()
+        if b is None:
+            caption = (
+                f"当前生效区间：{a.strftime(DT_FORMAT)} ~ now"
+                "（结束时间随刷新更新）"
             )
+        elif st.session_state.get("stat_range_mode") == "custom":
+            caption = f"当前生效区间：{a.strftime(DT_FORMAT)} ~ {b.strftime(DT_FORMAT)}"
         else:
-            st.caption("可点选日期和时间（精确到分钟）；留空时按默认规则，点“查询”生效。")
+            caption = (
+                f"当前生效区间：{a.strftime(DT_FORMAT)} ~ now"
+                "（结束时间随刷新更新）"
+            )
+        st.caption(caption)
 
 
-@st.fragment(run_every=refresh_interval)
 def _render_cards_fragment() -> None:
-    """只刷新卡片区域：每 1s 重查 station_summary，不影响设备管理/删除弹窗。"""
-    # 每次fragment执行都重新读配置，保证新增/排序/删除后卡片立即同步
+    """只负责静态卡片布局；状态条和图表变化由独立 fragment 局部刷新。"""
     devices = _load_config_devices()
     n_cols = int(st.session_state.get("mon_cols", DEFAULT_COLS))
     if not devices:
@@ -630,13 +729,10 @@ def _render_cards_fragment() -> None:
             if idx < len(row):
                 device = row[idx]
                 with col:
-                    data = _read_summary(device["device_id"]) or {}
-                    applied = st.session_state.get("applied_stat_range")
-                    data = {**data, **_device_stats(device["device_id"], applied)}
-                    _render_card(device, data)
+                    _render_one_card_fragment(device)
 
 
-@st.fragment(run_every=refresh_interval)
+@st.fragment(run_every=step_refresh_interval)
 def _render_step_fragment() -> None:
     """工序页：按工序聚合监控设备列表中的统计数据。"""
     devices = _load_config_devices()
@@ -644,7 +740,7 @@ def _render_step_fragment() -> None:
         st.info("当前没有显示的设备，请先在“监控设备列表”中新增")
         return
 
-    applied = st.session_state.get("applied_stat_range")
+    applied = _effective_stat_range()
     st.caption(_range_caption())
     groups: dict[str, dict] = {}
     for d in devices:
@@ -714,8 +810,15 @@ def render() -> None:
 
     # 监控内容用 tab 组织：设备页 / 工序页
     with st.container(border=True):
-        tab_device, tab_step = st.tabs(["设备页", "工序页"])
-        with tab_device:
-            _render_cards_fragment()
-        with tab_step:
-            _render_step_fragment()
+        tab_device, tab_step = st.tabs(
+            ["设备页", "工序页"],
+            key=DASHBOARD_VIEW_TABS,
+            on_change="rerun",
+        )
+        # 只渲染当前选中的页签：未选中页签不注册刷新 fragment。
+        if tab_device.open:
+            with tab_device:
+                _render_cards_fragment()
+        elif tab_step.open:
+            with tab_step:
+                _render_step_fragment()

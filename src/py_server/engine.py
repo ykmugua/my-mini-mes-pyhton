@@ -338,6 +338,16 @@ station_fail_detail = Table(
     sqlite_autoincrement=True,
 )
 
+# 设备心跳：由设备端周期上报，供看板判断在线/离线
+device_heartbeats = Table(
+    "device_heartbeats",
+    metadata,
+    Column("device_id", Text, primary_key=True),
+    Column("last_seen_at", Integer, nullable=False),
+    Column("created_at", Integer, nullable=False),
+    Column("updated_at", Integer, nullable=False),
+)
+
 _engines: dict[str, Engine] = {}
 _details_engines: dict[str, Engine] = {}
 _report_engines: dict[str, Engine] = {}

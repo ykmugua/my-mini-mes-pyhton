@@ -1,4 +1,4 @@
-"""工位操作台：产品倒查工艺、批量入站、托盘解绑。"""
+"""工位操作台：产品倒查工艺、批量入站、载具解绑。"""
 
 from __future__ import annotations
 
@@ -150,7 +150,7 @@ def test_workbench_inbound_and_tray_unbind_roundtrip(client, workbench_seeded):
         },
     )
     assert occupied.status_code == 409
-    assert "先解除托盘绑定" in occupied.json()["detail"]
+    assert "先解除载具绑定" in occupied.json()["detail"]
 
     rejected = client.post(
         "/api/ui/workbench/tray-unbind",
@@ -325,10 +325,10 @@ def test_workbench_page_scans_tray_and_auto_submits(client, workbench_seeded):
     assert not at.exception, [str(item.value) for item in at.exception]
     assert at.title[0].value == "工位操作台"
     assert [item.label for item in at.tabs] == [
-        "手动入站",
-        "入线状态",
-        "托盘解绑",
-        "产品解锁",
+        "工件入站",
+        "在制产品",
+        "载具解绑",
+        "工件解锁",
     ]
     assert at.selectbox(key="workbench_product_model").value is None
     assert at.selectbox(key="workbench_process_step").disabled
@@ -374,9 +374,9 @@ def test_workbench_page_scans_tray_and_auto_submits(client, workbench_seeded):
     assert at.text_input(key=f"workbench_barcode_disabled_{token}_2").value == "SCAN-0002"
     assert any("已输入 1/19" in item.value for item in at.caption)
 
-    at.session_state["workbench_tabs"] = "托盘解绑"
+    at.session_state["workbench_tabs"] = "载具解绑"
     at.run()
-    at.session_state["workbench_tabs"] = "手动入站"
+    at.session_state["workbench_tabs"] = "工件入站"
     at.run()
     assert not at.exception, [str(item.value) for item in at.exception]
     assert at.selectbox(key="workbench_product_model").value == "P-1001"
@@ -404,7 +404,7 @@ def test_workbench_page_scans_tray_and_auto_submits(client, workbench_seeded):
     assert at.text_input(
         key=f"workbench_barcode_locked_{token}_1"
     ).value == "SCAN-0001"
-    assert any("19 个产品已入站" in item.value for item in at.success)
+    assert any("19 个工件已入站" in item.value for item in at.success)
     overview = client.get(
         "/api/ui/product/flow-overview",
         params={"traycode": "T02001"},
@@ -466,7 +466,7 @@ def test_workbench_unlock_can_choose_target_step(client, workbench_seeded):
         default_timeout=90,
     ).run()
     assert not at.exception, [str(item.value) for item in at.exception]
-    at.session_state["workbench_tabs"] = "产品解锁"
+    at.session_state["workbench_tabs"] = "工件解锁"
     at.run()
     assert not at.exception, [str(item.value) for item in at.exception]
 
@@ -549,7 +549,7 @@ def test_tag_page_lists_status_without_enabled_and_confirms_delete(
         default_timeout=90,
     ).run()
     assert not at.exception, [str(item.value) for item in at.exception]
-    at.session_state["workbench_tabs"] = "入线状态"
+    at.session_state["workbench_tabs"] = "在制产品"
     at.run()
     assert not at.exception, [str(item.value) for item in at.exception]
     assert at.title[0].value == "工位操作台"
@@ -557,7 +557,7 @@ def test_tag_page_lists_status_without_enabled_and_confirms_delete(
     assert list(at.dataframe[0].value.columns) == [
         "载具号",
         "条码数量",
-        "产品条码",
+        "工件条码",
         "当前工序",
         "操作",
     ]
@@ -565,7 +565,7 @@ def test_tag_page_lists_status_without_enabled_and_confirms_delete(
     page_row = at.dataframe[0].value.iloc[0]
     assert page_row["载具号"] == "T02001"
     assert page_row["条码数量"] == 2
-    assert set(str(page_row["产品条码"]).split("、")) == set(barcodes)
+    assert set(str(page_row["工件条码"]).split("、")) == set(barcodes)
 
     assert "删除" not in at.dataframe[0].value.columns
 
@@ -667,18 +667,18 @@ def test_tag_page_shows_only_flowing_trays(
         str(UI_DIR / "workbench_app.py"),
         default_timeout=90,
     ).run()
-    at.session_state["workbench_tabs"] = "入线状态"
+    at.session_state["workbench_tabs"] = "在制产品"
     at.run()
 
     assert not at.exception, [str(item.value) for item in at.exception]
     rows = at.dataframe[0].value
     ending_row = rows[rows["载具号"] == "T02001"].iloc[0]
     assert ending_row["条码数量"] == 1
-    assert ending_row["产品条码"] == sibling
-    assert ending not in str(ending_row["产品条码"])
+    assert ending_row["工件条码"] == sibling
+    assert ending not in str(ending_row["工件条码"])
     bound_row = rows[rows["载具号"] == "T02002"].iloc[0]
     assert bound_row["条码数量"] == 1
-    assert bound_row["产品条码"] == bound
+    assert bound_row["工件条码"] == bound
 
 
 def test_auto_unbind_terminal_trays_cleans_existing_bindings(

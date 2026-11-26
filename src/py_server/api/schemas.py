@@ -30,6 +30,17 @@ class ProgramStatusIn(BaseModel):
     )
 
 
+class DeviceHeartbeatIn(BaseModel):
+    """设备心跳上报。"""
+    device_id: str = Field(min_length=1)
+
+
+class DeviceTestStartIn(BaseModel):
+    """测试开始上报。"""
+    device_id: str = Field(min_length=1)
+    workpiece: str | None = None
+
+
 class VariableWriteIn(BaseModel):
     """VariableWriteIn 类。"""
     value: Any = None
@@ -74,7 +85,7 @@ class WorkbenchInboundIn(BaseModel):
     """WorkbenchInboundIn 类。"""
     product: str = Field(min_length=1)
     step_no: str = Field(min_length=1)
-    traycode: str = Field(min_length=1)
+    traycode: str = ""
     barcodes: list[str] = Field(default_factory=list)
     operator: str = Field(min_length=1)
 

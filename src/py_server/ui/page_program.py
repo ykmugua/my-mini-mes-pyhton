@@ -97,7 +97,7 @@ def _render_drift_alerts() -> None:
         [
             {
                 "设备": item["device_id"],
-                "产品": item["product"],
+                "产品型号": item["product"],
                 "绑定版本": item["program_version"],
                 "设备上报版本": item.get("reported_version") or "",
                 "告警原因": item["drift_reason"],
@@ -220,7 +220,7 @@ def _render_logs() -> None:
                     {
                         "时间": common.local_time(item["pulled_at"]),
                         "设备": item["device_id"],
-                        "产品": item["product"],
+                        "产品型号": item["product"],
                         "程序版本": item["program_version"],
                         "SHA256": (item["sha256"] or "")[:16] + "…",
                     }
@@ -241,7 +241,7 @@ def _render_logs() -> None:
                     {
                         "时间": common.local_time(item["reported_at"]),
                         "设备": item["device_id"],
-                        "产品": item["product"] or "",
+                        "产品型号": item["product"] or "",
                         "上报版本": item["reported_version"] or "",
                         "可信": "是" if item["trusted"] else "否",
                         "原因": item["reason"] or "",

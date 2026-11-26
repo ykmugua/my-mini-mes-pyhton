@@ -27,7 +27,7 @@ def render_sidebar() -> None:
         help="初期只区分可编辑 / 只读两类角色，不做登录鉴权",
     )
     if can_edit():
-        st.sidebar.success("可编辑：可以修改绑定、解锁、新增变量")
+        st.sidebar.success("可编辑：可以修改绑定关系、执行工件解锁、新增变量")
     else:
         st.sidebar.info("只读：仅浏览数据")
     st.sidebar.divider()

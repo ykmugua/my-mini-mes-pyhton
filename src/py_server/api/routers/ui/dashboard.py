@@ -27,6 +27,12 @@ def ui_station_summary(device_id: str) -> dict | None:
     return services.station_summary(device_id)
 
 
+@router.get("/api/ui/stations/{device_id}/status")
+def ui_device_status(device_id: str) -> dict:
+    """按设备读取看板卡片显示状态。"""
+    return services.device_status(device_id)
+
+
 @router.get("/api/ui/stations/{device_id}/fail-details")
 def ui_station_fail_details(device_id: str, limit: int = 50) -> list[dict]:
     """按设备读取失败项明细。"""

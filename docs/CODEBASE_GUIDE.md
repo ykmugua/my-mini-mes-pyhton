@@ -62,6 +62,20 @@ ui ──HTTP──▶ api/routers ──▶ services ──▶ application ─�
 - `ui/` 只通过 `ui/client.py` 调 HTTP 接口，不直接访问 repository 或数据库；
 - `api/routers/` 只负责参数声明和调用下层；业务校验放在 services/application。
 
+新增规则时按以下默认位置放置：
+
+| 规则类型 | 默认位置 | 示例 |
+| --- | --- | --- |
+| 请求头和字段格式校验 | API / Pydantic schema | 必填请求头、`x-device-sn == station`、UUID 格式 |
+| 依赖外部状态的准入检查 | services / application + repositories | 设备 SN 是否注册、设备是否启用、载具是否占用 |
+| 幂等和查重 | application + repositories + 数据库约束 | `request_id` 重复、UUID 重复、测试项重复冲突 |
+| 依赖统计或配置的流程卡控 | application / services | 设备使用次数超限、当班容量上限 |
+| 纯业务状态机和稳定策略 | `domain` | 工件锁定不能直接 PASS、程序版本/SHA 判定、放行顺序 |
+
+`domain` 不是所有限制规则的集合。只有“不需要查库、不依赖接口协议、只用传入的业务事实即可判定，并且规则稳定”的逻辑才进入 `domain`。
+
+业务术语定义见 [GLOSSARY.md](../GLOSSARY.md)；domain 边界决策记录在 `.context/architecture.md`。
+
 ---
 
 ## 4. 运行模型
@@ -318,7 +332,7 @@ Streamlit 默认用 `MES_UI_API_BASE=http://127.0.0.1:8000` 访问接口，避�
 - Router 处理 HTTP；
 - Service 提供业务入口和输入校验；
 - Application 编排事务；
-- Domain 表达纯业务规则；
+- Domain 表达少量纯业务规则（可信性、联锁、工件状态机），不是万能校验层；
 - Repository 封装 SQL；
 - Engine 管理连接和表结构。
 

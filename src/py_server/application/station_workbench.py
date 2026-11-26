@@ -42,6 +42,18 @@ def unbind_tray(*, traycode: str, operator: str, now: str) -> list[dict]:
     return deleted
 
 
+def downline_workpiece(*, barcode: str, operator: str, now: str) -> list[dict]:
+    """无载具工件下线：写流转历史并删除当前在制记录。"""
+    product_flow_store.close_workpiece_flow(
+        barcode,
+        device="工件下线",
+        note=f"工件下线（操作员：{operator}）",
+        changed_at=now,
+    )
+    active_product_repo.delete_barcodes([barcode])
+    return [{"barcode": barcode}]
+
+
 def delete_product_flow(*, barcode: str) -> dict | None:
     """删除产品的入线状态，不触碰测试结果等其他业务数据。"""
     deleted = product_flow_store.delete_product(barcode)

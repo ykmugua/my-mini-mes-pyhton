@@ -58,7 +58,7 @@ def test_report_query_by_product_and_step_reads_unified_db(client, seeded):
     ).run()
     assert not at.exception, [str(item.value) for item in at.exception]
     assert [tab.label for tab in at.tabs] == [
-        "产品流转查询",
+        "工件流转查询",
         "测试报告查询",
     ]
     at.session_state["pq_tabs"] = "测试报告查询"

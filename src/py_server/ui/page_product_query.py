@@ -1,4 +1,4 @@
-"""页面：产品查询（产品追溯 + 工序解绑）。"""
+"""页面：产品查询（工件追溯 + 工件解锁）。"""
 
 from __future__ import annotations
 
@@ -7,6 +7,7 @@ import streamlit as st
 
 from .. import config
 from . import client, common
+from ..constants import MISSING_TRAYCODE, is_missing_traycode
 from .client import ApiError as ServiceError
 from .pages.constants import (
     PAGE_TITLE_PRODUCT_QUERY,
@@ -32,7 +33,11 @@ def _result_frame(results: list[dict], *, report_trays: dict[str, str]) -> pd.Da
         "id": r.get("id") or "",
         "barcode": r.get("barcode") or "",
         "componentcode": r.get("componentcode") or "",
-        "traycode": report_trays.get(str(r.get("barcode") or ""), ""),
+        "traycode": (
+            MISSING_TRAYCODE
+            if is_missing_traycode(report_trays.get(str(r.get("barcode") or ""), ""))
+            else report_trays.get(str(r.get("barcode") or ""), "")
+        ),
         "board_status": r.get("board_status") or "",
         "current_step": r.get("current_step") or "",
         "last_report_device": r.get("last_report_device") or "",
@@ -48,7 +53,7 @@ def _report_query_frame(results: list[dict]) -> pd.DataFrame:
         "source_db": r.get("source_db") or "",
         "station": r.get("station") or "",
         "componentcode": r.get("componentcode") or "",
-        "traycode": r.get("traycode") or "",
+        "traycode": MISSING_TRAYCODE if is_missing_traycode(r.get("traycode")) else r.get("traycode"),
         "barcode": r.get("barcode") or "",
         "programname": r.get("programname") or "",
         "programversion": r.get("programversion") or "",
@@ -213,10 +218,10 @@ def _render_selected_report_detail(selected: dict | None = None) -> None:
         return
     barcode = str(selected.get("barcode") or "")
     step_no = str(selected.get("step_no") or "") or None
-    st.markdown("**测试报告详情**")
+    st.markdown("**测试报告明细**")
     with st.container(border=True):
         st.caption(
-            f"条码 {barcode} · 工序 {step_no or '默认'} · "
+            f"工件条码 {barcode} · 工序 {step_no or '默认'} · "
             f"来源 {selected.get('source_db') or ''}"
         )
         st.session_state["pq_report_detail_caption"] = "选中的测试报告总览"
@@ -224,7 +229,7 @@ def _render_selected_report_detail(selected: dict | None = None) -> None:
             pd.DataFrame([{
                 "station": selected.get("station") or "",
                 "componentcode": selected.get("componentcode") or "",
-                "traycode": selected.get("traycode") or "",
+        "traycode": MISSING_TRAYCODE if is_missing_traycode(selected.get("traycode")) else selected.get("traycode"),
                 "barcode": selected.get("barcode") or "",
                 "programname": selected.get("programname") or "",
                 "programversion": selected.get("programversion") or "",
@@ -240,7 +245,7 @@ def _render_selected_report_detail(selected: dict | None = None) -> None:
         )
         details_table = str(selected.get("details_table") or "")
         if not details_table:
-            st.info("该报告暂无 details 表")
+            st.info("该测试报告暂无测试明细")
             return
         try:
             details = client.report_details(details_table, step_no)
@@ -255,7 +260,7 @@ def _render_selected_report_detail(selected: dict | None = None) -> None:
             detail_frame = detail_frame.drop(columns=["id"])
         detail_frame.insert(0, "序号", range(1, len(detail_frame) + 1))
         st.session_state["pq_report_details_caption"] = "选中的测试报告明细"
-        st.session_state["pq_report_details_title_markdown"] = "**测试明细 details**"
+        st.session_state["pq_report_details_title_markdown"] = "**测试明细**"
         st.markdown(st.session_state["pq_report_details_title_markdown"])
         st.dataframe(
             detail_frame,
@@ -419,7 +424,7 @@ def _render_test_history(tests: list[dict], barcode: str, step_no: str | None = 
     ov_frame = pd.DataFrame([{
         "station": r.get("station") or "",
         "componentcode": r.get("componentcode") or "",
-        "traycode": r.get("traycode") or "",
+        "traycode": MISSING_TRAYCODE if is_missing_traycode(r.get("traycode")) else r.get("traycode"),
         "barcode": r.get("barcode") or "",
         "programname": r.get("programname") or "",
         "programversion": r.get("programversion") or "",
@@ -442,7 +447,7 @@ def _render_test_history(tests: list[dict], barcode: str, step_no: str | None = 
     selected = overview[rows[0]]
 
     # 下块：details
-    st.markdown("**测试明细 details**")
+    st.markdown("**测试明细**")
     try:
         details = client.report_details(selected["details_table"], step_no)
     except ServiceError as exc:
@@ -461,21 +466,21 @@ def _render_test_history(tests: list[dict], barcode: str, step_no: str | None = 
 
 def _render_product_flow(barcode: str | None = None) -> None:
     """产品流转：上块总览表，点行选产品，下块显示该产品具体流转表。"""
-    st.markdown("**产品流转总览**")
+    st.markdown("**工件流转总览**")
     try:
         overview = client.product_flow_overview(barcode)
     except ServiceError as exc:
-        st.error(f"读取产品流转总览失败：{exc}")
+        st.error(f"读取工件流转总览失败：{exc}")
         return
     if not overview:
-        st.info("暂无产品流转数据")
+        st.info("暂无工件流转数据")
         return
     # 表头使用 product_overview 数据库字段名
     frame = pd.DataFrame([{
         "id": r["id"],
         "barcode": r.get("barcode") or "",
         "componentcode": r.get("componentcode") or "",
-        "traycode": r.get("traycode") or "",
+        "traycode": MISSING_TRAYCODE if is_missing_traycode(r.get("traycode")) else r.get("traycode"),
         "board_status": r.get("board_status") or "",
         "current_step": r.get("current_step") or "",
         "last_report_device": r.get("last_report_device") or "",
@@ -483,7 +488,7 @@ def _render_product_flow(barcode: str | None = None) -> None:
         "updated_at": r.get("updated_at") or "",
     } for r in overview])
     # 总览只展示当前条码对应的一行
-    st.dataframe(frame.head(1), hide_index=True, width="stretch", alt="产品流转总览")
+    st.dataframe(frame.head(1), hide_index=True, width="stretch", alt="工件流转总览")
     selected = overview[0]
     st.caption(f"具体流转记录：{selected['barcode']}")
     try:
@@ -492,9 +497,9 @@ def _render_product_flow(barcode: str | None = None) -> None:
         st.error(f"读取具体流转失败：{exc}")
         return
     if not details:
-        st.info("该产品暂无流转记录")
+        st.info("该工件暂无流转记录")
         return
-    st.dataframe(pd.DataFrame(details), hide_index=True, width="stretch", alt="产品具体流转记录")
+    st.dataframe(pd.DataFrame(details), hide_index=True, width="stretch", alt="工件具体流转记录")
 
 
 def _render_detail(wp_id: str) -> None:
@@ -507,7 +512,7 @@ def _render_detail(wp_id: str) -> None:
         return
 
     with st.container(border=True):
-        st.subheader(f"追溯详情：{wp_id}")
+        st.subheader(f"追溯明细：{wp_id}")
 
         # 工艺路线
         product = detail.get("product")
@@ -526,18 +531,18 @@ def _render_detail(wp_id: str) -> None:
                     with st.expander("工艺路线", expanded=False):
                         st.dataframe(rf, hide_index=True, width="stretch", alt="产品工艺路线表")
                 else:
-                    st.caption("该产品未配置工序流程")
+                    st.caption("该工件未配置工序流程")
             except ServiceError:
                 pass
 
-        # 产品流转（顺序排列，不用 tab）
-        st.markdown("**产品流转**")
+        # 工件流转（顺序排列，不用 tab）
+        st.markdown("**工件流转**")
         _render_product_flow(wp_id)
 
-        # 工序解绑（顺序排列，不用 tab）
-        st.markdown("**工序解绑**")
+        # 工件解锁（顺序排列，不用 tab）
+        st.markdown("**工件解锁**")
         if not editable:
-            st.info("只读角色不可执行解绑")
+            st.info("只读角色不可执行工件解锁")
             return
 
         flow_locked = False
@@ -547,10 +552,10 @@ def _render_detail(wp_id: str) -> None:
         except ServiceError:
             flow_locked = False
         if not detail.get("locked") and not flow_locked:
-            st.info("当前工件未锁定，无需解绑")
+            st.info("当前工件未锁定，无需解锁")
             return
 
-        st.warning("解绑将写入一条手动解锁流转记录，并更新产品当前状态。")
+        st.warning("工件解锁将写入一条手动解锁流转记录，并更新工件当前状态。")
         try:
             steps = client.step_options()
         except ServiceError:
@@ -560,9 +565,9 @@ def _render_detail(wp_id: str) -> None:
             u1, u2 = st.columns([1, 2])
             operator = u1.text_input("操作人", value=common.operator(), key="pq_unlock_op")
             target_step = u2.selectbox("切换到的工序", step_options or ["原工序"], key="pq_unlock_step")
-            note = st.text_input("备注（写入流转记录）", key="pq_unlock_note", placeholder="例如：手动解锁放行")
+            note = st.text_input("备注（写入流转记录）", key="pq_unlock_note", placeholder="例如：手动解锁")
             confirmed = st.checkbox("我已确认该工件可以放行，本次操作将记录操作人和备注", key="pq_unlock_confirm")
-            submitted = st.form_submit_button("执行解绑", type="primary")
+            submitted = st.form_submit_button("执行解锁", type="primary")
         if submitted:
             if not confirmed:
                 st.error("请勾选确认")
@@ -577,21 +582,21 @@ def _render_detail(wp_id: str) -> None:
                         note=reason_text,
                     )
                 except ServiceError as exc:
-                    st.error(f"解绑失败：{exc}")
+                    st.error(f"工件解锁失败：{exc}")
                 else:
-                    st.toast("解绑成功，工件已放行")
+                    st.toast("工件解锁成功；可重新判定放行")
                     st.rerun()
 
 
 def render() -> None:
     """执行 render。"""
     st.title(PAGE_TITLE_PRODUCT_QUERY)
-    st.caption("按产品/工件/状态/时间查询工件，点击结果行查看追溯详情，并对锁定工件执行人工解绑放行。")
+    st.caption("按产品型号/工件/状态/时间查询工件，点击结果行查看追溯明细，并对锁定工件执行工件解锁。")
     common.render_flash()
     common.render_readonly_notice()
 
     flow_tab, report_tab = st.tabs(
-        ["产品流转查询", "测试报告查询"],
+        ["工件流转查询", "测试报告查询"],
         key="pq_tabs",
         on_change="rerun",
     )
@@ -639,7 +644,7 @@ def render() -> None:
                 st.divider()
                 _render_detail(current)
             else:
-                st.info("请点击查询结果中的一行查看追溯详情")
+                st.info("请点击查询结果中的一行查看追溯明细")
     if report_tab.open:
         with report_tab:
             _render_report_query()

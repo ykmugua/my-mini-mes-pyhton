@@ -30,9 +30,11 @@
 
 - `ui/` 只能经 `ui/client.py` 调 FastAPI，不准直接访问 repository 或数据库；
 - `repositories/` 是唯一允许写 SQL 的地方；
-- `domain/` 只放纯业务规则；
+- `domain/` 只放少量纯业务规则：程序可信、联锁放行、工件状态机；
 - `application/` 编排多步骤业务用例；
 - `services.py` 是对外业务入口和输入校验层。
+
+新增卡控规则时不要默认塞进 `domain`：请求头校验放 API/schema，查注册/查次数/查占用放 services/application，幂等和查重放 application/repositories/数据库约束，纯业务状态机或稳定策略才考虑放 `domain`。
 
 ---
 
@@ -105,6 +107,8 @@
 - 理解“设备可信性”怎么判断；
 - 理解“放行/联锁”怎么判断；
 - 理解工件锁定/解锁的状态规则。
+
+边界提醒：这里只放纯规则。设备 SN 是否注册、设备使用次数是否超限、UUID/`request_id` 是否重复、载具是否被占用等流程卡控不在 `domain`，而是在 API/services/application/repositories 中。
 
 函数索引：
 

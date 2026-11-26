@@ -75,7 +75,7 @@ def _product_config(*, include_delete: bool) -> dict[str, Any]:
     """执行 product_config。"""
     config: dict[str, Any] = {
         "组件号": st.column_config.TextColumn(
-            "组件号", required=True, width="medium"
+            "组件号", required=True, width="medium", help="可直接修改；保存后会同步关联工艺、程序绑定和当前流转中的组件号"
         ),
         "组件名称": st.column_config.TextColumn("组件名称", required=True, width="medium"),
         "启用": helpers.enabled_column(),
@@ -276,7 +276,6 @@ def render_page() -> None:
             edited_products = st.data_editor(
                 _product_frame(products, include_delete=True),
                 column_config=_product_config(include_delete=True),
-                disabled=["组件号"],
                 hide_index=True,
                 num_rows="fixed",
                 width="stretch",

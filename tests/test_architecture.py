@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import json
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -51,13 +52,32 @@ def test_ui_pages_only_import_client():
 def test_dashboard_config_static():
     """新看板静态配置：station_summary 查询、状态色、自动刷新。"""
     text = (SRC / "ui" / "page_dashboard.py").read_text(encoding="utf-8")
-    assert "refresh_interval = 1000" in text
+    assert 'status_refresh_interval = "1s"' in text
+    assert 'step_refresh_interval = "5s"' in text
     assert "DEFAULT_COLS = 6" in text
     assert "client.station_summary" in text
     for color in ("#888888", "#4287f5", "#28a745", "#dc3545", "#333333"):
         assert color in text
-    assert "@st.fragment(run_every=refresh_interval)" in text
+    assert "@st.fragment(run_every=status_refresh_interval)" in text
+    assert "@st.fragment(run_every=step_refresh_interval)" in text
+    assert "@st.fragment\ndef _render_one_card_fragment" in text
+    lines = text.splitlines()
+    for index, line in enumerate(lines):
+        if line.strip() == "def _render_cards_fragment() -> None:":
+            previous = next(
+                (item.strip() for item in reversed(lines[:index]) if item.strip()),
+                "",
+            )
+            assert not previous.startswith("@st.fragment"), previous
     assert "redis" not in text.lower()
+
+
+def test_device_config_has_only_dashboard_fields():
+    """设备看板配置只保留展示与开启状态字段。"""
+    config = json.loads((ROOT / "config" / "device_config.json").read_text(encoding="utf-8"))
+    expected = {"device_id", "name", "step_no", "step_name", "enable"}
+    for device in config["devices"]:
+        assert set(device) == expected
 
 
 def test_dashboard_repo_sql_excludes_untrusted():

@@ -6,6 +6,8 @@
 * 幂等上报：服务端按 (工件码, 设备, 测试项) 去重，重复上报不会重复计；
 * 上传失败本地缓存补传：上报失败先写入本地队列，`flush` 时重试；
 * 程序下载中断续传：使用 HTTP Range 续传，完成后校验 SHA256，不匹配则重下。
+* 设备开启状态：通过 `GET /api/device/enable` 查询，设备端不直接读取配置文件。
+* 设备在线与测试开始：通过 `POST /api/device/heartbeat` 与 `POST /api/device/test-start` 上报。
 
 用法示例::
 
@@ -18,6 +20,9 @@
     python examples/device_client.py --device TEST-01 interlock --workpiece WP-0001
     python examples/device_client.py --device TEST-01 var-get --name line_mode
     python examples/device_client.py --device TEST-01 var-set --name line_mode --value MANUAL
+    python examples/device_client.py --device TEST-01 enabled
+    python examples/device_client.py --device TEST-01 heartbeat
+    python examples/device_client.py --device TEST-01 test-start --workpiece WP-0001
     python examples/device_client.py --device TEST-01 flush
 """
 
@@ -270,6 +275,28 @@ class DeviceClient:
         response.raise_for_status()
         return response.json()
 
+    def device_enabled(self) -> dict[str, Any]:
+        response = self.http.get(
+            "/api/device/enable", params={"device_id": self.device_id}
+        )
+        response.raise_for_status()
+        return response.json()
+
+    def heartbeat(self) -> dict[str, Any]:
+        response = self.http.post(
+            "/api/device/heartbeat", json={"device_id": self.device_id}
+        )
+        response.raise_for_status()
+        return response.json()
+
+    def test_start(self, workpiece: str | None = None) -> dict[str, Any]:
+        payload: dict[str, Any] = {"device_id": self.device_id}
+        if workpiece:
+            payload["workpiece"] = workpiece
+        response = self.http.post("/api/device/test-start", json=payload)
+        response.raise_for_status()
+        return response.json()
+
 
 def demo(client: DeviceClient, workpiece: str) -> None:
     """一次完整的设备交互：拉程序 -> 上报状态 -> 下载校验 -> 查锁 -> 报结果 -> 读变量。"""
@@ -336,6 +363,10 @@ def build_parser() -> argparse.ArgumentParser:
     var_set.add_argument("--value", required=True)
 
     sub.add_parser("flush", help="补传本地缓存的测试结果")
+    sub.add_parser("enabled", help="查询设备开启状态")
+    sub.add_parser("heartbeat", help="上报设备心跳")
+    test_start = sub.add_parser("test-start", help="上报测试开始")
+    test_start.add_argument("--workpiece", default=None, help="测试中的工件条码")
     return parser
 
 
@@ -390,6 +421,12 @@ def main() -> None:
             )
         elif args.command == "flush":
             print(json.dumps(client.flush_outbox(), ensure_ascii=False, indent=2))
+        elif args.command == "enabled":
+            print(json.dumps(client.device_enabled(), ensure_ascii=False, indent=2))
+        elif args.command == "heartbeat":
+            print(json.dumps(client.heartbeat(), ensure_ascii=False, indent=2))
+        elif args.command == "test-start":
+            print(json.dumps(client.test_start(args.workpiece), ensure_ascii=False, indent=2))
     finally:
         client.close()
 

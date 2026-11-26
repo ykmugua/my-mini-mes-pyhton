@@ -22,7 +22,7 @@ flowchart LR
 | 界面层 | Streamlit | 内部管理工具；只通过 `ui/client.py` 经 HTTP 调 FastAPI，不直接访问 Repository 或数据库 |
 | 服务层 | services | 业务入口、输入校验、异常转换 |
 | 用例层 | application | 多步骤业务编排：测试上报、入站、解绑、解锁、程序状态 |
-| 领域层 | domain | 纯业务规则，不依赖 FastAPI / Streamlit / SQLAlchemy / sqlite3 |
+| 领域层 | domain | 少量纯业务规则：程序可信、联锁放行、工件状态机；不承载流程卡控或外部状态查询 |
 | 数据访问层 | Repository | 唯一写 SQL 的地方，用 SQLAlchemy Core 构造语句 |
 | 存储适配层 | SQLAlchemy Engine | 连接管理、方言适配、WAL / busy_timeout 等 SQLite 参数 |
 | 存储层 | SQLite | `mes.db`、`ProductFlow.db`、`TestReport.db` |
@@ -34,6 +34,7 @@ flowchart LR
 3. **Streamlit 只能经 HTTP 访问 FastAPI**：UI 不允许直接 import Repository、engine、SQLAlchemy 或 sqlite3。
 4. **设备负责上报，操作员负责维护**：设备上报测试/程序状态；主数据、入站、解绑、解锁等由操作员通过 Streamlit 触发。
 5. **换数据库主要影响底层**：连接配置和 Repository 内部变化，其余层不变。
+6. **新增卡控按性质归位**：请求头/schema 校验放 API，查注册/查次数/查占用放 services/application，幂等查重放 application/repositories，纯稳定业务规则才考虑放 domain。
 
 ## 四、数据库约定（补充）
 

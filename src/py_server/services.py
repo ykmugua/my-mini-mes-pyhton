@@ -9,12 +9,14 @@
 
 from __future__ import annotations
 
+import json
 import re
 from contextlib import contextmanager
 from datetime import timedelta
 from typing import Any, Iterable
 
-from . import config, db
+from . import config, constants, db
+from .application import device_status as _device_status_uc
 from .application import report_program_status as _report_program_status_uc
 from .application import report_test_result as _report_test_result_uc
 from .application import station_workbench as _station_workbench_uc
@@ -28,6 +30,7 @@ from .domain.workpiece.model import Workpiece
 from .repositories import (
     active_product_repo,
     binding_repo,
+    device_heartbeat_repo,
     dashboard_repo,
     log_repo,
     master_data_repo,
@@ -39,7 +42,7 @@ from .repositories import (
     product_query_repo,
     workpiece_repo,
 )
-from .repositories.base import Conn, with_conn as _with_conn, with_read_conn as _with_read
+from .repositories.base import Conn, with_conn, with_conn as _with_conn, with_read_conn as _with_read
 
 
 # -----------------------------------------------------------------------------
@@ -74,6 +77,22 @@ def _read():
     """执行 read。"""
     with _with_read() as conn:
         yield conn
+
+
+def device_enabled(device_id: str) -> dict:
+    """查询设备开启状态；设备端只读取，不直接访问配置文件。"""
+    device_id = _clean_text(device_id, "设备标识")
+    try:
+        data = json.loads(config.device_config_path().read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise ServiceError(f"读取设备配置失败：{exc}") from exc
+    for item in data.get("devices", []):
+        if str(item.get("device_id") or "") == device_id:
+            return {
+                "device_id": device_id,
+                "enabled": bool(item.get("enable", True)),
+            }
+    raise NotFoundError(f"设备 {device_id} 不在设备配置中")
 
 
 @contextmanager
@@ -256,27 +275,14 @@ def report_program_status(device_id, product, reported_version, reported_sha256,
     with _read() as conn:
         binding = _try_binding(conn, device_id, product)
         count = _binding_count(conn, device_id)
-    reasons: list[str] = []
-    if binding is None:
-        if count > 1 and not product:
-            reasons.append(f"设备 {device_id} 绑定多个产品，请指定 product")
-        else:
-            reasons.append("设备未配置程序绑定")
-        resolved_product = product or ""
-        trusted = False
-    else:
-        resolved_product = binding["product"]
-        if not version:
-            reasons.append("未上报程序版本")
-        elif version != binding["program_version"]:
-            reasons.append(f"上报版本 {version} 与绑定版本 {binding['program_version']} 不一致")
-        if not sha:
-            reasons.append("未上报程序 SHA256")
-        elif sha != binding["sha256"]:
-            reasons.append("上报校验和与绑定校验和不一致")
-        if sha256_ok is False:
-            reasons.append("设备自检校验和不匹配")
-        trusted = not reasons
+    trusted, reasons, resolved_product = _report_program_status_uc.evaluate_program_status(
+        binding=binding,
+        binding_count=count,
+        product=product,
+        reported_version=reported_version,
+        reported_sha256=reported_sha256,
+        sha256_ok=sha256_ok,
+    )
     return _report_program_status_uc.execute(
         device_id=device_id,
         product=product,
@@ -545,6 +551,45 @@ def list_devices() -> list[str]:
 def station_summary(device_id: str) -> dict | None:
     """按设备读取看板汇总；供 UI 通过 HTTP 获取。"""
     return station_repo.get_by_device(device_id)
+
+
+def device_status(device_id: str) -> dict:
+    """按设备读取看板卡片显示状态；UI 通过 HTTP 获取。"""
+    device_id = _clean_text(device_id, "设备标识")
+    enabled = bool(device_enabled(device_id)["enabled"])
+    summary = station_repo.get_by_device(device_id)
+    return _device_status_uc.resolve_display_status(summary=summary, enabled=enabled)
+
+
+def record_device_heartbeat(device_id: str) -> dict:
+    """记录设备心跳。"""
+    device_id = _clean_text(device_id, "设备标识")
+    ts = device_heartbeat_repo.touch(device_id)
+    return {"device_id": device_id, "last_seen_at": ts}
+
+
+def record_test_start(*, device_id: str, workpiece: str | None = None) -> dict:
+    """记录测试开始，将设备看板状态切换为测试中。"""
+    device_id = _clean_text(device_id, "设备标识")
+    now_ts = int(db.utc_now().timestamp())
+    try:
+        devices = json.loads(config.device_config_path().read_text(encoding="utf-8")).get("devices", [])
+    except (OSError, ValueError):
+        devices = []
+    device_row = next(
+        (item for item in devices if str(item.get("device_id") or "") == device_id),
+        None,
+    )
+    name = str((device_row or {}).get("name") or device_id)
+    with with_conn() as conn:
+        station_repo.apply_test_start(
+            conn,
+            device_id=device_id,
+            name=name,
+            barcode=(workpiece or "").strip() or None,
+            status_since=now_ts,
+        )
+    return {"device_id": device_id, "status": "测试中", "status_since": now_ts}
 
 
 def station_fail_details(device_id: str, limit: int = 50) -> list[dict]:
@@ -954,9 +999,6 @@ def _workbench_recipe(conn: Conn, product_model: str) -> dict:
         for model in _split_csv(resource.get("tray_models")):
             if model not in tray_models:
                 tray_models.append(model)
-    if not tray_models:
-        raise ValidationError(f"工艺 {process_code} 未配置转运载具型号")
-
     step_names = {
         str(step["step_no"]): str(step.get("step_name") or "")
         for step in master_data_repo.list_steps(conn)
@@ -993,14 +1035,16 @@ def manual_inbound(
     *,
     product: str,
     step_no: str,
-    traycode: str,
+    traycode: str | None,
     barcodes: Iterable[str],
     operator: str,
 ) -> dict:
     """手动入站：产品、载具与载具载荷内的一批条码同时建档。"""
     product = _clean_text(product, "产品型号")
     step_no = _clean_text(step_no, "工序")
-    traycode = _clean_text(traycode, "载具号")
+    raw_traycode = "" if traycode is None else str(traycode).strip()
+    no_tray = constants.is_missing_traycode(raw_traycode)
+    traycode = constants.MISSING_TRAYCODE if no_tray else raw_traycode
     operator = _clean_text(operator, "操作员", max_len=64)
     cleaned_barcodes = [
         _clean_text(value, f"第 {index} 个条码")
@@ -1010,7 +1054,7 @@ def manual_inbound(
         raise ValidationError("入站条码不能为空")
     folded = [code.casefold() for code in cleaned_barcodes]
     if len(set(folded)) != len(folded):
-        raise ValidationError("同一载具内的条码不能重复")
+        raise ValidationError("入站条码不能重复")
 
     with _read() as conn:
         recipe = _workbench_recipe(conn, product)
@@ -1031,42 +1075,44 @@ def manual_inbound(
             model.casefold() for model in route["tray_models"]
         }
         if not allowed_models:
-            raise ValidationError(
-                f"产品 {product} 的工序 {step_no} 未配置允许的载具型号"
-            )
-        tray = next(
-            (
-                item
-                for item in master_data_repo.list_trays(conn)
-                if str(item.get("traycode")) == traycode
-            ),
-            None,
-        )
-        if tray is None:
-            raise NotFoundError(f"载具 {traycode} 不存在")
-        if not bool(tray.get("enabled")):
-            raise ValidationError(f"载具 {traycode} 已停用")
-        if str(tray.get("tray_model") or "").casefold() not in allowed_models:
-            raise ValidationError(
-                f"载具 {traycode} 的型号 {tray.get('tray_model')} 不符合"
-                f"产品 {product}、工序 {step_no} 的允许范围"
-            )
-        capacity = int(tray.get("capacity") or 0)
-        if capacity <= 0:
-            raise ValidationError(f"载具 {traycode} 未配置有效载荷数量")
-        if product_flow_store.list_overview(traycode=traycode):
-            raise ConflictError(
-                f"载具 {traycode} 当前已绑定产品，请先解除托盘绑定"
-            )
-        if len(cleaned_barcodes) > capacity:
-            raise ValidationError(
-                f"载具 {traycode} 最多可填写 {capacity} 个条码"
-            )
-        # 工件主表可能由测试上报产生，不能作为“当前入站占用”的判定依据；
-        # 入站占用只看 ProductFlow 当前总览。
+            if not no_tray:
+                raise ValidationError(f"产品 {product} 的工序 {step_no} 未配置载具，不能扫描载具")
+        else:
+            if no_tray:
+                raise ValidationError("该工序配置了载具型号，请扫描载具号")
+            else:
+                tray = next(
+                    (
+                        item
+                        for item in master_data_repo.list_trays(conn)
+                        if str(item.get("traycode")) == traycode
+                    ),
+                    None,
+                )
+                if tray is None:
+                    raise NotFoundError(f"载具 {traycode} 不存在")
+                if not bool(tray.get("enabled")):
+                    raise ValidationError(f"载具 {traycode} 已停用")
+                if str(tray.get("tray_model") or "").casefold() not in allowed_models:
+                    raise ValidationError(
+                        f"载具 {traycode} 的型号 {tray.get('tray_model')} 不符合"
+                        f"产品 {product}、工序 {step_no} 的允许范围"
+                    )
+                capacity = int(tray.get("capacity") or 0)
+                if capacity <= 0:
+                    raise ValidationError(f"载具 {traycode} 未配置有效载荷数量")
+                if active_product_repo.list_active(traycode=traycode):
+                    raise ConflictError(
+                        f"载具 {traycode} 当前已绑定产品，请先解除载具绑定"
+                    )
+                if len(cleaned_barcodes) > capacity:
+                    raise ValidationError(
+                        f"载具 {traycode} 最多可填写 {capacity} 个条码"
+                    )
+        # 工件主表可能由测试上报产生，不能作为“当前入站占用”的判定依据。
 
     for barcode in cleaned_barcodes:
-        if product_flow_store.get_overview_by_barcode(barcode) is not None:
+        if active_product_repo.list_active(barcode=barcode):
             raise ConflictError(f"条码 {barcode} 已存在，不能重复入站")
 
     now = db.utc_now_iso()
@@ -1086,7 +1132,7 @@ def manual_inbound(
     _station_workbench_uc.manual_inbound(rows=rows, now=now)
     return {
         "product": product,
-        "traycode": traycode,
+        "traycode": constants.MISSING_TRAYCODE if no_tray else traycode,
         "process_code": str(recipe["process"]["process_code"]),
         "current_step": step_no,
         "next_step": str(route["success_next_step"]),
@@ -1116,6 +1162,25 @@ def unbind_tray(*, traycode: str, operator: str, confirmed: bool) -> dict:
         "count": len(affected),
         "barcodes": [str(item["barcode"]) for item in affected],
     }
+
+
+def downline_workpiece(*, barcode: str, operator: str, confirmed: bool) -> dict:
+    """无载具工件下线：写流转历史，删除当前在制，不删除测试数据。"""
+    barcode = _clean_text(barcode, "工件条码")
+    operator = _clean_text(operator, "操作员", max_len=64)
+    if not confirmed:
+        raise ValidationError("必须勾选确认后才能执行工件下线")
+    rows = active_product_repo.list_active(barcode=barcode)
+    if not rows:
+        raise NotFoundError(f"工件 {barcode} 当前不在制")
+    if any(not constants.is_missing_traycode(row.get("traycode")) for row in rows):
+        raise ConflictError(f"工件 {barcode} 已绑定载具，请使用载具解绑")
+    affected = _station_workbench_uc.downline_workpiece(
+        barcode=barcode,
+        operator=operator,
+        now=db.utc_now_iso(),
+    )
+    return {"barcode": barcode, "count": len(affected)}
 
 
 def delete_product_flow(*, barcode: str) -> dict:

@@ -140,6 +140,11 @@ def station_summary(device_id: str) -> dict | None:
     return _request("GET", f"/api/ui/stations/{device_id}")
 
 
+def device_status(device_id: str) -> dict:
+    """通过 HTTP 读取单设备看板卡片状态。"""
+    return _request("GET", f"/api/ui/stations/{device_id}/status")
+
+
 def station_fail_details(device_id: str, limit: int = 50) -> list[dict]:
     """通过 HTTP 读取单设备失败项明细。"""
     return _request("GET", f"/api/ui/stations/{device_id}/fail-details", params={"limit": limit})
@@ -424,7 +429,7 @@ def workbench_recipe(product_model: str) -> dict:
 def manual_inbound(
     product: str,
     step_no: str,
-    traycode: str,
+    traycode: str | None,
     barcodes: list[str],
     operator: str,
 ) -> dict:
@@ -439,6 +444,15 @@ def manual_inbound(
             "barcodes": barcodes,
             "operator": operator,
         },
+    )
+
+
+def workpiece_downline(barcode: str, operator: str, confirmed: bool) -> dict:
+    """无载具工件下线。"""
+    return _request(
+        "POST",
+        "/api/ui/workbench/workpiece-downline",
+        json={"barcode": barcode, "operator": operator, "confirmed": confirmed},
     )
 
 

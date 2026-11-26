@@ -17,6 +17,27 @@ def test_health(client):
     assert response.json()["status"] == "ok"
 
 
+def test_device_enable_from_config(client, tmp_path, monkeypatch):
+    config_path = tmp_path / "device_config.json"
+    config_path.write_text(
+        '{"devices":[{"device_id":"D1","enable":true},{"device_id":"D2","enable":false}]}',
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("MES_DEVICE_CONFIG_PATH", str(config_path))
+    config.device_config_path.cache_clear() if hasattr(config.device_config_path, "cache_clear") else None
+
+    enabled = client.get("/api/device/enable", params={"device_id": "D1"})
+    assert enabled.status_code == 200
+    assert enabled.json() == {"device_id": "D1", "enabled": True}
+
+    disabled = client.get("/api/device/enable", params={"device_id": "D2"})
+    assert disabled.status_code == 200
+    assert disabled.json()["enabled"] is False
+
+    missing = client.get("/api/device/enable", params={"device_id": "D9"})
+    assert missing.status_code == 404
+
+
 def test_program_unknown_device_returns_404(client, bench):
     response = client.get("/api/program", params={"device_id": "D9", "product": "P1"})
     assert response.status_code == 404

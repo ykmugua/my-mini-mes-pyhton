@@ -11,6 +11,7 @@ from fastapi import APIRouter, Query
 from .... import services
 from ....repositories import active_product_repo, master_data_repo, product_flow_store, report_query_store
 from ....services import NotFoundError
+from ...schemas_workbench import WorkpieceDownlineIn
 from ...schemas import WorkbenchInboundIn, WorkbenchTrayUnbindIn
 
 router = APIRouter(tags=["product_query"])
@@ -192,6 +193,16 @@ def ui_workbench_inbound(payload: WorkbenchInboundIn) -> dict:
         traycode=payload.traycode,
         barcodes=payload.barcodes,
         operator=payload.operator,
+    )
+
+
+@router.post("/api/ui/workbench/workpiece-downline")
+def ui_workpiece_downline(payload: WorkpieceDownlineIn) -> dict:
+    """执行 ui_workpiece_downline。"""
+    return services.downline_workpiece(
+        barcode=payload.barcode,
+        operator=payload.operator,
+        confirmed=payload.confirmed,
     )
 
 
