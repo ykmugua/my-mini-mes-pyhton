@@ -83,8 +83,8 @@ def test_report_query_by_product_and_step_reads_unified_db(client, seeded):
     report_table = at.dataframe(key="pq_report_result_table")
     assert list(report_table.value.columns)[:3] == [
         "barcode",
-        "step_no",
-        "source_db",
+        "componentcode",
+        "station",
     ]
     # 查询按钮只在点击的 rerun 为 True；后续 rerun 保留结果表但不显示旧详情。
     at.run()

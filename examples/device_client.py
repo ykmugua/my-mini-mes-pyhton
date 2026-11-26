@@ -116,10 +116,11 @@ class DeviceClient:
         """上报一条 V1.3 整单测试结果；失败时写入本地 outbox。"""
         detail_result = "true" if result == "PASS" else "false"
         payload = {
-            "station": self.device_id,
-            "componentcode": self.product or "",
-            "traycode": "",
             "barcode": workpiece,
+            "componentcode": self.product or "",
+            "station": self.device_id,
+            "fixturecode": "/",
+            "traycode": "/",
             "programname": "DEVICE-CLIENT",
             "programversion": program_version or "v1",
             "testexecutetime": "2026/11/24 10:00:00.000",
@@ -153,15 +154,9 @@ class DeviceClient:
 
     def _post_result(self, payload: dict[str, Any]) -> dict[str, Any]:
         """向 V1.3 整单接口提交 payload，并返回业务 result。"""
-        request_id = f"client-{payload['barcode']}-{int(time.time() * 1000)}"[:32]
         response = self.http.post(
             "/api/v1/test-results",
             json=payload,
-            headers={
-                "x-device-sn": payload["station"],
-                "x-timestamp": str(int(time.time() * 1000)),
-                "x-request-id": request_id,
-            },
         )
         response.raise_for_status()
         envelope = response.json()

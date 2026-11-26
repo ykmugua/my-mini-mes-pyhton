@@ -28,15 +28,16 @@ class TestResultUploadIn(BaseModel):
 
     model_config = ConfigDict(populate_by_name=True)
 
-    station: str = Field(min_length=1)
-    componentcode: str = Field(min_length=1)
-    traycode: str = ""
     barcode: str = Field(min_length=1)
+    componentcode: str = Field(min_length=1)
+    station: str = Field(min_length=1)
+    fixturecode: str = Field(min_length=1)
+    traycode: str = Field(min_length=1)
     programname: str = Field(min_length=1)
     programversion: str = Field(min_length=1)
     testexecutetime: str = Field(min_length=1)
-    result: str = Field(min_length=1)
     testlongtime: str = Field(min_length=1)
+    result: str = Field(min_length=1)
     details: list[TestDetailIn] = Field(min_length=1)
     isfinalreport: str = Field(min_length=1)
 

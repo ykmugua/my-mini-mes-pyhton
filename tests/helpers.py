@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import uuid
-
 from fastapi.testclient import TestClient
 from py_server.constants import DETAIL_RESULT_FAIL, DETAIL_RESULT_PASS
 
@@ -49,10 +47,11 @@ def push_result(
     """通过 V1.3 整单接口上报一条测试结果（测试辅助）。"""
     passed = result == "PASS"
     payload = {
-        "station": device_id,
-        "componentcode": product or "P1",
-        "traycode": "",
         "barcode": workpiece,
+        "componentcode": product or "P1",
+        "station": device_id,
+        "fixturecode": "/",
+        "traycode": "/",
         "programname": "TEST-PROGRAM",
         "programversion": program_version,
         "testexecutetime": _to_protocol_time(tested_at),
@@ -73,15 +72,7 @@ def push_result(
             }
         ],
     }
-    response = client.post(
-        "/api/v1/test-results",
-        json=payload,
-        headers={
-            "x-device-sn": device_id,
-            "x-timestamp": "1763978400000",
-            "x-request-id": uuid.uuid4().hex,
-        },
-    )
+    response = client.post("/api/v1/test-results", json=payload)
     assert response.status_code == 200, response.text
     envelope = response.json()
     assert envelope.get("code") == 0, envelope

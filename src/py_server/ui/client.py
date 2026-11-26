@@ -310,6 +310,7 @@ def report_query(
     step_no: str | None = None,
     barcode: str | None = None,
     traycode: str | None = None,
+    fixturecode: str | None = None,
     result: str | None = None,
     board_status: str | None = None,
     current_step: str | None = None,
@@ -325,6 +326,8 @@ def report_query(
         params["barcode"] = barcode
     if traycode:
         params["traycode"] = traycode
+    if fixturecode:
+        params["fixturecode"] = fixturecode
     if result:
         params["result"] = result
     if board_status:

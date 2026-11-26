@@ -21,7 +21,7 @@ DETAIL_COLUMNS = [
 ]
 
 OVERVIEW_COLUMNS = [
-    "id", "station", "componentcode", "traycode", "barcode",
+    "id", "barcode", "componentcode", "station", "fixturecode", "traycode",
     "programname", "programversion", "testexecutetime", "testlongtime",
     "result", "isfinalreport", "failed_step", "details_table",
 ]
@@ -59,10 +59,11 @@ def _overview_ddl() -> str:
     """执行 overview_ddl。"""
     return """
         id INTEGER PRIMARY KEY,
-        station TEXT NOT NULL,
-        componentcode TEXT NOT NULL,
-        traycode TEXT NOT NULL DEFAULT '',
         barcode TEXT NOT NULL,
+        componentcode TEXT NOT NULL,
+        station TEXT NOT NULL,
+        fixturecode TEXT NOT NULL DEFAULT '/',
+        traycode TEXT NOT NULL DEFAULT '/',
         programname TEXT NOT NULL,
         programversion TEXT NOT NULL,
         testexecutetime TEXT NOT NULL,
@@ -81,6 +82,14 @@ def ensure_overview_table(step_no: str | int | None, engine=None) -> str:
         raise ValueError(f"非法总览表名: {table}")
     with _engine_for(engine).begin() as conn:
         conn.execute(text(f'CREATE TABLE IF NOT EXISTS "{table}" ({_overview_ddl()})'))
+        columns = {
+            row[1]
+            for row in conn.execute(text(f'PRAGMA table_info("{table}")')).fetchall()
+        }
+        if "fixturecode" not in columns:
+            conn.execute(text(
+                f"ALTER TABLE \"{table}\" ADD COLUMN fixturecode TEXT NOT NULL DEFAULT '/'"
+            ))
         conn.execute(text(
             f'CREATE INDEX IF NOT EXISTS "idx_{table}_barcode" ON "{table}"(barcode)'
         ))
@@ -142,18 +151,19 @@ def insert_overview(
         raise ValueError(f"非法明细表名: {detail_table}")
     sql = text(f"""
         INSERT INTO "{table}"
-        (station, componentcode, traycode, barcode, programname, programversion,
+        (barcode, componentcode, station, fixturecode, traycode, programname, programversion,
          testexecutetime, testlongtime, result, isfinalreport, failed_step, details_table)
-        VALUES (:station, :componentcode, :traycode, :barcode, :programname,
+        VALUES (:barcode, :componentcode, :station, :fixturecode, :traycode, :programname,
                 :programversion, :testexecutetime, :testlongtime, :result,
                 :isfinalreport, :failed_step, :details_table)
     """)
     with _engine_for(engine).begin() as conn:
         conn.execute(sql, {
-            "station": report.get("station", ""),
-            "componentcode": report.get("componentcode", ""),
-            "traycode": report.get("traycode", ""),
             "barcode": report.get("barcode", ""),
+            "componentcode": report.get("componentcode", ""),
+            "station": report.get("station", ""),
+            "fixturecode": report.get("fixturecode", "/") or "/",
+            "traycode": report.get("traycode", "/") or "/",
             "programname": report.get("programname", ""),
             "programversion": report.get("programversion", ""),
             "testexecutetime": report.get("testexecutetime", ""),

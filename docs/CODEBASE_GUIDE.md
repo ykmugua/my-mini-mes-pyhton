@@ -66,7 +66,7 @@ ui ──HTTP──▶ api/routers ──▶ services ──▶ application ─�
 
 | 规则类型 | 默认位置 | 示例 |
 | --- | --- | --- |
-| 请求头和字段格式校验 | API / Pydantic schema | 必填请求头、`x-device-sn == station`、UUID 格式 |
+| 请求体字段格式校验 | API / Pydantic schema | V1.3 顶层字段、明细字段、空值 `/` 占位 |
 | 依赖外部状态的准入检查 | services / application + repositories | 设备 SN 是否注册、设备是否启用、载具是否占用 |
 | 幂等和查重 | application + repositories + 数据库约束 | `request_id` 重复、UUID 重复、测试项重复冲突 |
 | 依赖统计或配置的流程卡控 | application / services | 设备使用次数超限、当班容量上限 |

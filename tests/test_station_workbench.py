@@ -34,15 +34,16 @@ def _v1_result_payload(
     is_final: bool,
 ) -> dict:
     return {
-        "station": "TEST-03",
-        "componentcode": "P-1001",
-        "traycode": traycode,
         "barcode": barcode,
+        "componentcode": "P-1001",
+        "station": "TEST-03",
+        "fixturecode": "/",
+        "traycode": traycode,
         "programname": "TEST-DUT-S3",
         "programversion": "v1",
         "testexecutetime": "2026/11/21 16:20:00.000",
-        "result": result,
         "testlongtime": "00:00:01.000",
+        "result": result,
         "isfinalreport": "true" if is_final else "false",
         "details": [
             {
@@ -76,11 +77,6 @@ def _post_v1_result(
             result=result,
             is_final=is_final,
         ),
-        headers={
-            "x-device-sn": "TEST-03",
-            "x-timestamp": "1763713200000",
-            "x-request-id": uuid.uuid4().hex,
-        },
     )
     assert response.status_code == 200
     body = response.json()

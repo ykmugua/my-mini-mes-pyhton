@@ -308,14 +308,15 @@ test_reports = Table(
     metadata,
     Column("id", Integer, primary_key=True, autoincrement=True, nullable=True),
     Column("request_id", Text, nullable=False, unique=True),
-    Column("station", Text, nullable=False),
-    Column("componentcode", Text, nullable=False),
     Column("barcode", Text, nullable=False),
+    Column("componentcode", Text, nullable=False),
+    Column("station", Text, nullable=False),
+    Column("fixturecode", Text, nullable=False, default="/", server_default="/"),
     Column("programname", Text, nullable=False),
     Column("programversion", Text, nullable=False),
     Column("testexecutetime", Text, nullable=False),
-    Column("result", Text, nullable=False),
     Column("testlongtime", Text, nullable=False),
+    Column("result", Text, nullable=False),
     Column("isfinalreport", Text, nullable=False, default="false", server_default="false"),
     Column("created_at", Text, nullable=False),
     sqlite_autoincrement=True,
@@ -464,6 +465,7 @@ def init_schema() -> None:
         "TEXT",
         "",
     )
+    _ensure_column(get_engine(), test_reports, "fixturecode", "TEXT", "/")
 
 
 def _ensure_column(engine, table, column_name: str, column_type: str, default: str) -> None:

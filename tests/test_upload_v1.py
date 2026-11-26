@@ -2,27 +2,21 @@
 
 from __future__ import annotations
 
-import uuid
-
 from py_server.repositories import report_details_store, station_repo
 
 
-HEADERS = {
-    "x-device-sn": "TEST-V1",
-    "x-timestamp": "1745310935000",
-}
-
-
-def _payload(*, barcode="SN-V1-001", result="FAIL", step="S1", item="温度"):
+def _payload(*, barcode="SN-V1-001", result="FAIL", step="S1", item="温度", testexecutetime="2025/4/22 13:55:35.123"):
     return {
-        "station": "TEST-V1",
-        "componentcode": "L120201091",
         "barcode": barcode,
+        "componentcode": "L120201091",
+        "station": "TEST-V1",
+        "fixturecode": "/",
+        "traycode": "/",
         "programname": "TEST-DUT-001",
         "programversion": "V0.0.2",
-        "testexecutetime": "2025/4/22 13:55:35.123",
-        "result": result,
+        "testexecutetime": testexecutetime,
         "testlongtime": "00:00:06.300",
+        "result": result,
         "isfinalreport": "true",
         "details": [
             {
@@ -41,8 +35,7 @@ def _payload(*, barcode="SN-V1-001", result="FAIL", step="S1", item="温度"):
 
 
 def test_v1_upload_success_and_envelope(client):
-    headers = dict(HEADERS, **{"x-request-id": uuid.uuid4().hex})
-    response = client.post("/api/v1/test-results", json=_payload(), headers=headers)
+    response = client.post("/api/v1/test-results", json=_payload())
     assert response.status_code == 200
     body = response.json()
     assert set(body) == {"success", "message", "code", "result"}
@@ -53,31 +46,32 @@ def test_v1_upload_success_and_envelope(client):
     assert body["result"]["retest"] is False
 
 
-def test_v1_upload_requires_headers(client):
+def test_v1_upload_without_custom_headers(client):
     response = client.post("/api/v1/test-results", json=_payload())
     body = response.json()
-    assert body["success"] is False
-    assert body["code"] == 40001
+    assert body["success"] is True
+    assert body["code"] == 0
 
 
-def test_v1_upload_device_sn_mismatch(client):
-    headers = dict(HEADERS, **{"x-request-id": uuid.uuid4().hex, "x-device-sn": "OTHER"})
-    response = client.post("/api/v1/test-results", json=_payload(), headers=headers)
-    assert response.json()["code"] == 40003
+def test_v1_upload_deduplicates_by_business_key(client):
+    first = client.post("/api/v1/test-results", json=_payload()).json()
+    second = client.post("/api/v1/test-results", json=_payload()).json()
+    assert first["code"] == 0
+    assert second["code"] == 0
+    assert second["result"]["duplicate"] is True
 
 
 def test_v1_upload_is_idempotent(client):
-    headers = dict(HEADERS, **{"x-request-id": uuid.uuid4().hex})
-    first = client.post("/api/v1/test-results", json=_payload(), headers=headers).json()
-    second = client.post("/api/v1/test-results", json=_payload(), headers=headers).json()
-    assert first["result"]["request_id"] == headers["x-request-id"]
-    assert second["result"]["request_id"] == headers["x-request-id"]
+    first = client.post("/api/v1/test-results", json=_payload()).json()
+    second = client.post("/api/v1/test-results", json=_payload()).json()
+    expected = "|".join(["SN-V1-001", "2025/4/22 13:55:35.123", "TEST-V1", "00:00:06.300"])
+    assert first["result"]["request_id"] == expected
+    assert second["result"]["request_id"] == expected
     assert second["result"]["retest"] == first["result"]["retest"]
 
 
 def test_v1_upload_updates_station_summary(client):
-    headers = dict(HEADERS, **{"x-request-id": uuid.uuid4().hex})
-    client.post("/api/v1/test-results", json=_payload(result="FAIL"), headers=headers)
+    client.post("/api/v1/test-results", json=_payload(result="FAIL"))
     summary = station_repo.get_by_device("TEST-V1")
     assert summary is not None
     assert summary["status"] == "失败"
@@ -89,17 +83,13 @@ def test_v1_upload_updates_station_summary(client):
 
 
 def test_v1_upload_retest_counts_as_retest_pass(client):
-    h1 = dict(HEADERS, **{"x-request-id": uuid.uuid4().hex})
     client.post(
         "/api/v1/test-results",
         json=_payload(result="FAIL", step="S1", item="首次温度"),
-        headers=h1,
     )
-    h2 = dict(HEADERS, **{"x-request-id": uuid.uuid4().hex})
     response = client.post(
         "/api/v1/test-results",
-        json=_payload(result="PASS", step="S2", item="复测温度"),
-        headers=h2,
+        json=_payload(result="PASS", step="S2", item="复测温度", testexecutetime="2025/4/22 14:05:35.123"),
     )
     assert response.json()["result"]["retest"] is True
     summary = station_repo.get_by_device("TEST-V1")
@@ -109,8 +99,7 @@ def test_v1_upload_retest_counts_as_retest_pass(client):
 
 def test_v1_upload_master_detail_history(client):
     """上传后产品查询历史应返回整单结构（顶层字段 + details 列表）。"""
-    headers = dict(HEADERS, **{"x-request-id": uuid.uuid4().hex})
-    response = client.post("/api/v1/test-results", json=_payload(), headers=headers)
+    response = client.post("/api/v1/test-results", json=_payload())
     assert response.json()["code"] == 0
     history = client.get("/api/ui/product/workpiece/SN-V1-001/history").json()["tests"]
     assert history, "历史不应为空"
@@ -127,8 +116,7 @@ def test_v1_upload_master_detail_history(client):
 
 
 def test_v1_upload_writes_overview(client):
-    headers = dict(HEADERS, **{"x-request-id": uuid.uuid4().hex})
-    response = client.post("/api/v1/test-results", json=_payload(), headers=headers)
+    response = client.post("/api/v1/test-results", json=_payload())
     assert response.json()["code"] == 0
     overview = report_details_store.list_overview("SN-V1-001")
     assert overview

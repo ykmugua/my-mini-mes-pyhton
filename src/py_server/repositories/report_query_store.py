@@ -76,6 +76,7 @@ def filter_options() -> dict:
     products: set[str] = set()
     barcodes: set[str] = set()
     traycodes: set[str] = set()
+    fixturecodes: set[str] = set()
     stations: set[str] = set()
     step_values: set[str] = set()
     for row in report_details_store.list_overview(None):
@@ -86,6 +87,7 @@ def filter_options() -> dict:
             (products, "componentcode"),
             (barcodes, "barcode"),
             (traycodes, "traycode"),
+            (fixturecodes, "fixturecode"),
             (stations, "station"),
         ):
             value = str(row.get(key) or "").strip()
@@ -119,6 +121,7 @@ def filter_options() -> dict:
         "products": sorted(products),
         "barcodes": sorted(barcodes),
         "traycodes": sorted(traycodes),
+        "fixturecodes": sorted(fixturecodes),
         "stations": sorted(stations),
         "steps": steps,
     }
@@ -130,6 +133,7 @@ def query_reports(
     step_no: str | None = None,
     barcode: str | None = None,
     traycode: str | None = None,
+    fixturecode: str | None = None,
     result: str | None = None,
     board_status: str | None = None,
     current_step: str | None = None,
@@ -144,6 +148,8 @@ def query_reports(
         if product and str(row.get("componentcode") or "") != product:
             continue
         if traycode and str(row.get("traycode") or "") != traycode:
+            continue
+        if fixturecode and str(row.get("fixturecode") or "/") != fixturecode:
             continue
         if result and str(row.get("result") or "") != result:
             continue

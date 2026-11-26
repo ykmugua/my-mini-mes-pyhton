@@ -49,12 +49,11 @@ def _result_frame(results: list[dict], *, report_trays: dict[str, str]) -> pd.Da
 def _report_query_frame(results: list[dict]) -> pd.DataFrame:
     """执行 report_query_frame。"""
     return pd.DataFrame([{
-        "step_no": r.get("step_no") or "",
-        "source_db": r.get("source_db") or "",
-        "station": r.get("station") or "",
-        "componentcode": r.get("componentcode") or "",
-        "traycode": MISSING_TRAYCODE if is_missing_traycode(r.get("traycode")) else r.get("traycode"),
         "barcode": r.get("barcode") or "",
+        "componentcode": r.get("componentcode") or "",
+        "station": r.get("station") or "",
+        "fixturecode": r.get("fixturecode") or "/",
+        "traycode": MISSING_TRAYCODE if is_missing_traycode(r.get("traycode")) else r.get("traycode"),
         "programname": r.get("programname") or "",
         "programversion": r.get("programversion") or "",
         "testexecutetime": r.get("testexecutetime") or "",
@@ -62,6 +61,8 @@ def _report_query_frame(results: list[dict]) -> pd.DataFrame:
         "result": r.get("result") or "",
         "isfinalreport": r.get("isfinalreport") or "",
         "failed_step": r.get("failed_step") or "",
+        "step_no": r.get("step_no") or "",
+        "source_db": r.get("source_db") or "",
     } for r in results])
 
 
@@ -80,6 +81,7 @@ def _render_report_query() -> None:
     product_options = opts(options.get("products", []))
     barcode_options = opts(options.get("barcodes", []))
     traycode_options = opts(options.get("traycodes", []))
+    fixturecode_options = opts(options.get("fixturecodes", []))
     device_options = opts(options.get("stations", []))
     board_status_options = ["全部", "normal", "lock", "final"]
     result_options = ["全部", "PASS", "FAIL"]
@@ -123,32 +125,38 @@ def _render_report_query() -> None:
             persist_state="session",
         )
         c4, c5, c6 = st.columns(3)
-        report_board_status = c4.selectbox(
+        report_fixturecode = c4.selectbox(
+            "fixturecode",
+            fixturecode_options,
+            key="pq_report_fixturecode",
+            persist_state="session",
+        )
+        report_board_status = c5.selectbox(
             "board_status",
             board_status_options,
             key="pq_report_board_status",
             persist_state="session",
         )
-        report_current_step = c5.selectbox(
+        report_current_step = c6.selectbox(
             "current_step",
             step_options,
             key="pq_report_current_step",
             persist_state="session",
         )
-        report_device = c6.selectbox(
+        c7, c8, c9 = st.columns(3)
+        report_device = c7.selectbox(
             "last_report_device",
             device_options,
             key="pq_report_last_report_device",
             persist_state="session",
         )
-        c7, c8 = st.columns([2, 1])
-        report_step_display = c7.selectbox(
+        report_step_display = c8.selectbox(
             "step_no",
             display_step_options,
             key="pq_report_step",
             persist_state="session",
         )
-        report_result = c8.selectbox(
+        report_result = c9.selectbox(
             "result",
             result_options,
             key="pq_report_result",
@@ -166,6 +174,7 @@ def _render_report_query() -> None:
                 step_no=step_display_to_no.get(report_step_display),
                 barcode=None if report_barcode == "全部" else report_barcode,
                 traycode=None if report_traycode == "全部" else report_traycode,
+                fixturecode=None if report_fixturecode == "全部" else report_fixturecode,
                 result=None if report_result == "全部" else report_result,
                 board_status=None if report_board_status == "全部" else report_board_status,
                 current_step=None if report_current_step == "全部" else report_current_step,
@@ -186,9 +195,9 @@ def _render_report_query() -> None:
 
     event = st.dataframe(
         _report_query_frame(rows)[[
-            "barcode", "step_no", "source_db", "station", "componentcode",
-            "traycode", "programname", "programversion", "testexecutetime",
-            "result", "isfinalreport", "failed_step",
+            "barcode", "componentcode", "station", "fixturecode", "traycode",
+            "programname", "programversion", "testexecutetime", "testlongtime",
+            "result", "isfinalreport", "failed_step", "step_no", "source_db",
         ]],
         hide_index=True,
         width="stretch",
@@ -227,10 +236,11 @@ def _render_selected_report_detail(selected: dict | None = None) -> None:
         st.session_state["pq_report_detail_caption"] = "选中的测试报告总览"
         st.dataframe(
             pd.DataFrame([{
-                "station": selected.get("station") or "",
-                "componentcode": selected.get("componentcode") or "",
-        "traycode": MISSING_TRAYCODE if is_missing_traycode(selected.get("traycode")) else selected.get("traycode"),
                 "barcode": selected.get("barcode") or "",
+                "componentcode": selected.get("componentcode") or "",
+                "station": selected.get("station") or "",
+                "fixturecode": selected.get("fixturecode") or "/",
+        "traycode": MISSING_TRAYCODE if is_missing_traycode(selected.get("traycode")) else selected.get("traycode"),
                 "programname": selected.get("programname") or "",
                 "programversion": selected.get("programversion") or "",
                 "testexecutetime": selected.get("testexecutetime") or "",

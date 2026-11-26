@@ -155,13 +155,7 @@ Swagger 文档见 `/docs`。常用接口：
 | POST | `/api/ui/workbench/inbound` | 手动入站 |
 | POST | `/api/ui/workbench/tray-unbind` | 托盘解绑 |
 
-V1.3 上报请求头：
-
-```text
-x-device-sn: <station>
-x-timestamp: <毫秒时间戳>
-x-request-id: <32 位 UUID，重试保持不变>
-```
+V1.3 上报不再使用自定义请求头；业务幂等键为 `barcode + testexecutetime + station + testlongtime`，重试时保持这几个字段不变。
 
 上报成功后系统会：写入 `test_reports` 与 SN 明细表、维护 `report_index.step_no`、更新工件与 ProductFlow 状态、刷新看板汇总。
 

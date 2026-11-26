@@ -70,9 +70,15 @@ def execute(
     report_one,
 ) -> dict:
     """整单入库（主子表）+ 汇总维护；同一 request_id 重复提交幂等。"""
-    request_id = (headers.get("x-request-id") or "").strip()
     barcode = payload["barcode"].strip()
     station = payload["station"].strip()
+    fixturecode = str(payload.get("fixturecode") or "/").strip() or "/"
+    request_id = "|".join([
+        barcode,
+        payload["testexecutetime"].strip(),
+        station,
+        payload["testlongtime"].strip(),
+    ])
     result = payload["result"].strip().upper()
     if result not in (RESULT_PASS, RESULT_FAIL):
         raise UploadValidationError(f"result 只能是 {RESULT_PASS} 或 {RESULT_FAIL}")
@@ -141,14 +147,15 @@ def execute(
     # 写主子表
     report = {
         "request_id": request_id,
-        "station": station,
-        "componentcode": payload["componentcode"],
         "barcode": barcode,
+        "componentcode": payload["componentcode"],
+        "station": station,
+        "fixturecode": fixturecode,
         "programname": payload["programname"],
         "programversion": payload["programversion"],
         "testexecutetime": payload["testexecutetime"],
-        "result": result,
         "testlongtime": payload["testlongtime"],
+        "result": result,
         "isfinalreport": is_final_report,
         "created_at": db.utc_now_iso(),
     }
@@ -175,6 +182,7 @@ def execute(
     failed_steps = [d["TestStep"] for d in details if d["TestResult"] == DETAIL_RESULT_FAIL]
     overview_report = dict(report)
     overview_report["traycode"] = str(payload.get("traycode") or "")
+    overview_report["fixturecode"] = fixturecode
     report_details_store.insert_overview(
         overview_report,
         ",".join(failed_steps),
