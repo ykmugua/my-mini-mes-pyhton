@@ -756,3 +756,6 @@
 
 ## 74. 架构决策：一个产品型号允许多个工艺并由工位显式选择
 2026-11-26：允许多个启用工艺绑定同一个产品型号/组件，工艺号仍唯一，不再要求 component_no 唯一。工位操作台工件入站第一行改为：产品型号 → 工艺 → 工序 → 每行工件条码输入框数量。选择产品型号后拉取启用工艺列表；只有一个工艺自动选中，多个工艺需用户选择；切换产品型号或工艺清空工序和扫码批次。GET /api/ui/workbench/recipe 与 POST /api/ui/workbench/inbound 支持 process_code；多个工艺且未指定工艺时返回“请选择工艺”；最终写入 componentcode 仍为产品型号。
+
+## 75. 架构决策：V1.3 上传格式、fixturecode 与无请求头
+2026-11-26：上传格式以 docs/MesFormat/mesUploadTestDataFormat.json 为准，字段顺序为 barcode/componentcode/station/fixturecode/traycode/programname/programversion/testexecutetime/testlongtime/result/details/isfinalreport；空字符串统一传 `/`。新增 fixturecode：主库 test_reports、TestReport.db 的 report_index_* 总览表均补列，历史值统一 `/`；产品查询新增 fixturecode 筛选，列表顺序与格式 JSON 一致。上传接口去掉 x-device-sn/x-timestamp/x-request-id 三个自定义请求头，业务幂等键改为 barcode + testexecutetime + station + testlongtime。SQLite 已有表物理列顺序不可切换，新建表按新顺序，查询/展示按新顺序。
