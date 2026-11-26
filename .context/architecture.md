@@ -708,3 +708,39 @@
 
 - FastAPI 路由按调用方分目录：routers/device、routers/ui、routers/common；旧顶层路由文件仅 re-export，避免外部 import 中断。
 - `active_products` 是 mes.db 中当前在制产品表；ProductFlow.db 继续维护 product_overview 与每产品历史表。
+
+## 59. 架构决策：domain 只保留纯且稳定的业务规则
+2026-11-25：明确 domain 层不是万能校验层，只表达不依赖 FastAPI、Streamlit、SQLAlchemy、sqlite3、配置文件或数据库的稳定业务不变量；当前保留程序可信性、联锁放行、工件状态机三块。请求头校验放 API/Pydantic schema；设备 SN 是否注册、设备是否启用、载具占用、设备使用次数超限等依赖外部状态的流程卡控放 services/application；request_id/UUID/测试项重复等幂等和查重放 application/repositories/数据库约束。代码相应调整：ProgramTrustPolicy.evaluate 增加 self_check_failed 入参；application/report_program_status.py 新增 evaluate_program_status 复用 domain 策略并保留既有中文文案；services.report_program_status 删除重复判定；services.manual_inbound 的托盘占用和条码重复入站改为以 mes.db.active_products 为准。验证：全量 109 passed。
+
+## 60. 架构决策：MES 业务术语与 UI 文案统一
+2026-11-25：确认术语规范：业务对象统一称“工件”，输入/列表字段统一称“工件条码”，“产品”只用于产品型号语境；业务对象统一称“载具”，字段称“载具号”，UI 动作称“载具解绑”，不在使用“托盘”作为业务名（旧接口/数据库字段兼容保留）；动作统一称“入站”，当前状态称“在制产品”，历史称“流转历史”，不再使用“入线状态”；载具层面用“绑定/解绑”，工件锁层面用“锁定/解锁”，设备启动判定用“放行”。本轮先改 Streamlit 用户可见文案，不改 API 路径、数据库字段、Python 变量名和测试断言；必要时同步文档术语说明。
+
+## 61. UI 术语改名边界确认
+第二轮确认：顶部导航“产品查询”保持不变；工位操作台页签改为“工件入站 / 在制产品 / 载具解绑 / 工件解锁”；产品查询内部页签改为“工件流转查询 / 测试报告查询”；“工序解绑”统一改为“工件解锁 / 执行解锁 / 解锁成功，工件可重新判定放行”；V1.3 协议字段（TestItem、TestResult、isfinalreport、SHA256 等）与 st.dialog/session_state 的 key 保留不改。
+
+## 62. 架构决策：设备端 API 最小集
+2026-11-25：确认设备端最小 API 集为：1) GET /health（连通性检查）；2) GET /api/program（拉取程序元数据）；3) GET /programs/{filename}（下载程序文件；与元数据合起来构成“下载测试程序”业务动作）；4) POST /api/program/status（上报程序版本/SHA256/自检结果，V1.3 无 SHA 字段，可信判定依赖此接口）；5) GET /api/interlock（放行判定/工站进站校验，不新增重复接口）；6) POST /api/v1/test-results（唯一 V1.3 整单测试报告上传入口，不恢复旧单条上报）；7) GET/POST /api/variable/{name}（开放性变量读写，设备之间交换 line_mode/target_qty/alarm_enabled 等状态）；8) 新增只读 GET /api/device/enable（查询设备开启状态，来自 config/device_config.json，设备端不直接读配置文件）。UI 接口不暴露给设备端。
+
+## 63. 架构决策：设备配置移除 ip/port 字段
+2026-11-25：确认 config/device_config.json 只是看板监控设备列表与设备开启开关配置，不是设备注册表；历史连接字段没有任何代码读取。最终决定彻底删除现有配置、看板保存代码和测试中的相关字段与断言，不保留过滤或兼容逻辑。新增监控设备时只写 device_id/name/step_no/step_name/enable；架构测试用字段白名单校验配置结构。
+
+## 64. 架构决策：流式卡片状态模型
+2026-11-25：确认流式卡片状态优先级为 disable > offline > testing > PASS/FAIL > idle。enable=false 显示禁用且不显示时间；设备心跳超时或无心跳显示离线且不显示时间；设备显式调用 POST /api/device/test-start 后显示测试中，时间从测试开始到现在；最近测试报告/测试结果在时间阈值内显示通过或失败并显示测试耗时，超过阈值显示空闲，时间从最近报告到现在。新增 POST /api/device/heartbeat 记录设备心跳，/health 仅表示 FastAPI 服务健康。心跳超时阈值与结果空闲阈值分别放 constants.py，推荐 30 秒与 300 秒。测试开始与测试结果继续使用 station_summary.status_since 作为状态起始时间，不新增列。
+
+## 65. 架构决策：看板放大改为独立全屏页面
+2026-11-25：右侧大抽屉放大体验不佳，改为独立 Streamlit 页面 /dashboard_focus。主看板“放大显示”使用 st.link_button 新标签页打开，URL 参数携带当前视图（devices/steps）与已生效统计区间（range_mode/start/end），放大页按参数恢复时间筛选并只渲染当前监控区域，不显示设备管理、时间设置和普通页签栏。放大页保留左侧导航并提供返回看板按钮；删除右侧 dialog 放大实现，避免两套方案并存。
+
+## 66. 架构决策：取消看板放大显示功能
+2026-11-25：用户评估右侧抽屉与独立全屏页面后决定不保留放大显示功能。已移除主看板“放大显示”按钮、/dashboard_focus 页面注册、render_focus、URL 参数透传逻辑及相关 imports；保留设备页/工序页的局部刷新、状态条刷新、图表按签名变化刷新等既有行为。
+
+## 67. 架构决策：支持无载具产品流转
+2026-11-25：确认无载具对象统一称“无载具工件 / 无载具入站 / 无载具工序”，不使用“没有托盘的产品”。载具能力按产品型号对应工艺的工序配置，process_step_resources 增加 tray_mode（必须载具 / 载具可选 / 不允许载具），默认必须载具保持兼容。无载具入站不要求扫描载具，active_products.traycode 与 product_overview.traycode 写空字符串，不创建虚拟载具号。tag_page 保留“当前已绑定载具”只显示 traycode 非空记录；新增“当前在制工件”列表显示无载具工件并提供“工件下线”，下线写流转历史、删除 active_products 当前在制记录，不删测试报告/测试数据。产品查询中 traycode 为空显示“无载具”。V1.3 traycode 保持可选，不改协议。
+
+## 68. 架构决策：取消 tray_mode 配置列
+2026-11-25：用户明确工序资源不需要单独的载具模式列；转运载具型号为空即代表该工序按无载具处理。已移除 process_step_resources.tray_mode 字段、init_schema 补列逻辑、constants 中 TRAY_MODE_* 常量、工艺配置页“载具模式”列、workbench_recipe/manual_inbound 与工位操作台的 tray_mode 判断。工位入站现在按 route.tray_models 是否为空决定是否显示载具扫描框；为空则不要求载具，非空则必须扫描允许型号的载具。
+
+## 69. 架构决策：无载具使用固定数据库标记 no traycode
+2026-11-25：无载具工件在数据库统一写 `no traycode`，UI 仍显示“无载具”，兼容旧数据中的空字符串。无载具入站提交一次后不进入锁定态，而是递增 token、清空 submitted 并把焦点指向下一批第一个工件条码框，支持连续扫码。工位操作台“当前在制工件”区块套 border 容器，并按空字符串或 no traycode 识别无载具记录。产品查询同样把 no traycode 显示成“无载具”。
+
+## 70. 架构决策：载具缺失值统一为斜杠
+2026-11-26：用户确认不再使用 `no traycode` 表示无载具；数据库和界面统一使用 `/`。为兼容历史数据，空字符串、`no traycode`、`/` 都通过 constants.is_missing_traycode 识别为载具缺失。新入站写 `/`；当前已绑定载具列表过滤载具缺失值；当前在制工件列表显示无载具工件；产品查询显示 `/`；工件下线允许空字符串、`no traycode`、`/` 三类历史/新数据。GLOSSARY 更新为“载具缺失值”。

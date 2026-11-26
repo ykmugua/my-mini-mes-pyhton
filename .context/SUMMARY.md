@@ -1,1 +1,9 @@
-FastAPI 路由按设备/UI/共用分组；active_products 当前在制表接入；托盘解绑写历史并下线产品；看板统计固定读 TestReport.db；时间筛选支持默认当日与自定义范围；整理项目文档并新增 onboarding；修正 x-device-sn 为设备号并与 station 校验。
+# 项目上下文索引
+
+> 最后同步: 2026-11-24 09:32:36 | 设备: TEST | Agent: unknown
+
+## 详细主题
+- [task_progress.md](./task_progress.md) — 7 lines
+- [gotchas.md](./gotchas.md) — 295 lines
+- [architecture.md](./architecture.md) — 746 lines
+- [api_notes.md](./api_notes.md) — 13 lines
