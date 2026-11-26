@@ -337,6 +337,8 @@ def test_workbench_page_scans_tray_and_auto_submits(client, workbench_seeded):
     assert not at.exception, [str(item.value) for item in at.exception]
     at.selectbox(key="workbench_product_model").select("P-1001").run()
     assert not at.exception, [str(item.value) for item in at.exception]
+    assert at.selectbox(key="workbench_inbound_process").value == "PROC-001 · 标准电源板工艺"
+    assert not at.exception, [str(item.value) for item in at.exception]
     assert at.selectbox(key="workbench_process_step").value is None
     assert not at.selectbox(key="workbench_process_step").disabled
     assert not any(
@@ -446,6 +448,7 @@ def test_workbench_page_is_read_only(workbench_seeded):
     at.run()
     assert not at.exception, [str(item.value) for item in at.exception]
     at.selectbox(key="workbench_product_model").select("P-1001").run()
+    at.selectbox(key="workbench_inbound_process").select("PROC-001 · 标准电源板工艺").run()
     at.selectbox(key="workbench_process_step").select("1 · S1").run()
     assert at.text_input(key="workbench_inbound_tray_input").disabled
 

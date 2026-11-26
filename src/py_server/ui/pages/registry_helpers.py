@@ -136,6 +136,16 @@ def copy_value(value: str, existing: set[str], suffix: str = COPY_SUFFIX_ALNUM) 
     return candidate
 
 
+def fill_missing_text_values(form_values: dict[str, Any], template_values: dict[str, Any] | None) -> dict[str, Any]:
+    """提交新增时用模板补齐表单里为空的文本字段，不覆盖用户已填内容。"""
+    if not template_values:
+        return dict(form_values)
+    result: dict[str, Any] = {}
+    for key, value in form_values.items():
+        result[key] = template_values.get(key, value) if clean_text(value) == "" else value
+    return result
+
+
 def delete_column(click_key: str, on_click: Callable[[], None]) -> Any:
     """统一的删除按钮列配置。"""
     return st.column_config.ButtonColumn(

@@ -217,27 +217,18 @@ def render_page() -> None:
                     submitted = st.form_submit_button(CREATE_STEP_BUTTON)
 
                 if submitted:
+                    template_values = None
                     if source != BLANK_TEMPLATE:
                         row = next(s for s in steps if str(s["step_no"]) == source)
-                        new_no = helpers.copy_value(source, {str(s["step_no"]) for s in steps})
-                        new_row = {
-                            **row,
-                            "step_no": new_no,
-                            "step_name": f"{row.get('step_name', '')} 副本",
-                        }
-                        proposed_rows = _step_frame([*steps, new_row], include_delete=False).to_dict("records")
-                        success_message = f"已从模板 {source} 新建工序 {new_no}"
-                    else:
-                        proposed_rows = _step_frame(steps, include_delete=False).to_dict("records")
-                        proposed_rows.append(
-                            {
-                                "工序号": new_step_no.strip(),
-                                "工序名": new_step_name.strip(),
-                                "启用": helpers.enabled_from_text(new_step_enabled_text),
-                                "备注": new_step_remark.strip(),
-                            }
-                        )
-                        success_message = "工序已新增"
+                        template_values = _step_frame([row], include_delete=False).to_dict("records")[0]
+                    filled = helpers.fill_missing_text_values({
+                        "工序号": new_step_no.strip(),
+                        "工序名": new_step_name.strip(),
+                        "启用": helpers.enabled_from_text(new_step_enabled_text),
+                        "备注": new_step_remark.strip(),
+                    }, template_values)
+                    proposed_rows = _step_frame(steps, include_delete=False).to_dict("records") + [filled]
+                    success_message = f"已从模板 {source} 新建工序" if template_values else "工序已新增"
                     validated, error = _validate_steps(proposed_rows)
                     if error:
                         st.error(error)

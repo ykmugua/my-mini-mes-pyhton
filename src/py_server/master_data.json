@@ -162,6 +162,7 @@
       "download_url": "http://192.168.1.50:8000/programs/fw_FINAL-CHECK_v1.0.0.zip"
     }
   ],
+  "needle_beds": [],
   "products": [
     {
       "product_model": "LITE",

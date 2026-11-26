@@ -114,7 +114,7 @@ def test_registry_pages_share_common_helpers():
         assert f"def {name}" in helper
     for name in ("ROLE_EDIT", "ROLE_VIEW", "ENABLED_OPTIONS", "EMPTY_TEXT_VALUES"):
         assert name in constants
-    for page in ("device_registration.py", "tray_registration.py", "step_registration.py", "product_management.py"):
+    for page in ("device_registration.py", "tray_registration.py", "needle_bed_registration.py", "step_registration.py", "product_management.py"):
         text = (SRC / "ui" / "pages" / page).read_text(encoding="utf-8")
         assert "registry_helpers" in text, page
         assert "from .constants import" in text, page

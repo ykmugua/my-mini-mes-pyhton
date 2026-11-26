@@ -85,6 +85,23 @@ def replace_trays(conn: Conn, rows: list[dict]) -> None:
     _replace(conn, eg.trays, rows, ["traycode"])
 
 
+# --- needle_beds ---
+def list_needle_beds(conn: Conn | None = None) -> list[dict]:
+    """列出needle_beds。"""
+    if conn is None:
+        with with_read_conn() as c:
+            return list_needle_beds(c)
+    rows = _rows(conn, eg.needle_beds, eg.needle_beds.c.needle_bed_code)
+    for row in rows:
+        row["enabled"] = bool(row["enabled"])
+    return rows
+
+
+def replace_needle_beds(conn: Conn, rows: list[dict]) -> None:
+    """替换needle_beds。"""
+    _replace(conn, eg.needle_beds, rows, ["needle_bed_code"])
+
+
 # --- programs ---
 def list_programs(conn: Conn | None = None) -> list[dict]:
     """列出programs。"""
@@ -182,6 +199,7 @@ def snapshot(conn: Conn | None = None) -> dict:
         "steps": list_steps(conn),
         "devices": list_devices(conn),
         "trays": list_trays(conn),
+        "needle_beds": list_needle_beds(conn),
         "programs": list_programs(conn),
         "program_versions": list_program_versions(conn),
         "products": list_products(conn),

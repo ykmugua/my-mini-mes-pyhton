@@ -942,7 +942,7 @@ def _route_sort_key(route: dict) -> tuple[int, int | str]:
     return (0, int(step_no)) if step_no.isdigit() else (1, step_no)
 
 
-def _workbench_recipe(conn: Conn, product_model: str) -> dict:
+def _workbench_recipe(conn: Conn, product_model: str, process_code: str | None = None) -> dict:
     """执行 workbench_recipe。"""
     product = next(
         (
@@ -965,27 +965,36 @@ def _workbench_recipe(conn: Conn, product_model: str) -> dict:
     ]
     if not processes:
         raise ValidationError(f"产品型号 {product_model} 未绑定启用工艺")
-    if len(processes) > 1:
+    process = None
+    if process_code:
+        process = next(
+            (item for item in processes if str(item.get("process_code")) == str(process_code)),
+            None,
+        )
+        if process is None:
+            raise ValidationError(f"工艺 {process_code} 不属于产品型号 {product_model} 或未启用")
+    elif len(processes) == 1:
+        process = processes[0]
+    else:
         codes = "、".join(str(item["process_code"]) for item in processes)
-        raise ConflictError(f"产品型号 {product_model} 绑定了多个启用工艺：{codes}")
+        raise ValidationError(f"产品型号 {product_model} 绑定多个启用工艺，请选择工艺：{codes}")
 
-    process = processes[0]
-    process_code = str(process["process_code"])
+    selected_process_code = str(process["process_code"])
     routes = sorted(
         [
             row
             for row in master_data_repo.list_process_routes(conn)
-            if str(row.get("process_code")) == process_code
+            if str(row.get("process_code")) == selected_process_code
         ],
         key=_route_sort_key,
     )
     if not routes:
-        raise ValidationError(f"工艺 {process_code} 未配置工序路线")
+        raise ValidationError(f"工艺 {selected_process_code} 未配置工序路线")
 
     resources = [
         row
         for row in master_data_repo.list_process_step_resources(conn)
-        if str(row.get("process_code")) == process_code
+        if str(row.get("process_code")) == selected_process_code
     ]
     tray_models_by_step: dict[str, list[str]] = {}
     for resource in resources:
@@ -1024,16 +1033,42 @@ def _workbench_recipe(conn: Conn, product_model: str) -> dict:
     }
 
 
-def workbench_recipe(product_model: str) -> dict:
+def workbench_recipe(product_model: str, process_code: str | None = None) -> dict:
     """按产品型号倒查启用工艺、路线和允许的载具型号。"""
     product_model = _clean_text(product_model, "产品型号")
+    process_code = str(process_code).strip() if process_code else None
     with _read() as conn:
-        return _workbench_recipe(conn, product_model)
+        return _workbench_recipe(conn, product_model, process_code)
+
+
+def workbench_processes(product_model: str) -> list[dict]:
+    """列出产品型号下已启用的工艺。"""
+    product_model = _clean_text(product_model, "产品型号")
+    with _read() as conn:
+        product = next(
+            (
+                item for item in master_data_repo.list_products(conn)
+                if str(item.get("product_model")) == product_model
+            ),
+            None,
+        )
+        if product is None:
+            raise NotFoundError(f"产品型号 {product_model} 不存在")
+        return [
+            {
+                "process_code": str(item.get("process_code") or ""),
+                "process_name": str(item.get("process_name") or ""),
+            }
+            for item in master_data_repo.list_processes(conn)
+            if str(item.get("component_no") or "") == product_model
+            and bool(item.get("enabled"))
+        ]
 
 
 def manual_inbound(
     *,
     product: str,
+    process_code: str | None,
     step_no: str,
     traycode: str | None,
     barcodes: Iterable[str],
@@ -1041,6 +1076,7 @@ def manual_inbound(
 ) -> dict:
     """手动入站：产品、载具与载具载荷内的一批条码同时建档。"""
     product = _clean_text(product, "产品型号")
+    process_code = str(process_code).strip() if process_code else None
     step_no = _clean_text(step_no, "工序")
     raw_traycode = "" if traycode is None else str(traycode).strip()
     no_tray = constants.is_missing_traycode(raw_traycode)
@@ -1057,7 +1093,7 @@ def manual_inbound(
         raise ValidationError("入站条码不能重复")
 
     with _read() as conn:
-        recipe = _workbench_recipe(conn, product)
+        recipe = _workbench_recipe(conn, product, process_code)
         route = next(
             (
                 item

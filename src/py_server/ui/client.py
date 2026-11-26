@@ -417,17 +417,23 @@ def product_route(product_model: str) -> dict:
 # -----------------------------------------------------------------------------
 # 工位操作台
 # -----------------------------------------------------------------------------
-def workbench_recipe(product_model: str) -> dict:
+def workbench_processes(product_model: str) -> list[dict]:
+    """按产品型号列出启用工艺。"""
+    return _request("GET", "/api/ui/workbench/processes", params={"product": product_model})
+
+
+def workbench_recipe(product_model: str, process_code: str | None = None) -> dict:
     """执行 workbench_recipe。"""
     return _request(
         "GET",
         "/api/ui/workbench/recipe",
-        params={"product": product_model},
+        params={"product": product_model, "process_code": process_code or ""},
     )
 
 
 def manual_inbound(
     product: str,
+    process_code: str | None,
     step_no: str,
     traycode: str | None,
     barcodes: list[str],
@@ -439,6 +445,7 @@ def manual_inbound(
         "/api/ui/workbench/inbound",
         json={
             "product": product,
+            "process_code": process_code,
             "step_no": step_no,
             "traycode": traycode,
             "barcodes": barcodes,

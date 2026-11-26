@@ -1,8 +1,9 @@
 {
-  "station": "39C0-L2-1F-DIP16-FCT01",
-  "componentcode": "L120201091",
-  "traycode": "T02001",
   "barcode": "71202011752609010004567V8083",
+  "componentcode": "L120201091",
+  "station": "39C0-L2-1F-DIP16-FCT01",
+  "fixturecode": "F1002",
+  "traycode": "T02001",
   "programname": "TEST-DUT-001",
   "programversion": "V0.0.2",
   "testexecutetime": "2025/4/22 13:55:35.123",

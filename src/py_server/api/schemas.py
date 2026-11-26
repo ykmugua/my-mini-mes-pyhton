@@ -84,6 +84,7 @@ class MasterDataIn(BaseModel):
 class WorkbenchInboundIn(BaseModel):
     """WorkbenchInboundIn 类。"""
     product: str = Field(min_length=1)
+    process_code: str | None = None
     step_no: str = Field(min_length=1)
     traycode: str = ""
     barcodes: list[str] = Field(default_factory=list)

@@ -165,26 +165,19 @@ def render_page() -> None:
                     submitted = st.form_submit_button(CREATE_DEVICE_BUTTON)
 
                 if submitted:
+                    template_values = None
                     if source != BLANK_TEMPLATE:
-                        row = next(d for d in devices if str(d["device_id"]) == source)
-                        new_id = helpers.copy_value(source, {str(d["device_id"]) for d in devices})
-                        new_row = {
-                            **row,
-                            "device_id": new_id,
-                            "device_name": f"{row.get('device_name', '')} 副本",
-                        }
-                        proposed_rows = _device_frame([*devices, new_row], include_delete=False).to_dict("records")
-                        success_message = f"已从模板 {source} 新建设备 {new_id}"
-                    else:
-                        proposed_rows = _device_frame(devices, include_delete=False).to_dict("records")
-                        proposed_rows.append({
-                            "设备编号": new_device_id.strip(),
-                            "设备名称": new_device_name.strip(),
-                            "设备型号": new_device_model.strip(),
-                            "启用": helpers.enabled_from_text(new_device_enabled_text),
-                            "备注": new_device_remark.strip(),
-                        })
-                        success_message = "设备已添加"
+                        template_row = next(d for d in devices if str(d["device_id"]) == source)
+                        template_values = _device_frame([template_row], include_delete=False).to_dict("records")[0]
+                    filled = helpers.fill_missing_text_values({
+                        "设备编号": new_device_id.strip(),
+                        "设备名称": new_device_name.strip(),
+                        "设备型号": new_device_model.strip(),
+                        "启用": helpers.enabled_from_text(new_device_enabled_text),
+                        "备注": new_device_remark.strip(),
+                    }, template_values)
+                    proposed_rows = _device_frame(devices, include_delete=False).to_dict("records") + [filled]
+                    success_message = f"已从模板 {source} 新建设备" if template_values else "设备已添加"
                     validated, error = _validate_devices(proposed_rows)
                     if error:
                         st.error(error)

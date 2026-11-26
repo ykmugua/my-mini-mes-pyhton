@@ -16,7 +16,7 @@ def _data_file() -> Path:
         return Path(override)
     return Path(__file__).with_name("master_data.json")
 _KEYS = (
-    "steps", "devices", "trays", "programs", "program_versions",
+    "steps", "devices", "trays", "needle_beds", "programs", "program_versions",
     "products", "processes", "process_routes", "process_step_resources",
 )
 
@@ -28,6 +28,7 @@ def seed_master_data() -> None:
         master_data_repo.replace_steps(conn, data["steps"])
         master_data_repo.replace_devices(conn, data["devices"])
         master_data_repo.replace_trays(conn, data["trays"])
+        master_data_repo.replace_needle_beds(conn, data.get("needle_beds", []))
         master_data_repo.replace_programs(conn, data["programs"])
         master_data_repo.replace_program_versions(conn, data["program_versions"])
         master_data_repo.replace_products(conn, data["products"])

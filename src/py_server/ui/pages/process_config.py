@@ -143,10 +143,31 @@ def render_page() -> None:
                 elif any(p["process_code"] == code for p in processes):
                     st.error("工艺号已存在")
                 else:
+                    template_process = next((p for p in processes if p["process_code"] == source), None) if source != "空白新增" else None
+                    filled = {
+                        "工艺号": code,
+                        "工艺名称": new_name.strip(),
+                        "启用": enabled_text == "是",
+                        "备注": new_remark.strip(),
+                        "绑定组件": new_component,
+                    }
+                    if template_process:
+                        template_values = {
+                            "工艺号": "",
+                            "工艺名称": template_process.get("process_name", ""),
+                            "启用": bool(template_process.get("enabled", True)),
+                            "备注": template_process.get("remark", ""),
+                            "绑定组件": template_process.get("component_no", ""),
+                        }
+                        from . import registry_helpers as helpers
+
+                        filled = helpers.fill_missing_text_values(filled, template_values)
                     new_processes = list(processes) + [{
-                        "process_code": code, "process_name": new_name.strip() or code,
-                        "enabled": enabled_text == "是", "remark": new_remark.strip(),
-                        "component_no": new_component,
+                        "process_code": filled["工艺号"],
+                        "process_name": filled["工艺名称"] or filled["工艺号"],
+                        "enabled": bool(filled["启用"]),
+                        "remark": filled["备注"],
+                        "component_no": filled["绑定组件"],
                     }]
                     new_routes = list(routes)
                     new_resources = list(resources)
@@ -288,13 +309,19 @@ def render_page() -> None:
             # 3.2 工序资源（删除按钮）
             st.markdown("**工序资源**")
             res_by_step = {str(r["step_no"]): r for r in resources if r["process_code"] == selected}
+            needle_bed_models = sorted({
+                str(r.get("needle_bed_model") or "")
+                for r in st.session_state.get("needle_beds", [])
+                if str(r.get("needle_bed_model") or "")
+            })
             resource_frame = pd.DataFrame([{
                 "工序": str(r["step_no"]),
                 "程序": res_by_step.get(str(r["step_no"]), {}).get("program_name", ""),
                 "可执行设备型号": _split(res_by_step.get(str(r["step_no"]), {}).get("device_models", "")),
+                "测试针床型号": _split(res_by_step.get(str(r["step_no"]), {}).get("needle_bed_models", "")),
                 "转运载具型号": _split(res_by_step.get(str(r["step_no"]), {}).get("tray_models", "")),
                 "删除": "删除",
-            } for r in cur_routes], columns=["工序", "程序", "可执行设备型号", "转运载具型号", "删除"])
+            } for r in cur_routes], columns=["工序", "程序", "可执行设备型号", "测试针床型号", "转运载具型号", "删除"])
             edited_res = st.data_editor(
                 resource_frame, hide_index=True, num_rows="fixed", width="stretch",
                 alt="工序资源编辑器", key=f"res_editor_{selected}",
@@ -302,6 +329,7 @@ def render_page() -> None:
                     "工序": st.column_config.TextColumn("工序", disabled=True),
                     "程序": st.column_config.SelectboxColumn("程序", options=program_names),
                     "可执行设备型号": st.column_config.MultiselectColumn("可执行设备型号", options=device_models),
+                    "测试针床型号": st.column_config.MultiselectColumn("测试针床型号", options=needle_bed_models),
                     "转运载具型号": st.column_config.MultiselectColumn("转运载具型号", options=tray_models),
                     "删除": st.column_config.ButtonColumn(
                         "删除", type="tertiary", on_click=_request_resource_delete,
@@ -314,6 +342,7 @@ def render_page() -> None:
                     {"process_code": selected, "step_no": str(row["工序"]),
                      "program_name": str(row["程序"] or ""),
                      "device_models": _join(row["可执行设备型号"]),
+                     "needle_bed_models": _join(row["测试针床型号"]),
                      "tray_models": _join(row["转运载具型号"])}
                     for _, row in edited_res.iterrows() if _text(row["工序"])
                 ]

@@ -21,6 +21,7 @@ INBOUND_MESSAGE_KEY = "workbench_inbound_message"
 INBOUND_FOCUS_KEY = "workbench_inbound_focus_key"
 INBOUND_STEP_KEY = "workbench_process_step"
 INBOUND_STEP_NO_KEY = "workbench_inbound_step_no"
+INBOUND_PROCESS_KEY = "workbench_inbound_process"
 TRAY_INPUT_KEY = "workbench_inbound_tray_input"
 BARCODE_COLUMNS_KEY = "workbench_barcode_columns"
 UNLOCK_ERROR_KEY = "workbench_unlock_error"
@@ -146,6 +147,14 @@ def _reset_inbound_batch() -> None:
 
 def _reset_inbound_for_product_change() -> None:
     """执行 reset_inbound_for_product_change。"""
+    st.session_state.pop(INBOUND_PROCESS_KEY, None)
+    st.session_state.pop(INBOUND_STEP_KEY, None)
+    st.session_state.pop(INBOUND_STEP_NO_KEY, None)
+    _reset_inbound_batch()
+
+
+def _reset_inbound_for_process_change() -> None:
+    """切换工艺时清空工序和扫码批次。"""
     st.session_state.pop(INBOUND_STEP_KEY, None)
     st.session_state.pop(INBOUND_STEP_NO_KEY, None)
     _reset_inbound_batch()
@@ -282,6 +291,7 @@ def _submit_or_focus_next_barcode(
     capacity: int,
     current_index: int,
     product_model: str,
+    process_code: str,
     traycode: str,
     operator: str,
 ) -> None:
@@ -322,6 +332,7 @@ def _submit_or_focus_next_barcode(
         try:
             result = client.manual_inbound(
                 product=product_model,
+                process_code=process_code,
                 step_no=step_no,
                 traycode=traycode,
                 barcodes=barcodes,
@@ -368,6 +379,7 @@ def _handle_barcode_change(
     capacity: int,
     index: int,
     product_model: str,
+    process_code: str,
     operator: str,
 ) -> None:
     """执行 handle_barcode_change。"""
@@ -381,6 +393,7 @@ def _handle_barcode_change(
         capacity=capacity,
         current_index=index,
         product_model=product_model,
+        process_code=process_code,
         traycode=str(st.session_state.get(INBOUND_TRAY_KEY) or ""),
         operator=operator,
     )
@@ -392,6 +405,7 @@ def _handle_enabled_change(
     capacity: int,
     index: int,
     product_model: str,
+    process_code: str,
     operator: str,
 ) -> None:
     """执行 handle_enabled_change。"""
@@ -402,6 +416,7 @@ def _handle_enabled_change(
         capacity=capacity,
         current_index=index,
         product_model=product_model,
+        process_code=process_code,
         traycode=str(st.session_state.get(INBOUND_TRAY_KEY) or ""),
         operator=operator,
     )
@@ -475,8 +490,8 @@ def _render_inbound(
     st.session_state.setdefault(TRAY_INPUT_KEY, "")
     st.session_state.setdefault(INBOUND_SUBMITTED_KEY, False)
     st.session_state.setdefault(BARCODE_COLUMNS_KEY, 2)
-    model_column, step_column, columns_column = st.columns(
-        [3, 2, 1],
+    model_column, process_column, step_column, columns_column = st.columns(
+        [3, 2, 2, 1],
         vertical_alignment="bottom",
     )
     with model_column:
@@ -489,11 +504,32 @@ def _render_inbound(
             persist_state="session",
             on_change=_reset_inbound_for_product_change,
         )
-    recipe = None
-    route_options: dict[str, dict] = {}
+    process_options: list[str] = []
     if product_model:
         try:
-            recipe = client.workbench_recipe(product_model)
+            process_options = [
+                f"{item['process_code']} · {item.get('process_name') or '未命名工艺'}"
+                for item in client.workbench_processes(product_model)
+            ]
+        except ServiceError as exc:
+            st.error(f"读取产品工艺列表失败：{exc}")
+    with process_column:
+        process_label = st.selectbox(
+            "工艺",
+            process_options,
+            index=0 if len(process_options) == 1 else None,
+            placeholder="请先选择产品型号" if not product_model else "请选择工艺",
+            key=INBOUND_PROCESS_KEY,
+            persist_state="session",
+            on_change=_reset_inbound_for_process_change,
+            disabled=not product_model or not process_options,
+        )
+    recipe = None
+    route_options: dict[str, dict] = {}
+    selected_process_code = str(process_label).split(" · ", 1)[0] if process_label else ""
+    if product_model and selected_process_code:
+        try:
+            recipe = client.workbench_recipe(product_model, selected_process_code)
         except ServiceError as exc:
             st.error(f"读取产品工艺失败：{exc}")
         if recipe is not None:
@@ -506,13 +542,13 @@ def _render_inbound(
             "工序",
             list(route_options),
             index=None,
-            placeholder="请选择工序" if product_model else "请先选择产品型号",
+            placeholder="请选择工序" if selected_process_code else "请先选择产品型号和工艺",
             key=INBOUND_STEP_KEY,
             persist_state="session",
             on_change=_reset_inbound_for_step_change,
-            disabled=not product_model or not route_options,
+            disabled=not selected_process_code or not route_options,
         )
-        if product_model and recipe is not None and not route_options:
+        if selected_process_code and recipe is not None and not route_options:
             st.warning("当前工艺没有配置工序")
     with columns_column:
         columns_per_row = int(st.number_input(
@@ -523,7 +559,7 @@ def _render_inbound(
             key=BARCODE_COLUMNS_KEY,
             persist_state="session",
         ))
-    if not product_model or recipe is None:
+    if not product_model or not selected_process_code or recipe is None:
         return
     if not route_options:
         return
@@ -610,6 +646,7 @@ def _render_inbound(
                                     "capacity": capacity,
                                     "index": index,
                                     "product_model": product_model,
+                                    "process_code": selected_process_code,
                                     "operator": operator,
                                 },
                                 disabled=(
@@ -630,6 +667,7 @@ def _render_inbound(
                                     "capacity": capacity,
                                     "index": index,
                                     "product_model": product_model,
+                                    "process_code": selected_process_code,
                                     "operator": operator,
                                 },
                                 disabled=read_only or submitted,

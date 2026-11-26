@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import streamlit as st
 
-from . import device_registration, product_management, program, step_registration, tray_registration
+from . import device_registration, needle_bed_registration, product_management, program, step_registration, tray_registration
 
 TAB_KEY = "registration_hub_tabs"
-TAB_LABELS = ["程序注册", "工序注册", "设备注册", "载具注册", "组件注册"]
+TAB_LABELS = ["程序注册", "工序注册", "设备注册", "载具注册", "针床注册", "组件注册"]
 PAGE_TITLE = "注册配置"
 
 
@@ -27,5 +27,7 @@ def render_page() -> None:
                 device_registration.render_page()
             elif label == "载具注册":
                 tray_registration.render_page()
+            elif label == "针床注册":
+                needle_bed_registration.render_page()
             else:
                 product_management.render_page()

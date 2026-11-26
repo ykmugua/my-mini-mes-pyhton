@@ -193,27 +193,20 @@ def render_page() -> None:
                     submitted = st.form_submit_button(CREATE_TRAY_BUTTON)
 
                 if submitted:
+                    template_values = None
                     if source != BLANK_TEMPLATE:
                         row = next(t for t in trays if str(t["traycode"]) == source)
-                        new_code_value = helpers.copy_value(source, {str(t["traycode"]) for t in trays})
-                        new_row = {
-                            **row,
-                            "traycode": new_code_value,
-                            "tray_name": f"{row.get('tray_name', '')} 副本",
-                        }
-                        proposed_rows = _tray_frame([*trays, new_row], include_delete=False).to_dict("records")
-                        success_message = f"已从模板 {source} 新建载具 {new_code_value}"
-                    else:
-                        proposed_rows = _tray_frame(trays, include_delete=False).to_dict("records")
-                        proposed_rows.append({
+                        template_values = _tray_frame([row], include_delete=False).to_dict("records")[0]
+                    filled = helpers.fill_missing_text_values({
                             "载具码": new_code.strip(),
                             "载具名称": new_name.strip(),
                             "载具型号": new_model.strip(),
                             "载荷数量": int(new_capacity),
                             "启用": helpers.enabled_from_text(new_enabled_text),
                             "备注": new_remark.strip(),
-                        })
-                        success_message = "载具已添加"
+                    }, template_values)
+                    proposed_rows = _tray_frame(trays, include_delete=False).to_dict("records") + [filled]
+                    success_message = f"已从模板 {source} 新建载具" if template_values else "载具已添加"
                     validated, error = _validate_trays(proposed_rows)
                     if error:
                         st.error(error)

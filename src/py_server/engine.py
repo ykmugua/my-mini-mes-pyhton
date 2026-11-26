@@ -222,6 +222,17 @@ trays = Table(
     Column("remark", Text, nullable=False, default="", server_default=""),
 )
 
+needle_beds = Table(
+    "needle_beds",
+    metadata,
+    Column("needle_bed_code", Text, primary_key=True),
+    Column("needle_bed_name", Text, nullable=False, default="", server_default=""),
+    Column("needle_bed_number", Text, nullable=False, default="", server_default=""),
+    Column("needle_bed_model", Text, nullable=False, default="", server_default=""),
+    Column("enabled", Integer, nullable=False, default=1, server_default="1"),
+    Column("remark", Text, nullable=False, default="", server_default=""),
+)
+
 programs = Table(
     "programs",
     metadata,
@@ -286,6 +297,7 @@ process_step_resources = Table(
     Column("program_name", Text, nullable=False, default="", server_default=""),
     Column("device_models", Text, nullable=False, default="", server_default=""),
     Column("tray_models", Text, nullable=False, default="", server_default=""),
+    Column("needle_bed_models", Text, nullable=False, default="", server_default=""),
     UniqueConstraint("process_code", "step_no"),
 )
 
@@ -443,5 +455,25 @@ def reset_for_tests() -> None:
 
 
 def init_schema() -> None:
-    """只做 metadata.create_all，不修改已有表。"""
+    """创建缺失的表，并为旧库补充新增列。"""
     metadata.create_all(get_engine())
+    _ensure_column(
+        get_engine(),
+        process_step_resources,
+        "needle_bed_models",
+        "TEXT",
+        "",
+    )
+
+
+def _ensure_column(engine, table, column_name: str, column_type: str, default: str) -> None:
+    """为已有 SQLite 表补充新列，避免 create_all 不迁移旧表导致 500。"""
+    with engine.begin() as conn:
+        columns = {
+            row[1]
+            for row in conn.exec_driver_sql(f"PRAGMA table_info({table.name})").fetchall()
+        }
+        if column_name not in columns:
+            conn.exec_driver_sql(
+                f"ALTER TABLE {table.name} ADD COLUMN {column_name} {column_type} NOT NULL DEFAULT '{default}'"
+            )

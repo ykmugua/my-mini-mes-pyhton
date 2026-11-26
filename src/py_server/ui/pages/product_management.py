@@ -218,37 +218,29 @@ def render_page() -> None:
                     submitted = st.form_submit_button(CREATE_COMPONENT_BUTTON)
 
                 if submitted:
+                    template_values = None
                     if source != BLANK_TEMPLATE:
                         row = next(p for p in products if str(p["product_model"]) == source)
-                        new_model = helpers.copy_value(source, {str(p["product_model"]) for p in products})
-                        new_row = {
-                            **row,
-                            "product_model": new_model,
-                            "product_name": f"{row.get('product_name', '')} 副本",
-                        }
-                        proposed_products = [*products, new_row]
-                        success_message = f"已从模板 {source} 新建组件 {new_model}"
-                    else:
-                        clean_model = product_model.strip()
-                        if not clean_model:
-                            st.error("组件不能为空")
-                            return
-                        if any(
-                            item["product_model"].casefold() == clean_model.casefold()
-                            for item in products
-                        ):
-                            st.error("组件号不能重复")
-                            return
-                        proposed_products = [
-                            *products,
-                            {
-                                "product_model": clean_model,
-                                "product_name": product_name.strip(),
-                                "enabled": helpers.enabled_from_text(enabled_text),
-                                "remark": remark.strip(),
-                            },
-                        ]
-                        success_message = "组件已添加"
+                        template_values = _product_frame([row], include_delete=False).to_dict("records")[0]
+                    filled = helpers.fill_missing_text_values({
+                        "组件号": product_model.strip(),
+                        "组件名称": product_name.strip(),
+                        "启用": helpers.enabled_from_text(enabled_text),
+                        "备注": remark.strip(),
+                    }, template_values)
+                    if not filled["组件号"]:
+                        st.error("组件号不能为空")
+                        return
+                    if any(item["product_model"].casefold() == str(filled["组件号"]).casefold() for item in products):
+                        st.error("组件号不能重复")
+                        return
+                    proposed_products = [*products, {
+                        "product_model": filled["组件号"],
+                        "product_name": filled["组件名称"],
+                        "enabled": filled["启用"],
+                        "remark": filled["备注"],
+                    }]
+                    success_message = f"已从模板 {source} 新建组件" if template_values else "组件已添加"
                     validated, error = _validate_products(
                         _product_frame(proposed_products, include_delete=False).to_dict("records")
                     )

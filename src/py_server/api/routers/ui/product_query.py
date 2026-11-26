@@ -179,9 +179,15 @@ def ui_step_options() -> list[dict]:
 
 
 @router.get("/api/ui/workbench/recipe")
-def ui_workbench_recipe(product: str = Query(min_length=1)) -> dict:
+def ui_workbench_recipe(product: str = Query(min_length=1), process_code: str | None = Query(default=None)) -> dict:
     """执行 ui_workbench_recipe。"""
-    return services.workbench_recipe(product)
+    return services.workbench_recipe(product, process_code)
+
+
+@router.get("/api/ui/workbench/processes")
+def ui_workbench_processes(product: str = Query(min_length=1)) -> list[dict]:
+    """列出产品型号下已启用的工艺。"""
+    return services.workbench_processes(product)
 
 
 @router.post("/api/ui/workbench/inbound")
@@ -189,6 +195,7 @@ def ui_workbench_inbound(payload: WorkbenchInboundIn) -> dict:
     """执行 ui_workbench_inbound。"""
     return services.manual_inbound(
         product=payload.product,
+        process_code=payload.process_code,
         step_no=payload.step_no,
         traycode=payload.traycode,
         barcodes=payload.barcodes,
