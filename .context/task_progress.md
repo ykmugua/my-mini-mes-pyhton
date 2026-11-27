@@ -5,3 +5,13 @@
 - 看板卡片测试数据固定来自 TestReport.db report_index_<step>；时间为空默认当日 00:00 至现在；设置范围后按范围筛选；无 station_summary 记录也渲染统计。
 - 新增文档 docs/PROJECT_ONBOARDING.md，README 已链接。
 - 全量测试最近一次：109 passed。
+
+- 产品进站校验接口验收新增 `tests/test_workpiece_check_in.py`，覆盖成功只读、产品不存在、锁定、FAIL、工序不匹配、治具/托盘型号不匹配、工序资源缺失、参数错误。当前全量测试 133 passed。
+
+- 收尾完成：`products` 两列、`devices.step_no` 已从代码/种子/当前数据库移除，缺失表自动补建；全量测试 134 passed。
+
+- `products` 旧字段已删除、`devices.step_no` 已删除，当前 `data/mes.db` 表结构已重建且缺失表已自动补建。全量测试 135 passed；历史在制记录 `345` 的 `next_step` 已从 2 修正为 END。
+
+- 回归测试新增“失败终态下线后解锁不重新出现在在制产品”；全量测试 136 passed。
+
+- 解锁页支持选择锁定产品和解锁后工序；提供“执行解锁”和“解锁并重新入站”。普通解锁不会重新插入 active_products；重新入站复用手动入站接口。全量测试 136 passed。

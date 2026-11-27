@@ -759,3 +759,24 @@
 
 ## 75. 架构决策：V1.3 上传格式、fixturecode 与无请求头
 2026-11-26：上传格式以 docs/MesFormat/mesUploadTestDataFormat.json 为准，字段顺序为 barcode/componentcode/station/fixturecode/traycode/programname/programversion/testexecutetime/testlongtime/result/details/isfinalreport；空字符串统一传 `/`。新增 fixturecode：主库 test_reports、TestReport.db 的 report_index_* 总览表均补列，历史值统一 `/`；产品查询新增 fixturecode 筛选，列表顺序与格式 JSON 一致。上传接口去掉 x-device-sn/x-timestamp/x-request-id 三个自定义请求头，业务幂等键改为 barcode + testexecutetime + station + testlongtime。SQLite 已有表物理列顺序不可切换，新建表按新顺序，查询/展示按新顺序。
+
+## 76. 架构决策：统一时间表达格式
+2026-11-27：所有对外/可见的字符串时间统一为 `YYYY/M/D HH:mm:ss.SSS`（示例 `2025/4/22 13:55:35.123`），月日不强制补零，毫秒固定 3 位，不带 T/Z/时区偏移；保留对旧 ISO、`YYYY-MM-DD HH:mm:ss`、`HH:mm:ss.SSS` 的兼容解析。改动覆盖 API 响应示例、设备端 API 文档、上传协议文档、utc_now_iso/to_iso/normalize_ts、UI local_time/now_text、ProductFlow normalize_time、看板统计区间 caption、V1.3 明细 TestBeginTime/TestEndTime。status_since/last_seen_at 仍为内部 Unix 秒整数，不改字符串格式；历史数据库 TEXT 时间统一转换，新格式写入。
+
+## 77. 架构决策：details 明细时间保持原格式
+2026-11-27：统一时间格式只适用于顶层/接口/数据库时间字段；V1.3 `details` 内部的 `TestBeginTime` / `TestEndTime` 恢复为原来的 `HH:mm:ss.SSS`，不补全日期、不套用 `yyyy/M/d HH:mm:ss.SSS`。上传用例不再改写明细时间，示例 JSON、MES上传接口文档、设备端API文档和测试辅助数据同步恢复。
+
+## 78. 架构决策：在制产品页与载具仓位二次入站
+2026-11-27：ProductFlow.db.product_overview 同步 active_products 增加 process_code/tray_slot，并将 traycode 默认值统一为 `/`。工位操作台“在制产品”改为两个筛选下拉框（产品、载具）+ 尽可能展示 active_products 字段的列表 + 两个按钮（解绑产品、解绑载具）。解绑产品删除选中条码的当前在制记录并写流转历史；解绑载具删除该载具下所有当前在制记录和总览行。支持载具二次入站：输入已入站载具时按 tray_slot 自动回填已有条码；解绑产品后该 slot 留空，可再次输入新条码入站。入站请求新增 tray_slots，按 1..capacity 对应条码框。
+
+- `product_overview` 表结构采用固定物理列顺序：`id, barcode, componentcode, process_code, traycode, tray_slot, board_status, current_step, last_report_device, last_report_note, updated_at, flow_table`。`ensure_overview_table()` 检测到旧列顺序后会在同一事务内备份行、DROP 旧表、按目标顺序重建并回填数据，避免 `ALTER TABLE ADD COLUMN` 把新列追加到末尾。
+
+- 工件流转查询页只展示 `product_overview`：查询结果直接读 `/api/ui/product/flow-overview`，UI 隐藏 `id`；筛选框选项也从 product_overview 取。选中结果行后按 `flow_table` 显示流转明细并隐藏明细 `id`，下方显示测试履历；工艺路线、追溯详情、工件解锁等旧区块已移除。
+
+- `report_index_<step>` 总览表列顺序固定为 `id, barcode, componentcode, station, fixturecode, traycode, programname, programversion, testexecutetime, testlongtime, result, details_table, isfinalreport, failed_step`。`ensure_overview_table()` 检测列顺序不一致会重建并保留数据。测试报告查询页进入时默认展示全部总览记录，查询按钮用于按筛选条件刷新；单选行后显示该报告测试明细，取消选择隐藏。
+
+- `products` 表移除 `test_program_name`、`test_program_path`，目标列为 `product_model, product_name, remark, enabled`；`devices` 表移除 `step_no`，目标列为 `device_id, device_name, device_model, enabled, remark`。`init_schema()` 会自动重建旧表并迁移保留数据，`metadata.create_all()` 会补回被删除的缺失表。
+
+- 工件解锁页改为锁定产品列表，字段与在制产品一致（barcode/componentcode/process_code/traycode/tray_slot/board_status/current_step/next_step/last_report_device/last_report_note/updated_at，并显示 lock_reason）。`services.list_locked_workpieces()` 合并 workpieces、active_products、product_overview 上下文。
+
+- 解锁页锁定产品列表通过 `services.list_locked_workpieces()` 合并 workpieces、active_products、product_overview，展示在制产品同款字段；支持目标工序、执行解锁、解锁并重新入站。
