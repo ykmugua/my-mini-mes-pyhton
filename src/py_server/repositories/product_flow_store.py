@@ -1,14 +1,16 @@
 """产品流转库：ProductFlow.db（总览表 + 每产品一张流转表）。
 
 状态枚举：normal / lock / final
-时间格式：YYYY-MM-DD HH:MM:SS（业务时区）
+时间格式：yyyy/M/D HH:mm:ss.SSS（业务时区）
 """
 
 from __future__ import annotations
 
 import hashlib
 import re
-from datetime import datetime, timezone
+
+from .. import config, db
+from ..constants import PRODUCT_OVERVIEW_COLUMNS
 
 from sqlalchemy import text
 
@@ -30,16 +32,11 @@ def _eng():
 
 
 def normalize_time(value: str) -> str:
-    """统一转成 YYYY-MM-DD HH:MM:SS（业务时区）。"""
+    """统一转成 yyyy/M/D HH:mm:ss.SSS（业务时区）。"""
     if not value:
-        return datetime.now(config.timezone()).strftime("%Y-%m-%d %H:%M:%S")
-    try:
-        dt = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
-        if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
-        return dt.astimezone(config.timezone()).strftime("%Y-%m-%d %H:%M:%S")
-    except (ValueError, TypeError):
-        return str(value)
+        return db.utc_now_iso()
+    parsed = db.parse_ts(value)
+    return db.format_time(parsed) if parsed else str(value)
 
 
 def _columns(conn, table: str) -> list[str]:
@@ -47,37 +44,76 @@ def _columns(conn, table: str) -> list[str]:
     return [row[1] for row in conn.execute(text(f"PRAGMA table_info(\"{table}\")")).fetchall()]
 
 
+_OVERVIEW_TABLE_COLUMNS = ("id", *PRODUCT_OVERVIEW_COLUMNS)
+
+
+def _create_overview_table(conn) -> None:
+    """按目标列顺序创建 product_overview 与唯一索引。"""
+    conn.execute(text("""
+        CREATE TABLE product_overview (
+            id INTEGER PRIMARY KEY,
+            barcode TEXT NOT NULL,
+            componentcode TEXT NOT NULL,
+            process_code TEXT NOT NULL DEFAULT '',
+            traycode TEXT NOT NULL DEFAULT '/',
+            tray_slot TEXT NOT NULL DEFAULT '/',
+            board_status TEXT NOT NULL,
+            current_step TEXT NOT NULL,
+            last_report_device TEXT NOT NULL,
+            last_report_note TEXT NOT NULL DEFAULT '',
+            updated_at TEXT NOT NULL,
+            flow_table TEXT NOT NULL
+        )
+    """))
+    conn.execute(text(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_product_overview_barcode ON product_overview(barcode)"
+    ))
+
+
 def ensure_overview_table() -> None:
-    """确保overview_table。"""
+    """确保 product_overview 存在且列顺序正确；旧结构自动重建并保留数据。"""
     with _eng().begin() as conn:
-        cols = _columns(conn, "product_overview") if conn.execute(text(
+        exists = conn.execute(text(
             "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='product_overview'"
-        )).scalar() else []
-        if not cols:
-            conn.execute(text("""
-                CREATE TABLE product_overview (
-                    id INTEGER PRIMARY KEY,
-                    barcode TEXT NOT NULL,
-                    componentcode TEXT NOT NULL,
-                    traycode TEXT NOT NULL DEFAULT '',
-                    board_status TEXT NOT NULL,
-                    current_step TEXT NOT NULL,
-                    last_report_device TEXT NOT NULL,
-                    last_report_note TEXT NOT NULL DEFAULT '',
-                    updated_at TEXT NOT NULL,
-                    flow_table TEXT NOT NULL
-                )
-            """))
-        else:
-            if "current_device" in cols and "last_report_device" not in cols:
-                conn.execute(text("ALTER TABLE product_overview RENAME COLUMN current_device TO last_report_device"))
-            if "traycode" not in cols:
-                conn.execute(text("ALTER TABLE product_overview ADD COLUMN traycode TEXT NOT NULL DEFAULT ''"))
-            if "last_report_note" not in cols:
-                conn.execute(text("ALTER TABLE product_overview ADD COLUMN last_report_note TEXT NOT NULL DEFAULT ''"))
-        conn.execute(text(
-            "CREATE UNIQUE INDEX IF NOT EXISTS idx_product_overview_barcode ON product_overview(barcode)"
-        ))
+        )).scalar()
+        if not exists:
+            _create_overview_table(conn)
+            return
+        if _columns(conn, "product_overview") == list(_OVERVIEW_TABLE_COLUMNS):
+            conn.execute(text(
+                "CREATE UNIQUE INDEX IF NOT EXISTS idx_product_overview_barcode ON product_overview(barcode)"
+            ))
+            return
+        alias = {"current_device": "last_report_device"}
+        rows = [dict(row._mapping) for row in conn.execute(text("SELECT * FROM product_overview")).fetchall()]
+        normalized = []
+        for row in rows:
+            item = {alias.get(key, key): value for key, value in row.items()}
+            normalized.append(item)
+        conn.execute(text("DROP TABLE product_overview"))
+        _create_overview_table(conn)
+        for row in normalized:
+            values = {
+                "barcode": str(row.get("barcode") or ""),
+                "componentcode": str(row.get("componentcode") or ""),
+                "process_code": str(row.get("process_code") or ""),
+                "traycode": str(row.get("traycode") or ""),
+                "tray_slot": str(row.get("tray_slot") or "/"),
+                "board_status": str(row.get("board_status") or "normal"),
+                "current_step": str(row.get("current_step") or ""),
+                "last_report_device": str(row.get("last_report_device") or ""),
+                "last_report_note": str(row.get("last_report_note") or ""),
+                "updated_at": str(row.get("updated_at") or db.utc_now_iso()),
+                "flow_table": str(row.get("flow_table") or ""),
+            }
+            if row.get("id") is not None:
+                values["id"] = row["id"]
+            columns = ", ".join(values)
+            placeholders = ", ".join(f":{key}" for key in values)
+            conn.execute(
+                text(f"INSERT INTO product_overview ({columns}) VALUES ({placeholders})"),
+                values,
+            )
 
 
 def ensure_flow_table(barcode: str) -> str:
@@ -113,6 +149,7 @@ def upsert_flow(
     board_status: str,
     step_no: str,
     next_step: str,
+    overview_step_no: str | None = None,
     device: str,
     note: str = "",
     changed_at: str,
@@ -121,6 +158,7 @@ def upsert_flow(
     ensure_overview_table()
     table = ensure_flow_table(barcode)
     ts = normalize_time(changed_at)
+    overview_step = str(overview_step_no if overview_step_no is not None else step_no)
     with _eng().begin() as conn:
         conn.execute(text(f"""
             INSERT INTO "{table}"
@@ -157,7 +195,7 @@ def upsert_flow(
             """), {
                 "bc": barcode, "cc": componentcode or "", "tc": effective_traycode,
                 "bs": board_status,
-                "step": str(step_no), "dev": device or "", "note": str(note or ""),
+                "step": overview_step, "dev": device or "", "note": str(note or ""),
                 "ts": ts, "ft": table,
             })
         else:
@@ -170,7 +208,7 @@ def upsert_flow(
                     WHERE barcode=:bc
                 """), {
                     "bc": barcode, "cc": componentcode or "", "bs": board_status,
-                    "step": str(step_no), "dev": device or "", "note": str(note or ""),
+                    "step": overview_step, "dev": device or "", "note": str(note or ""),
                     "ts": ts, "ft": table,
                 })
             else:
@@ -183,7 +221,7 @@ def upsert_flow(
                 """), {
                     "bc": barcode, "cc": componentcode or "",
                     "tc": effective_traycode,
-                    "bs": board_status, "step": str(step_no), "dev": device or "",
+                    "bs": board_status, "step": overview_step, "dev": device or "",
                     "note": str(note or ""), "ts": ts, "ft": table,
                 })
         if board_status in TERMINAL_BOARD_STATUSES and effective_traycode:
@@ -201,9 +239,11 @@ def list_overview(
     barcode: str | None = None,
     componentcode: str | None = None,
     traycode: str | None = None,
+    tray_slot: str | None = None,
     device: str | None = None,
     board_status: str | None = None,
     current_step: str | None = None,
+    process_code: str | None = None,
 ) -> list[dict]:
     """列出overview。"""
     ensure_overview_table()
@@ -218,6 +258,9 @@ def list_overview(
     if traycode:
         conds.append("traycode = :tc")
         params["tc"] = traycode
+    if tray_slot:
+        conds.append("tray_slot = :slot")
+        params["slot"] = tray_slot
     if device:
         conds.append("last_report_device = :dev")
         params["dev"] = device
@@ -227,6 +270,9 @@ def list_overview(
     if current_step:
         conds.append("current_step = :step")
         params["step"] = str(current_step)
+    if process_code:
+        conds.append("process_code = :pc")
+        params["pc"] = str(process_code)
     sql = "SELECT * FROM product_overview"
     if conds:
         sql += " WHERE " + " AND ".join(conds)
@@ -325,24 +371,47 @@ def create_inbound(rows: list[dict], *, changed_at: str) -> None:
                 "note": str(row.get("note") or ""),
                 "changed_at": ts,
             })
-            conn.execute(text("""
-                INSERT INTO product_overview
-                (barcode, componentcode, traycode, board_status, current_step,
-                 last_report_device, last_report_note, updated_at, flow_table)
-                VALUES
-                (:barcode, :componentcode, :traycode, :board_status, :step_no,
-                 :device, :note, :changed_at, :flow_table)
-            """), {
+            params = {
                 "barcode": barcode,
                 "componentcode": str(row["componentcode"]),
+                "process_code": str(row.get("process_code") or ""),
                 "traycode": str(row.get("traycode") or ""),
+                "tray_slot": str(row.get("tray_slot") or "/"),
                 "board_status": str(row["board_status"]),
                 "step_no": str(row["step_no"]),
                 "device": str(row.get("device") or ""),
                 "note": str(row.get("note") or ""),
                 "changed_at": ts,
                 "flow_table": table,
-            })
+            }
+            exists = conn.execute(
+                text("SELECT 1 FROM product_overview WHERE barcode = :barcode"),
+                {"barcode": barcode},
+            ).fetchone()
+            if exists is None:
+                conn.execute(text("""
+                    INSERT INTO product_overview
+                    (barcode, componentcode, process_code, traycode, tray_slot, board_status, current_step,
+                     last_report_device, last_report_note, updated_at, flow_table)
+                    VALUES
+                    (:barcode, :componentcode, :process_code, :traycode, :tray_slot, :board_status, :step_no,
+                     :device, :note, :changed_at, :flow_table)
+                """), params)
+            else:
+                conn.execute(text("""
+                    UPDATE product_overview
+                    SET componentcode=:componentcode,
+                        process_code=:process_code,
+                        traycode=:traycode,
+                        tray_slot=:tray_slot,
+                        board_status=:board_status,
+                        current_step=:step_no,
+                        last_report_device=:device,
+                        last_report_note=:note,
+                        updated_at=:changed_at,
+                        flow_table=:flow_table
+                    WHERE barcode=:barcode
+                """), params)
 
 
 def close_tray_flow(traycode: str, *, device: str, note: str, changed_at: str) -> list[dict]:

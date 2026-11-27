@@ -22,6 +22,7 @@ from sqlalchemy import (
     create_engine,
     event,
 )
+
 from sqlalchemy.engine import Engine
 
 from . import config
@@ -101,7 +102,9 @@ active_products = Table(
     metadata,
     Column("barcode", Text, primary_key=True, nullable=False),
     Column("componentcode", Text, nullable=False, default="", server_default=""),
-    Column("traycode", Text, nullable=False, default="", server_default=""),
+    Column("process_code", Text, nullable=False, default="", server_default=""),
+    Column("traycode", Text, nullable=False, default="/", server_default="/"),
+    Column("tray_slot", Text, nullable=False, default="/", server_default="/"),
     Column("board_status", Text, nullable=False, default="normal", server_default="normal"),
     Column("current_step", Text, nullable=False, default="", server_default=""),
     Column("next_step", Text, nullable=False, default="", server_default=""),
@@ -206,7 +209,6 @@ devices = Table(
     Column("device_id", Text, primary_key=True, nullable=True),
     Column("device_name", Text, nullable=False),
     Column("device_model", Text, nullable=False, default="", server_default=""),
-    Column("step_no", Text, nullable=False, default="", server_default=""),
     Column("enabled", Integer, nullable=False, default=1, server_default="1"),
     Column("remark", Text, nullable=False, default="", server_default=""),
 )
@@ -263,8 +265,6 @@ products = Table(
     metadata,
     Column("product_model", Text, primary_key=True, nullable=True),
     Column("product_name", Text, nullable=False),
-    Column("test_program_name", Text, nullable=False, default="", server_default=""),
-    Column("test_program_path", Text, nullable=False, default="", server_default=""),
     Column("remark", Text, nullable=False, default="", server_default=""),
     Column("enabled", Integer, nullable=False, default=1, server_default="1"),
 )
@@ -466,6 +466,149 @@ def init_schema() -> None:
         "",
     )
     _ensure_column(get_engine(), test_reports, "fixturecode", "TEXT", "/")
+    _rebuild_products_if_needed(get_engine())
+    _rebuild_devices_if_needed(get_engine())
+    _rebuild_active_products_if_needed(get_engine())
+
+
+def _rebuild_products_if_needed(engine) -> None:
+    """移除 products 表中的旧程序字段并保留现有产品数据。"""
+    target_columns = ["product_model", "product_name", "remark", "enabled"]
+    with engine.begin() as conn:
+        columns = [row[1] for row in conn.exec_driver_sql("PRAGMA table_info(products)").fetchall()]
+        if "test_program_name" not in columns and "test_program_path" not in columns:
+            return
+        rows = conn.exec_driver_sql("SELECT * FROM products").fetchall()
+        data = [dict(row._mapping) for row in rows]
+        conn.exec_driver_sql("DROP TABLE products")
+        conn.exec_driver_sql("""
+            CREATE TABLE products (
+                product_model TEXT PRIMARY KEY,
+                product_name TEXT NOT NULL,
+                remark TEXT NOT NULL DEFAULT '',
+                enabled INTEGER NOT NULL DEFAULT 1
+            )
+        """)
+        for row in data:
+            conn.exec_driver_sql(
+                """
+                INSERT INTO products (product_model, product_name, remark, enabled)
+                VALUES (:product_model, :product_name, :remark, :enabled)
+                """,
+                {
+                    "product_model": row.get("product_model") or "",
+                    "product_name": row.get("product_name") or "",
+                    "remark": row.get("remark") or "",
+                    "enabled": row.get("enabled", 1),
+                },
+            )
+
+
+def _rebuild_devices_if_needed(engine) -> None:
+    """移除 devices 表中的旧 step_no 列并保留现有设备数据。"""
+    target_columns = ["device_id", "device_name", "device_model", "enabled", "remark"]
+    with engine.begin() as conn:
+        columns = [row[1] for row in conn.exec_driver_sql("PRAGMA table_info(devices)").fetchall()]
+        if "step_no" not in columns:
+            return
+        rows = conn.exec_driver_sql("SELECT * FROM devices").fetchall()
+        data = [dict(row._mapping) for row in rows]
+        conn.exec_driver_sql("DROP TABLE devices")
+        conn.exec_driver_sql("""
+            CREATE TABLE devices (
+                device_id TEXT PRIMARY KEY,
+                device_name TEXT NOT NULL,
+                device_model TEXT NOT NULL DEFAULT '',
+                enabled INTEGER NOT NULL DEFAULT 1,
+                remark TEXT NOT NULL DEFAULT ''
+            )
+        """)
+        for row in data:
+            conn.exec_driver_sql(
+                """
+                INSERT INTO devices (device_id, device_name, device_model, enabled, remark)
+                VALUES (:device_id, :device_name, :device_model, :enabled, :remark)
+                """,
+                {
+                    "device_id": row.get("device_id") or "",
+                    "device_name": row.get("device_name") or "",
+                    "device_model": row.get("device_model") or "",
+                    "enabled": row.get("enabled", 1),
+                    "remark": row.get("remark") or "",
+                },
+            )
+
+
+def _rebuild_active_products_if_needed(engine) -> None:
+    """按目标列顺序重建 active_products；旧数据原样迁移并补默认值。"""
+    target_columns = [
+        "barcode", "componentcode", "process_code", "traycode",
+        "tray_slot", "board_status", "current_step", "next_step",
+        "last_report_device", "last_report_note", "flow_table",
+        "created_at", "updated_at",
+    ]
+    from . import db
+
+    with engine.begin() as conn:
+        columns = [row[1] for row in conn.exec_driver_sql("PRAGMA table_info(active_products)").fetchall()]
+        if columns == target_columns:
+            return
+        rows = conn.exec_driver_sql("SELECT * FROM active_products").fetchall()
+        data = [dict(row._mapping) for row in rows]
+        conn.exec_driver_sql("DROP TABLE IF EXISTS active_products_new")
+        conn.exec_driver_sql(f"""
+            CREATE TABLE active_products_new (
+                barcode TEXT NOT NULL,
+                componentcode TEXT NOT NULL DEFAULT '',
+                process_code TEXT NOT NULL DEFAULT '',
+                traycode TEXT NOT NULL DEFAULT '/',
+                tray_slot TEXT NOT NULL DEFAULT '/',
+                board_status TEXT NOT NULL DEFAULT 'normal',
+                current_step TEXT NOT NULL DEFAULT '',
+                next_step TEXT NOT NULL DEFAULT '',
+                last_report_device TEXT NOT NULL DEFAULT '',
+                last_report_note TEXT NOT NULL DEFAULT '',
+                flow_table TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                PRIMARY KEY (barcode)
+            )
+        """)
+        for row in data:
+            traycode = str(row.get("traycode") or "")
+            if traycode.strip().casefold() in {"", "no traycode"}:
+                traycode = "/"
+            conn.exec_driver_sql(
+                """
+                INSERT INTO active_products_new
+                (barcode, componentcode, process_code, traycode, tray_slot, board_status,
+                 current_step, next_step, last_report_device, last_report_note,
+                 flow_table, created_at, updated_at)
+                VALUES (:barcode, :componentcode, :process_code, :traycode, :tray_slot, :board_status,
+                        :current_step, :next_step, :last_report_device, :last_report_note,
+                        :flow_table, :created_at, :updated_at)
+                """,
+                {
+                    "barcode": row.get("barcode") or "",
+                    "componentcode": row.get("componentcode") or "",
+                    "process_code": row.get("process_code") or "",
+                    "traycode": traycode,
+                    "tray_slot": row.get("tray_slot") or "/",
+                    "board_status": row.get("board_status") or "normal",
+                    "current_step": row.get("current_step") or "",
+                    "next_step": row.get("next_step") or "",
+                    "last_report_device": row.get("last_report_device") or "",
+                    "last_report_note": row.get("last_report_note") or "",
+                    "flow_table": row.get("flow_table") or "",
+                    "created_at": row.get("created_at") or db.utc_now_iso(),
+                    "updated_at": row.get("updated_at") or db.utc_now_iso(),
+                },
+            )
+        conn.exec_driver_sql("DROP TABLE active_products")
+        conn.exec_driver_sql("ALTER TABLE active_products_new RENAME TO active_products")
+        conn.exec_driver_sql(
+            "CREATE INDEX IF NOT EXISTS idx_active_products_traycode ON active_products(traycode)"
+        )
 
 
 def _ensure_column(engine, table, column_name: str, column_type: str, default: str) -> None:

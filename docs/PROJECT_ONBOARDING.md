@@ -206,7 +206,7 @@
 | --- | --- |
 | `routers/device/program.py` | `/health`、`/programs/{filename}`、`/api/program`、`/api/program/status` |
 | `routers/device/test_result.py` | `/api/v1/test-results` |
-| `routers/common/interlock.py` | `/api/interlock` 与 UI 解锁/前道规则接口 |
+| `routers/common/interlock.py` | `/api/ui/interlock-check` 与 UI 解锁/前道规则接口 |
 | `routers/common/variable.py` | `/api/variable/{name}` 与 UI 变量接口 |
 | `routers/ui/dashboard.py` | 看板和设备列表接口 |
 | `routers/ui/master_data.py` | 主数据快照、保存、程序历史 |

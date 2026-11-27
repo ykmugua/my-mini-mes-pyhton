@@ -10,13 +10,13 @@ from ...schemas import UnlockIn, UpstreamRulesIn
 router = APIRouter(tags=["interlock"])
 
 
-@router.get("/api/interlock")
-def get_interlock(
+@router.get("/api/ui/interlock-check")
+def ui_interlock_check(
     workpiece: str = Query(..., min_length=1),
     device_id: str | None = Query(default=None),
     product: str | None = Query(default=None),
 ) -> dict:
-    """获取interlock。"""
+    """UI 模拟设备查询联锁放行结果。"""
     return services.interlock_check(workpiece=workpiece, device_id=device_id, product=product)
 
 

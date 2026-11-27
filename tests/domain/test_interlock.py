@@ -9,7 +9,7 @@ UNTRUSTED = TrustVerdict(False, TrustReason.NO_REPORT)
 
 
 def test_device_untrusted_before_manual_release():
-    wp = Workpiece(workpiece="W1", manual_release_at="2026-11-16T00:00:00+00:00")
+    wp = Workpiece(workpiece="W1", manual_release_at="2026/11/16 00:00:00.000")
     decision = InterlockPolicy.evaluate(
         workpiece=wp, device_id="D1", product="P1", trust=UNTRUSTED,
         upstreams=(), trusted_pass_upstreams=(),
@@ -19,7 +19,7 @@ def test_device_untrusted_before_manual_release():
 
 
 def test_locked_before_manual_release():
-    wp = Workpiece(workpiece="W1", lock_reason="锁定", manual_release_at="2026-11-16T00:00:00+00:00")
+    wp = Workpiece(workpiece="W1", lock_reason="锁定", manual_release_at="2026/11/16 00:00:00.000")
     decision = InterlockPolicy.evaluate(
         workpiece=wp, device_id="D1", product="P1", trust=TRUSTED,
         upstreams=(), trusted_pass_upstreams=(),
@@ -28,7 +28,7 @@ def test_locked_before_manual_release():
 
 
 def test_fail_before_manual_release():
-    wp = Workpiece(workpiece="W1", status=WorkpieceStatus.FAIL, manual_release_at="2026-11-16T00:00:00+00:00")
+    wp = Workpiece(workpiece="W1", status=WorkpieceStatus.FAIL, manual_release_at="2026/11/16 00:00:00.000")
     decision = InterlockPolicy.evaluate(
         workpiece=wp, device_id="D1", product="P1", trust=TRUSTED,
         upstreams=(), trusted_pass_upstreams=(),
@@ -37,7 +37,7 @@ def test_fail_before_manual_release():
 
 
 def test_manual_release_allows_before_upstream_check():
-    wp = Workpiece(workpiece="W1", manual_release_at="2026-11-16T00:00:00+00:00")
+    wp = Workpiece(workpiece="W1", manual_release_at="2026/11/16 00:00:00.000")
     decision = InterlockPolicy.evaluate(
         workpiece=wp, device_id="D1", product="P1", trust=TRUSTED,
         upstreams=("D0",), trusted_pass_upstreams=(),

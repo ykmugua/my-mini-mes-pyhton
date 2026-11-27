@@ -252,13 +252,6 @@ def _handle_tray_change(
         st.session_state[INBOUND_ERROR_KEY] = f"检查载具占用失败：{exc}"
         st.session_state[tray_input_key] = ""
         return
-    if bound_rows:
-        st.session_state[INBOUND_ERROR_KEY] = (
-            f"载具 {actual_traycode} 已绑定 {len(bound_rows)} 个工件"
-        )
-        st.session_state[tray_input_key] = ""
-        return
-
     token = int(st.session_state.get(INBOUND_TOKEN_KEY, 0)) + 1
     st.session_state[INBOUND_TOKEN_KEY] = token
     st.session_state[INBOUND_TRAY_KEY] = actual_traycode
@@ -266,6 +259,14 @@ def _handle_tray_change(
     st.session_state[INBOUND_SUBMITTED_KEY] = False
     st.session_state.pop(INBOUND_ERROR_KEY, None)
     st.session_state.pop(INBOUND_MESSAGE_KEY, None)
+    for row in bound_rows:
+        slot_text = str(row.get("tray_slot") or "").strip()
+        if not slot_text.isdigit():
+            continue
+        index = int(slot_text)
+        if 1 <= index <= capacity:
+            st.session_state[f"workbench_barcode_{token}_{index}"] = str(row.get("barcode") or "")
+            st.session_state[f"workbench_barcode_enabled_{token}_{index}"] = False
     st.session_state[INBOUND_FOCUS_KEY] = (
         f"workbench_barcode_input_{token}_1"
     )
@@ -336,6 +337,7 @@ def _submit_or_focus_next_barcode(
                 step_no=step_no,
                 traycode=traycode,
                 barcodes=barcodes,
+                tray_slots=[str(index) for index, _ in enabled_slots],
                 operator=operator,
             )
         except ServiceError as exc:
@@ -785,106 +787,101 @@ def _render_product_unlock(*, steps: list[dict], read_only: bool) -> None:
     st.caption("解锁原因自动记录为“工位操作台扫码解锁”，操作员取自左侧边栏。")
 
 
-def _render_no_tray_wip(*, read_only: bool) -> None:
-    """显示无载具在制工件，并提供工件下线。"""
+def _active_product_frame(rows: list[dict]) -> pd.DataFrame:
+    return pd.DataFrame([{
+        "barcode": row.get("barcode") or "",
+        "componentcode": row.get("componentcode") or "",
+        "process_code": row.get("process_code") or "",
+        "traycode": row.get("traycode") or "/",
+        "tray_slot": row.get("tray_slot") or "/",
+        "board_status": row.get("board_status") or "",
+        "current_step": row.get("current_step") or "",
+        "next_step": row.get("next_step") or "",
+        "last_report_device": row.get("last_report_device") or "",
+        "last_report_note": row.get("last_report_note") or "",
+        "updated_at": row.get("updated_at") or "",
+    } for row in rows])
+
+
+def _render_active_products(*, read_only: bool) -> None:
     with st.container(border=True):
-        with st.container(
-            horizontal=True,
-            vertical_alignment="center",
-            horizontal_alignment="distribute",
-        ):
-            st.subheader("当前在制工件")
-            if st.button("刷新", icon=":material/refresh:", key="wip_refresh"):
-                st.rerun()
+        st.subheader("在制产品")
         try:
-            rows = [
-                row for row in client.active_products()
-                if is_missing_traycode(row.get("traycode"))
-            ]
+            rows = client.active_products()
         except ServiceError as exc:
-            st.error(f"读取在制工件失败：{exc}")
+            st.error(f"读取在制产品失败：{exc}")
             return
         if not rows:
-            st.info("当前没有无载具在制工件")
+            st.info("当前没有在制产品")
             return
-        frame = pd.DataFrame([{
-            "工件条码": row.get("barcode") or "",
-            "产品型号": row.get("componentcode") or "",
-            "当前工序": row.get("current_step") or "",
-            "最近设备": row.get("last_report_device") or "",
-        } for row in rows])
-        barcodes = [str(row["工件条码"]) for row in frame.to_dict("records")]
-        st.session_state[WIP_DOWNLINE_BARCODES_KEY] = barcodes
-        display = [dict(row) for row in frame.to_dict("records")]
-        column_config = {
-            "工件条码": st.column_config.TextColumn("工件条码", width="large"),
-            "产品型号": st.column_config.TextColumn("产品型号", width="medium"),
-            "当前工序": st.column_config.TextColumn("当前工序", width="medium"),
-            "最近设备": st.column_config.TextColumn("最近设备", width="medium"),
-        }
-        if not read_only:
-            for record in display:
-                record["操作"] = "工件下线"
-            column_config["操作"] = st.column_config.ButtonColumn(
-                "操作",
-                type="tertiary",
-                on_click=_request_wip_downline,
-                key=WIP_DOWNLINE_CLICK_KEY,
-                width="small",
-            )
+
+        product_options = ["全部"] + sorted({str(r.get("componentcode") or "") for r in rows if r.get("componentcode")})
+        tray_options = ["全部"] + sorted({str(r.get("traycode") or "/") for r in rows if str(r.get("traycode") or "/") != "/"})
+        c1, c2 = st.columns(2)
+        product_filter = c1.selectbox("产品", product_options, key="active_product_filter")
+        tray_filter = c2.selectbox("托盘", tray_options, key="active_tray_filter")
+
+        filtered = list(rows)
+        if product_filter != "全部":
+            filtered = [r for r in filtered if str(r.get("componentcode") or "") == product_filter]
+        if tray_filter != "全部":
+            filtered = [r for r in filtered if str(r.get("traycode") or "/") == tray_filter]
+        if not filtered:
+            st.info("当前筛选条件下没有在制产品")
+            return
+
+        frame = _active_product_frame(filtered)
         st.dataframe(
-            pd.DataFrame(display),
-            column_config=column_config,
+            frame,
             hide_index=True,
             width="stretch",
-            alt="当前在制工件列表",
+            alt="当前在制产品列表",
+            on_select="rerun",
+            selection_mode="single-row",
+            key="active_products_table",
         )
-        pending_barcode = str(st.session_state.get(WIP_DOWNLINE_PENDING_KEY) or "")
-        if not pending_barcode or read_only:
-            st.session_state[WIP_DOWNLINE_PENDING_KEY] = ""
-            return
-        _confirm_wip_downline(pending_barcode)
+        event = st.session_state.get("active_products_table")
+        selected_rows = []
+        if hasattr(event, "selection"):
+            selected_rows = getattr(event.selection, "rows", []) or []
+        selected = filtered[selected_rows[0]] if selected_rows else None
 
-
-def _request_wip_downline() -> None:
-    """记录列表里点击下线的工件。"""
-    click = st.session_state.get(WIP_DOWNLINE_CLICK_KEY)
-    if click is None:
-        return
-    barcodes = st.session_state.get(WIP_DOWNLINE_BARCODES_KEY, [])
-    row_index = int(click["row"])
-    if 0 <= row_index < len(barcodes):
-        st.session_state[WIP_DOWNLINE_PENDING_KEY] = str(barcodes[row_index])
-
-
-def _clear_pending_wip_downline() -> None:
-    """关闭确认弹窗时清空待下线工件。"""
-    st.session_state[WIP_DOWNLINE_PENDING_KEY] = ""
-
-
-@st.dialog("确认工件下线", icon=":material/logout:", on_dismiss=_clear_pending_wip_downline)
-def _confirm_wip_downline(barcode: str) -> None:
-    """确认后结束当前在制工件的流转。"""
-    st.write(f"确定让工件 **{barcode}** 下线吗？")
-    st.caption("下线只会清除当前在制状态，不会删除流转历史和测试数据。")
-    with st.container(horizontal=True, horizontal_alignment="left"):
-        if st.button("取消", key="wip_downline_cancel"):
-            _clear_pending_wip_downline()
-            st.rerun()
-        if st.button("确认下线", type="primary", key="wip_downline_confirm"):
-            try:
-                result = client.workpiece_downline(
-                    barcode=barcode,
-                    operator=common.operator(),
-                    confirmed=True,
-                )
-            except ServiceError as exc:
-                st.error(f"工件下线失败：{exc}")
-                return
-            _clear_pending_wip_downline()
-            st.toast(f"工件 {result['barcode']} 已下线")
-            st.rerun()
-
+        c1, c2 = st.columns(2)
+        has_tray = selected is not None and str(selected.get("traycode") or "/").strip() not in {"/", ""}
+        if c1.button(
+            "解绑产品",
+            disabled=read_only or selected is None,
+            key="active_downline_product",
+            help="将选中的工件下线，并保留测试数据和流转历史" if selected is not None else None,
+        ):
+            if selected:
+                try:
+                    result = client.workpiece_downline(
+                        barcode=str(selected.get("barcode") or ""),
+                        operator=common.operator(),
+                        confirmed=True,
+                    )
+                    st.toast(f"工件 {result['barcode']} 已下线")
+                    st.rerun()
+                except ServiceError as exc:
+                    st.error(f"工件下线失败：{exc}")
+        if c2.button(
+            "解绑载具",
+            disabled=read_only or selected is None or not has_tray,
+            key="active_unbind_tray",
+            help="已绑定载具的工件需要先解绑载具" if selected is not None else None,
+        ):
+            if selected and str(selected.get("traycode") or "/") != "/":
+                try:
+                    result = client.unbind_tray(
+                        traycode=str(selected.get("traycode")),
+                        operator=common.operator(),
+                        confirmed=True,
+                    )
+                    st.toast(f"载具 {result['traycode']} 已解绑 {result['count']} 个工件")
+                    st.rerun()
+                except ServiceError as exc:
+                    st.error(f"载具解绑失败：{exc}")
 
 def render() -> None:
     """执行 render。"""
@@ -920,8 +917,7 @@ def render() -> None:
             )
     if status_tab.open:
         with status_tab:
-            tag_page.render_content(read_only=read_only)
-            _render_no_tray_wip(read_only=read_only)
+            _render_active_products(read_only=read_only)
     if unbind_tab.open:
         with unbind_tab:
             _render_tray_unbind(trays=trays, read_only=read_only)

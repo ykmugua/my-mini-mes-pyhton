@@ -531,7 +531,12 @@ def _render_device_manager(config_devices: list[dict]) -> list[dict]:
 
     return all_config
 
-DT_FORMAT = "%Y-%m-%d %H:%M:%S"
+DT_FORMAT = "%Y/%m/%d %H:%M:%S."
+
+
+def _fmt_time(value: datetime) -> str:
+    """输出统一时间字符串。"""
+    return value.strftime(DT_FORMAT) + f"{value.microsecond // 1000:03d}"
 
 
 def _parse_stat_time(value) -> datetime | None:
@@ -544,9 +549,12 @@ def _parse_stat_time(value) -> datetime | None:
     if not value:
         return None
     for fmt in (
-        "%Y-%m-%d %H:%M:%S", "%Y/%m/%d %H:%M:%S",
-        "%Y-%m-%d %H:%M", "%Y/%m/%d %H:%M",
-        "%Y/%m/%d %H:%M:%S.%f", "%Y-%m-%d %H:%M:%S.%f",
+        "%Y/%m/%d %H:%M:%S.%f",
+        "%Y/%m/%d %H:%M:%S",
+        "%Y-%m-%d %H:%M:%S.%f",
+        "%Y-%m-%d %H:%M:%S",
+        "%Y/%m/%d %H:%M",
+        "%Y-%m-%d %H:%M",
     ):
         try:
             return datetime.strptime(value, fmt)
@@ -656,10 +664,10 @@ def _range_caption() -> str:
     """执行 range_caption。"""
     a, b = _effective_stat_range()
     if b is None:
-        return f"统计区间：{a.strftime(DT_FORMAT)} ~ now"
+        return f"统计区间：{_fmt_time(a)} ~ now"
     if st.session_state.get("stat_range_mode") != "custom":
-        return f"统计区间：{a.strftime(DT_FORMAT)} ~ now"
-    return f"统计区间：{a.strftime(DT_FORMAT)} ~ {b.strftime(DT_FORMAT)}"
+        return f"统计区间：{_fmt_time(a)} ~ now"
+    return f"统计区间：{_fmt_time(a)} ~ {_fmt_time(b)}"
 
 
 def _render_display_order(all_config: list[dict]) -> None:
@@ -689,11 +697,11 @@ def _render_display_order(all_config: list[dict]) -> None:
         st.markdown("**调整统计时间区间**")
         c1, c2, c3 = st.columns([2, 2, 1], vertical_alignment="bottom")
         c1.datetime_input(
-            "开始时间", value=None, format="YYYY-MM-DD", step=60, required=True,
+            "开始时间", value=None, format="YYYY/MM/DD", step=60, required=True,
             key="stat_time_start",
         )
         c2.datetime_input(
-            "结束时间", value=None, format="YYYY-MM-DD", step=60, required=True,
+            "结束时间", value=None, format="YYYY/MM/DD", step=60, required=True,
             key="stat_time_end",
         )
         c3.button("清空", key="stat_time_clear", on_click=_clear_stat_inputs)
@@ -702,14 +710,14 @@ def _render_display_order(all_config: list[dict]) -> None:
         a, b = _effective_stat_range()
         if b is None:
             caption = (
-                f"当前生效区间：{a.strftime(DT_FORMAT)} ~ now"
+                f"当前生效区间：{_fmt_time(a)} ~ now"
                 "（结束时间随刷新更新）"
             )
         elif st.session_state.get("stat_range_mode") == "custom":
-            caption = f"当前生效区间：{a.strftime(DT_FORMAT)} ~ {b.strftime(DT_FORMAT)}"
+            caption = f"当前生效区间：{_fmt_time(a)} ~ {_fmt_time(b)}"
         else:
             caption = (
-                f"当前生效区间：{a.strftime(DT_FORMAT)} ~ now"
+                f"当前生效区间：{_fmt_time(a)} ~ now"
                 "（结束时间随刷新更新）"
             )
         st.caption(caption)

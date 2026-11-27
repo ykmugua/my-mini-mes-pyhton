@@ -106,7 +106,7 @@ def ui_report_query(
     fixturecode: str | None = Query(default=None),
     result: str | None = Query(default=None),
     board_status: str | None = Query(default=None),
-    current_step: str | None = Query(default=None),
+    isfinalreport: str | None = Query(default=None),
     last_report_device: str | None = Query(default=None),
     limit: int = Query(default=200),
 ) -> list[dict]:
@@ -119,7 +119,7 @@ def ui_report_query(
         fixturecode=fixturecode,
         result=result,
         board_status=board_status,
-        current_step=current_step,
+        isfinalreport=isfinalreport,
         last_report_device=last_report_device,
         limit=limit,
     )
@@ -130,14 +130,17 @@ def ui_product_flow_overview(
     barcode: str | None = Query(default=None),
     componentcode: str | None = Query(default=None),
     traycode: str | None = Query(default=None),
+    tray_slot: str | None = Query(default=None),
     device: str | None = Query(default=None),
     board_status: str | None = Query(default=None),
     current_step: str | None = Query(default=None),
+    process_code: str | None = Query(default=None),
 ) -> list[dict]:
     """执行 ui_product_flow_overview。"""
     return product_flow_store.list_overview(
         barcode=barcode, componentcode=componentcode, traycode=traycode, device=device,
         board_status=board_status, current_step=current_step,
+        tray_slot=tray_slot, process_code=process_code,
     )
 
 
@@ -201,6 +204,7 @@ def ui_workbench_inbound(payload: WorkbenchInboundIn) -> dict:
         step_no=payload.step_no,
         traycode=payload.traycode,
         barcodes=payload.barcodes,
+        tray_slots=payload.tray_slots,
         operator=payload.operator,
     )
 

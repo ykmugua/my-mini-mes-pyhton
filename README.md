@@ -20,6 +20,7 @@
 技术栈：Python 3.14、FastAPI、Streamlit、SQLAlchemy Core、SQLite、plotly。部署为双进程：FastAPI 提供设备接口和 UI 接口，Streamlit 提供内部操作页面；Streamlit 通过 HTTP 客户端访问 FastAPI，不直接写数据库。
 
 如果你是第一次了解项目，建议先读 [项目了解路线图](docs/PROJECT_ONBOARDING.md)，再读 [代码详解](docs/CODEBASE_GUIDE.md)。
+设备端对接接口见 [设备端 API 文档](docs/设备端API文档.md)。
 
 ---
 
@@ -142,7 +143,7 @@ Swagger 文档见 `/docs`。常用接口：
 | GET | `/programs/{filename}` | 下载程序文件 |
 | POST | `/api/program/status` | 上报程序版本/SHA256/自检结果 |
 | POST | `/api/v1/test-results` | V1.3 整单测试上报（机台主接口） |
-| GET | `/api/interlock` | 工件放行判定 |
+| GET | `/api/ui/interlock-check` | 工件放行判定 |
 | GET/POST | `/api/variable/{name}` | 读取/写入开放变量 |
 | GET | `/api/device/enable` | 查询设备是否开启 |
 

@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 from pydantic import BaseModel, Field, ConfigDict
 
 
@@ -47,5 +45,5 @@ class ApiEnvelope(BaseModel):
 
     success: bool
     message: str
-    code: int
-    result: dict[str, Any] | None = None
+    code: str
+    data: None = None

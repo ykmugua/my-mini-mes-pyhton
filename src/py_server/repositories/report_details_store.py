@@ -23,7 +23,7 @@ DETAIL_COLUMNS = [
 OVERVIEW_COLUMNS = [
     "id", "barcode", "componentcode", "station", "fixturecode", "traycode",
     "programname", "programversion", "testexecutetime", "testlongtime",
-    "result", "isfinalreport", "failed_step", "details_table",
+    "result", "details_table", "isfinalreport", "failed_step",
 ]
 
 _DETAIL_TABLE_RE = re.compile(r"SN_[0-9A-Za-z_]{1,40}_[0-9a-f]{16}")
@@ -56,43 +56,49 @@ def detail_table_name(barcode: str, step_no: str | int | None = None) -> str:
 
 
 def _overview_ddl() -> str:
-    """执行 overview_ddl。"""
-    return """
-        id INTEGER PRIMARY KEY,
-        barcode TEXT NOT NULL,
-        componentcode TEXT NOT NULL,
-        station TEXT NOT NULL,
-        fixturecode TEXT NOT NULL DEFAULT '/',
-        traycode TEXT NOT NULL DEFAULT '/',
-        programname TEXT NOT NULL,
-        programversion TEXT NOT NULL,
-        testexecutetime TEXT NOT NULL,
-        testlongtime TEXT NOT NULL,
-        result TEXT NOT NULL DEFAULT '',
-        isfinalreport TEXT NOT NULL DEFAULT 'false',
-        failed_step TEXT NOT NULL DEFAULT '',
-        details_table TEXT NOT NULL
-    """
+    """按 OVERVIEW_COLUMNS 顺序生成总览表 DDL。"""
+    definitions = {
+        "id": "id INTEGER PRIMARY KEY",
+        "barcode": "barcode TEXT NOT NULL",
+        "componentcode": "componentcode TEXT NOT NULL",
+        "station": "station TEXT NOT NULL",
+        "fixturecode": "fixturecode TEXT NOT NULL DEFAULT '/'",
+        "traycode": "traycode TEXT NOT NULL DEFAULT '/'",
+        "programname": "programname TEXT NOT NULL",
+        "programversion": "programversion TEXT NOT NULL",
+        "testexecutetime": "testexecutetime TEXT NOT NULL",
+        "testlongtime": "testlongtime TEXT NOT NULL",
+        "result": "result TEXT NOT NULL DEFAULT ''",
+        "details_table": "details_table TEXT NOT NULL",
+        "isfinalreport": "isfinalreport TEXT NOT NULL DEFAULT 'false'",
+        "failed_step": "failed_step TEXT NOT NULL DEFAULT ''",
+    }
+    return ",\n        ".join(definitions[name] for name in OVERVIEW_COLUMNS)
 
 
 def ensure_overview_table(step_no: str | int | None, engine=None) -> str:
-    """确保overview_table。"""
+    """确保总览表存在且列顺序正确；旧结构自动重建并保留数据。"""
     table = overview_table_name(step_no)
     if not _OVERVIEW_TABLE_RE.fullmatch(table):
         raise ValueError(f"非法总览表名: {table}")
     with _engine_for(engine).begin() as conn:
-        conn.execute(text(f'CREATE TABLE IF NOT EXISTS "{table}" ({_overview_ddl()})'))
-        columns = {
-            row[1]
-            for row in conn.execute(text(f'PRAGMA table_info("{table}")')).fetchall()
-        }
-        if "fixturecode" not in columns:
-            conn.execute(text(
-                f"ALTER TABLE \"{table}\" ADD COLUMN fixturecode TEXT NOT NULL DEFAULT '/'"
-            ))
-        conn.execute(text(
-            f'CREATE INDEX IF NOT EXISTS "idx_{table}_barcode" ON "{table}"(barcode)'
-        ))
+        exists = conn.execute(text("SELECT count(*) FROM sqlite_master WHERE type='table' AND name=:name"), {"name": table}).scalar()
+        if not exists:
+            conn.execute(text(f'CREATE TABLE "{table}" ({_overview_ddl()})'))
+        else:
+            cols = [row[1] for row in conn.execute(text(f'PRAGMA table_info("{table}")')).fetchall()]
+            if cols != OVERVIEW_COLUMNS:
+                rows = [dict(row._mapping) for row in conn.execute(text(f'SELECT * FROM "{table}"')).fetchall()]
+                conn.execute(text(f'DROP TABLE "{table}"'))
+                conn.execute(text(f'CREATE TABLE "{table}" ({_overview_ddl()})'))
+                for row in rows:
+                    vals = {name: row.get(name) for name in OVERVIEW_COLUMNS if name != "id"}
+                    if row.get("id") is not None:
+                        vals["id"] = row["id"]
+                    names = ", ".join(vals)
+                    ph = ", ".join(f":{name}" for name in vals)
+                    conn.execute(text(f'INSERT INTO "{table}" ({names}) VALUES ({ph})'), vals)
+        conn.execute(text(f'CREATE INDEX IF NOT EXISTS "idx_{table}_barcode" ON "{table}"(barcode)'))
     return table
 
 

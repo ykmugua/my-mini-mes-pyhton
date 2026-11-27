@@ -7,25 +7,11 @@ from .base import Conn, with_read_conn
 
 
 def step_for_station(station: str, conn: Conn | None = None) -> dict | None:
-    """查设备所属工序、工序名。"""
+    """设备表不再维护工序；该接口保留兼容返回值，但始终返回 None。"""
     if conn is None:
         with with_read_conn() as c:
             return step_for_station(station, c)
-    from sqlalchemy import text
-
-    row = conn.execute(text(
-        "SELECT d.device_id, d.step_no, s.step_name "
-        "FROM devices d LEFT JOIN steps s ON d.step_no = s.step_no "
-        "WHERE d.device_id = :st"
-    ), {"st": station}).fetchone()
-    if row is None:
-        return None
-    m = dict(row)
-    return {
-        "device_id": m["device_id"],
-        "step_no": m["step_no"],
-        "step_name": m["step_name"],
-    }
+    return None
 
 
 def report_engine_for_station(station: str, conn: Conn | None = None):

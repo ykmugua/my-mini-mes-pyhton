@@ -13,7 +13,7 @@
                 <mxCell id="JK-ph_j6TXLIpDAEaD9r-3" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff3e0;strokeColor=#ef6c00;strokeWidth=2;fontSize=14;" value="Streamlit 界面层（内部工具）&#xa;查询 / 展示 / 修改&#xa;仅通过 HTTP 调 FastAPI" vertex="1">
                     <mxGeometry height="100" width="200" x="60" y="440" as="geometry"/>
                 </mxCell>
-                <mxCell id="JK-ph_j6TXLIpDAEaD9r-4" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e8f5e9;strokeColor=#2e7d32;strokeWidth=2;fontSize=13;align=left;spacingLeft=10;" value="&lt;b&gt;FastAPI 接入层（主要给机台）&lt;/b&gt;&lt;br&gt;POST /api/v1/test-results（V1.3 整单）&lt;br&gt;GET /api/program · POST /api/program/status&lt;br&gt;GET/POST /api/variable · GET /api/interlock&lt;br&gt;&lt;i&gt;参数校验 · 错误处理 · 不写 SQL&lt;/i&gt;" vertex="1">
+                <mxCell id="JK-ph_j6TXLIpDAEaD9r-4" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e8f5e9;strokeColor=#2e7d32;strokeWidth=2;fontSize=13;align=left;spacingLeft=10;" value="&lt;b&gt;FastAPI 接入层（主要给机台）&lt;/b&gt;&lt;br&gt;POST /api/v1/test-results（V1.3 整单）&lt;br&gt;GET /api/program · POST /api/program/status&lt;br&gt;GET/POST /api/variable · POST /api/workpiece/check-in&lt;br&gt;&lt;i&gt;参数校验 · 错误处理 · 不写 SQL&lt;/i&gt;" vertex="1">
                     <mxGeometry height="180" width="300" x="450" y="390" as="geometry"/>
                 </mxCell>
                 <mxCell id="JK-ph_j6TXLIpDAEaD9r-5" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f3e5f5;strokeColor=#6a1b9a;strokeWidth=2;fontSize=13;align=left;spacingLeft=10;" value="&lt;b&gt;Repository 数据访问层&lt;/b&gt;&lt;br&gt;workpiece/program/variable_repo&lt;br&gt;station_repo（看板只读）· upload_repo（幂等）&lt;br&gt;&lt;i&gt;唯一写 SQL · 事务边界&lt;/i&gt;" vertex="1">

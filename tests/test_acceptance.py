@@ -70,7 +70,7 @@ def test_acceptance_2_version_drift_alert(client, bench):
 def test_acceptance_3_interlock_rules(client, bench):
     """前道无 PASS 拒绝；前道 PASS 后放行；FAIL 工件后续设备拦截。"""
     denied = client.get(
-        "/api/interlock", params={"workpiece": "W1", "device_id": "D2"}
+        "/api/ui/interlock-check", params={"workpiece": "W1", "device_id": "D2"}
     )
     assert denied.status_code == 200
     body = denied.json()
@@ -80,7 +80,7 @@ def test_acceptance_3_interlock_rules(client, bench):
     # 前道 D1 上报 PASS 后，D2 放行
     push_result(client, "W1", "D1")
     allowed = client.get(
-        "/api/interlock", params={"workpiece": "W1", "device_id": "D2"}
+        "/api/ui/interlock-check", params={"workpiece": "W1", "device_id": "D2"}
     ).json()
     assert allowed["allowed"] is True
 
@@ -89,14 +89,14 @@ def test_acceptance_3_interlock_rules(client, bench):
     locked = services.workpiece_detail("W1")
     assert locked["locked"] is True
     later = client.get(
-        "/api/interlock", params={"workpiece": "W1", "device_id": "D3"}
+        "/api/ui/interlock-check", params={"workpiece": "W1", "device_id": "D3"}
     ).json()
     assert later["allowed"] is False
     assert "FAIL" in later["reason"]
 
     # 从未通过前道的工件同样是拒绝
     later = client.get(
-        "/api/interlock", params={"workpiece": "W-NO-PREV", "device_id": "D2"}
+        "/api/ui/interlock-check", params={"workpiece": "W-NO-PREV", "device_id": "D2"}
     ).json()
     assert later["allowed"] is False
     assert "D1" in later["reason"]
@@ -118,7 +118,7 @@ def test_acceptance_4_unlock_requires_reason_and_confirm(client, bench):
     assert result["status"] == "PENDING"
 
     allowed = client.get(
-        "/api/interlock", params={"workpiece": "W2", "device_id": "D2"}
+        "/api/ui/interlock-check", params={"workpiece": "W2", "device_id": "D2"}
     ).json()
     assert allowed["allowed"] is True
     assert "人工解锁" in allowed["reason"]

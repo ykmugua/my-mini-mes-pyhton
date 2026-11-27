@@ -24,7 +24,6 @@
       "device_id": "FCT-01",
       "device_name": "测试站-1",
       "device_model": "FCT",
-      "step_no": "",
       "enabled": true,
       "remark": "FCT测试站1号机台"
     },
@@ -32,7 +31,6 @@
       "device_id": "FCT-02",
       "device_name": "测试站-2",
       "device_model": "FCT",
-      "step_no": "",
       "enabled": true,
       "remark": "FCT测试站2号机台"
     },
@@ -40,7 +38,6 @@
       "device_id": "FCT-03",
       "device_name": "测试站-3",
       "device_model": "FCT",
-      "step_no": "",
       "enabled": true,
       "remark": "FCT测试站3号机台"
     },
@@ -48,7 +45,6 @@
       "device_id": "FCT-04",
       "device_name": "测试站-4",
       "device_model": "FCT",
-      "step_no": "",
       "enabled": true,
       "remark": "FCT测试站4号机台"
     },
@@ -56,7 +52,6 @@
       "device_id": "FCT-05",
       "device_name": "测试站-5",
       "device_model": "FCT",
-      "step_no": "",
       "enabled": true,
       "remark": "FCT测试站5号机台"
     },
@@ -64,7 +59,6 @@
       "device_id": "ICT-01",
       "device_name": "ICT站-1",
       "device_model": "ICT",
-      "step_no": "",
       "enabled": true,
       "remark": "ICT测试站1号机台"
     },
@@ -72,7 +66,6 @@
       "device_id": "NG-01",
       "device_name": "NG台",
       "device_model": "NG",
-      "step_no": "",
       "enabled": true,
       "remark": "NG缓存台"
     }
@@ -167,16 +160,12 @@
     {
       "product_model": "LITE",
       "product_name": "ADCU-LITE",
-      "test_program_name": "",
-      "test_program_path": "",
       "remark": "智驾单元的LITE型号",
       "enabled": 1
     },
     {
       "product_model": "MAX",
       "product_name": "ADCU-MAX",
-      "test_program_name": "",
-      "test_program_path": "",
       "remark": "智驾单元的MAX型号",
       "enabled": 1
     }

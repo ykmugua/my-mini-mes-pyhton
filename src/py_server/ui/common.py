@@ -5,6 +5,7 @@ from __future__ import annotations
 import streamlit as st
 
 from .. import config
+from .. import db
 from . import client
 ROLE_EDIT = "工程师（可编辑）"
 ROLE_VIEW = "只读"
@@ -69,25 +70,16 @@ def render_flash() -> None:
 
 
 def local_time(value) -> str:
-    """把 UTC ISO 时间转成本地展示（纯 Python，不访问数据库）。"""
-    from datetime import datetime
-
+    """把任意兼容时间转成本地统一展示。"""
     if not value:
         return "-"
-    try:
-        dt = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
-    except ValueError:
-        return str(value)
-    if dt.tzinfo is None:
-        return dt.strftime("%Y-%m-%d %H:%M:%S")
-    return dt.astimezone(config.timezone()).strftime("%Y-%m-%d %H:%M:%S")
+    parsed = db.parse_ts(value)
+    return db.format_time(parsed) if parsed else str(value)
 
 
 def now_text() -> str:
-    """执行 now_text。"""
-    from datetime import datetime, timezone
-
-    return datetime.now(timezone.utc).astimezone(config.timezone()).strftime("%Y-%m-%d %H:%M:%S")
+    """返回当前统一时间字符串。"""
+    return db.utc_now_iso()
 
 
 def api_base() -> str:

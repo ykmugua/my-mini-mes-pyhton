@@ -16,9 +16,9 @@ from ...schemas_v1 import TestResultUploadIn
 router = APIRouter(tags=["test_result"])
 
 
-def _envelope(success: bool, message: str, code: int, result=None) -> dict:
-    """执行 envelope。"""
-    return {"success": success, "message": message, "code": code, "result": result}
+def _envelope(success: bool, message: str, code: str) -> dict:
+    """返回设备端统一简化信封。"""
+    return {"success": success, "code": code, "message": message, "data": None}
 
 
 # ---------------------------------------------------------------------------
@@ -28,7 +28,7 @@ def _envelope(success: bool, message: str, code: int, result=None) -> dict:
 async def post_test_results_v1(
     payload: TestResultUploadIn,
 ):
-    """整单测试结果上报；按协议返回 {success,message,code,result} 信封。"""
+    """整单测试结果上报；按协议返回 {success,code,message,data} 信封。"""
     try:
         data = upload_execute(
             payload=payload.model_dump(),
@@ -36,10 +36,10 @@ async def post_test_results_v1(
             report_one=services.report_test_result,
         )
     except UploadValidationError as exc:
-        return JSONResponse(status_code=200, content=_envelope(False, str(exc), 40001))
+        return JSONResponse(status_code=200, content=_envelope(False, "测试报告上传失败", "400"))
     except UploadConflictError as exc:
-        return JSONResponse(status_code=200, content=_envelope(False, str(exc), 409))
+        return JSONResponse(status_code=200, content=_envelope(False, "测试报告上传失败", "400"))
     except Exception as exc:
-        return JSONResponse(status_code=200, content=_envelope(False, f"服务端内部错误：{exc}", 50000))
+        return JSONResponse(status_code=200, content=_envelope(False, "测试报告上传失败", "400"))
 
-    return _envelope(True, "success", 0, data)
+    return _envelope(True, "测试报告上次成功", "200")

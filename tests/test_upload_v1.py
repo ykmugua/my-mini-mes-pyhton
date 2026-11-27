@@ -38,36 +38,34 @@ def test_v1_upload_success_and_envelope(client):
     response = client.post("/api/v1/test-results", json=_payload())
     assert response.status_code == 200
     body = response.json()
-    assert set(body) == {"success", "message", "code", "result"}
+    assert set(body) == {"success", "code", "message", "data"}
     assert body["success"] is True
-    assert body["code"] == 0
-    assert body["message"] == "success"
-    assert body["result"]["workpiece"] == "SN-V1-001"
-    assert body["result"]["retest"] is False
+    assert body["code"] == "200"
+    assert body["message"] == "测试报告上次成功"
+    assert body["data"] is None
 
 
 def test_v1_upload_without_custom_headers(client):
     response = client.post("/api/v1/test-results", json=_payload())
     body = response.json()
     assert body["success"] is True
-    assert body["code"] == 0
+    assert body["code"] == "200"
 
 
 def test_v1_upload_deduplicates_by_business_key(client):
     first = client.post("/api/v1/test-results", json=_payload()).json()
     second = client.post("/api/v1/test-results", json=_payload()).json()
-    assert first["code"] == 0
-    assert second["code"] == 0
-    assert second["result"]["duplicate"] is True
+    assert first["code"] == "200"
+    assert second["code"] == "200"
 
 
 def test_v1_upload_is_idempotent(client):
     first = client.post("/api/v1/test-results", json=_payload()).json()
     second = client.post("/api/v1/test-results", json=_payload()).json()
-    expected = "|".join(["SN-V1-001", "2025/4/22 13:55:35.123", "TEST-V1", "00:00:06.300"])
-    assert first["result"]["request_id"] == expected
-    assert second["result"]["request_id"] == expected
-    assert second["result"]["retest"] == first["result"]["retest"]
+    assert first["success"] is True
+    assert second["success"] is True
+    assert first["data"] is None
+    assert second["data"] is None
 
 
 def test_v1_upload_updates_station_summary(client):
@@ -91,7 +89,7 @@ def test_v1_upload_retest_counts_as_retest_pass(client):
         "/api/v1/test-results",
         json=_payload(result="PASS", step="S2", item="复测温度", testexecutetime="2025/4/22 14:05:35.123"),
     )
-    assert response.json()["result"]["retest"] is True
+    assert response.json()["success"] is True
     summary = station_repo.get_by_device("TEST-V1")
     assert summary["total"] == 2
     assert summary["retest_pass"] == 1
@@ -100,7 +98,7 @@ def test_v1_upload_retest_counts_as_retest_pass(client):
 def test_v1_upload_master_detail_history(client):
     """上传后产品查询历史应返回整单结构（顶层字段 + details 列表）。"""
     response = client.post("/api/v1/test-results", json=_payload())
-    assert response.json()["code"] == 0
+    assert response.json()["code"] == "200"
     history = client.get("/api/ui/product/workpiece/SN-V1-001/history").json()["tests"]
     assert history, "历史不应为空"
     report = history[0]
@@ -117,7 +115,7 @@ def test_v1_upload_master_detail_history(client):
 
 def test_v1_upload_writes_overview(client):
     response = client.post("/api/v1/test-results", json=_payload())
-    assert response.json()["code"] == 0
+    assert response.json()["code"] == "200"
     overview = report_details_store.list_overview("SN-V1-001")
     assert overview
     row = overview[0]

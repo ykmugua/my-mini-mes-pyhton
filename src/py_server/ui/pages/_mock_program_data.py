@@ -28,7 +28,7 @@ def _mock_program_pulls(
                 "sha256": program["sha256"],
                 "pulled_at": (
                     MOCK_LOG_TIME - timedelta(minutes=index * 11)
-                ).strftime("%Y-%m-%d %H:%M:%S"),
+                ).strftime("%Y/%m/%d %H:%M:%S.") + "000",
             }
         )
     return records
@@ -63,7 +63,7 @@ def _mock_program_status_logs(
                 "reason": reason,
                 "reported_at": (
                     MOCK_LOG_TIME - timedelta(minutes=index * 13 + 3)
-                ).strftime("%Y-%m-%d %H:%M:%S"),
+                ).strftime("%Y/%m/%d %H:%M:%S.") + "000",
             }
         )
     return records
@@ -232,15 +232,11 @@ def initial_program_state() -> dict[str, list[dict[str, Any]]]:
             {
                 "product_model": "P-1001",
                 "product_name": "电源模块",
-                "test_program_name": "TEST_MAIN",
-                "test_program_path": "D:/test/P-1001/main.exe",
                 "remark": "",
             },
             {
                 "product_model": "P-1002",
                 "product_name": "控制板",
-                "test_program_name": "",
-                "test_program_path": "",
                 "remark": "待配置",
             },
         ],

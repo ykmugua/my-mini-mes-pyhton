@@ -18,16 +18,22 @@ from .pages.constants import (
 
 
 def _locked_frame(locked: list[dict]) -> pd.DataFrame:
-    """执行 locked_frame。"""
+    """锁定产品列表，字段与在制产品保持一致。"""
     return pd.DataFrame(
         [
             {
-                "工件码": item["workpiece"],
-                "产品型号": item.get("product") or "",
-                "当前设备": item.get("current_device") or "",
-                "工件状态": item.get("status") or "",
-                "锁定原因": item["lock_reason"],
-                "锁定时间": common.local_time(item.get("locked_at")),
+                "barcode": item.get("barcode") or item.get("workpiece") or "",
+                "componentcode": item.get("componentcode") or "",
+                "process_code": item.get("process_code") or "",
+                "traycode": item.get("traycode") or "/",
+                "tray_slot": item.get("tray_slot") or "/",
+                "board_status": item.get("board_status") or "",
+                "current_step": item.get("current_step") or "",
+                "next_step": item.get("next_step") or "",
+                "last_report_device": item.get("last_report_device") or "",
+                "last_report_note": item.get("last_report_note") or "",
+                "updated_at": item.get("updated_at") or "",
+                "lock_reason": item.get("lock_reason") or "",
             }
             for item in locked
         ]
@@ -36,64 +42,130 @@ def _locked_frame(locked: list[dict]) -> pd.DataFrame:
 
 def _render_locked(locked: list[dict]) -> None:
     """执行 render_locked。"""
-    st.subheader("当前锁定工件")
+    st.subheader("当前锁定产品")
     if not locked:
-        st.success("当前没有锁定工件。")
+        st.success("当前没有锁定产品。")
         return
-    st.dataframe(_locked_frame(locked), hide_index=True, width="stretch", alt="当前锁定工件列表")
+    st.dataframe(
+        _locked_frame(locked),
+        hide_index=True,
+        width="stretch",
+        alt="当前锁定产品列表",
+    )
 
 
 def _render_unlock(locked: list[dict]) -> None:
     """执行 render_unlock。"""
-    st.subheader("人工解锁")
-    st.caption("解锁必须填写原因并勾选确认；解锁后可重新判定放行，动作全部留痕。")
+    st.subheader("解锁产品")
+    st.caption("选择锁定产品和解锁后工序；可直接解锁，也可解锁后按所选工序重新入站。")
     if not locked:
-        st.caption("暂无需要解锁的工件。")
-        return
-    labels = {
-        f"{item['workpiece']} · {item.get('current_device') or '-'} · {item['lock_reason']}": item[
-            "workpiece"
-        ]
-        for item in locked
-    }
-    with st.form("unlock_form"):
-        choice = st.selectbox(
-            "选择工件", list(labels), key="unlock_choice", disabled=not common.can_edit()
-        )
-        col1, col2 = st.columns([1, 2])
-        unlocker = col1.text_input(
-            "解锁人",
-            value=common.operator(),
-            key="unlock_operator",
-            disabled=not common.can_edit(),
-        )
-        reason = col2.text_input(
-            "解锁原因（必填）",
-            key="unlock_reason",
-            placeholder="例如：返修后复测确认，经产线负责人同意解锁",
-            disabled=not common.can_edit(),
-        )
-        confirmed = st.checkbox(
-            "我已确认该工件可以放行，本次操作将记录解锁人、原因和时间",
-            key="unlock_confirm",
-            disabled=not common.can_edit(),
-        )
-        submitted = st.form_submit_button(
-            "执行解锁", type="primary", disabled=not common.can_edit()
-        )
-    if not submitted:
+        st.caption("暂无需要解锁的产品。")
         return
     try:
-        result = client.unlock_workpiece(
-            workpiece=labels[choice],
-            operator=unlocker,
-            reason=reason,
-            confirmed=confirmed,
+        steps = [item for item in client.step_options() if bool(item.get("enabled", True))]
+    except ServiceError as exc:
+        st.error(f"读取工序失败：{exc}")
+        return
+    if not steps:
+        st.error("没有可用工序，无法执行解锁")
+        return
+    step_labels = {
+        f"{item['step_no']} - {item.get('step_name') or ''}".rstrip(" -"): str(item["step_no"])
+        for item in steps
+    }
+    labels = {
+        f"{item.get('barcode') or item.get('workpiece')} · {item.get('componentcode') or '-'} · "
+        f"{item.get('current_step') or '-'} · {item.get('lock_reason') or ''}": item
+        for item in locked
+    }
+    choice = st.selectbox(
+        "选择锁定产品",
+        list(labels),
+        key="unlock_choice",
+        disabled=not common.can_edit(),
+    )
+    selected = labels[choice]
+    current_step = str(selected.get("current_step") or "")
+    step_keys = list(step_labels)
+    default_index = next(
+        (index for index, key in enumerate(step_keys) if step_labels[key] == current_step),
+        0,
+    )
+    target_label = st.selectbox(
+        "解锁后工序",
+        step_keys,
+        index=default_index,
+        key="unlock_target_step",
+        disabled=not common.can_edit(),
+    )
+    col1, col2 = st.columns([1, 2])
+    unlocker = col1.text_input(
+        "解锁人",
+        value=common.operator(),
+        key="unlock_operator",
+        disabled=not common.can_edit(),
+    )
+    reason = col2.text_input(
+        "解锁原因（必填）",
+        key="unlock_reason",
+        placeholder="例如：返修后复测确认，经产线负责人同意解锁",
+        disabled=not common.can_edit(),
+    )
+    confirmed = st.checkbox(
+        "我已确认该产品可以放行，本次操作将记录解锁人、原因和时间",
+        key="unlock_confirm",
+        disabled=not common.can_edit(),
+    )
+    target_step = step_labels[target_label]
+    barcode = str(selected.get("barcode") or selected.get("workpiece") or "")
+    active_now = bool(selected.get("active"))
+    c1, c2 = st.columns(2)
+    unlock_clicked = c1.button(
+        "执行解锁",
+        type="primary",
+        key="unlock_submit",
+        disabled=not common.can_edit(),
+    )
+    reentry_clicked = c2.button(
+        "解锁并重新入站",
+        key="unlock_and_reentry",
+        disabled=not common.can_edit() or active_now,
+        help="产品当前已在制，不能重复入站" if active_now else "解锁后按所选工序重新进入在制",
+    )
+    if not unlock_clicked and not reentry_clicked:
+        return
+    if not confirmed:
+        st.error("请勾选确认")
+        return
+    if not unlocker.strip() or not reason.strip():
+        st.error("解锁人和解锁原因不能为空")
+        return
+    try:
+        client.unlock_workpiece(
+            workpiece=barcode,
+            operator=unlocker.strip(),
+            reason=reason.strip(),
+            confirmed=True,
+            target_step=target_step,
+            note=reason.strip(),
         )
+        if reentry_clicked:
+            traycode = str(selected.get("traycode") or "/")
+            tray_slot = str(selected.get("tray_slot") or "/")
+            client.manual_inbound(
+                product=str(selected.get("componentcode") or ""),
+                process_code=str(selected.get("process_code") or "") or None,
+                step_no=target_step,
+                traycode=traycode,
+                barcodes=[barcode],
+                operator=unlocker.strip(),
+                tray_slots=[tray_slot] if traycode != "/" and tray_slot != "/" else None,
+            )
     except ServiceError as exc:
         st.error(str(exc))
     else:
-        common.flash("success", f"工件 {result['workpiece']} 已解锁，可重新判定放行。")
+        action = "解锁并重新入站" if reentry_clicked else "解锁"
+        common.flash("success", f"产品 {barcode} 已{action}，工序 {target_step}。")
         st.rerun()
 
 

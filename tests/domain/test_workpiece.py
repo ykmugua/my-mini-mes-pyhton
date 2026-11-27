@@ -11,17 +11,17 @@ def _locked() -> Workpiece:
         workpiece="W1",
         status=WorkpieceStatus.FAIL,
         lock_reason="测试项 绝缘 FAIL",
-        locked_at="2026-11-16T00:00:00+00:00",
+        locked_at="2026/11/16 00:00:00.000",
         current_device="D2",
     )
 
 
 def test_unlock_returns_pending_and_outcome():
     wp = _locked()
-    outcome = wp.unlock(operator="张工", reason="返修确认", confirmed=True, now="2026-11-16T01:00:00+00:00")
+    outcome = wp.unlock(operator="张工", reason="返修确认", confirmed=True, now="2026/11/16 01:00:00.000")
     assert wp.status is WorkpieceStatus.PENDING
     assert wp.lock_reason is None
-    assert wp.manual_release_at == "2026-11-16T01:00:00+00:00"
+    assert wp.manual_release_at == "2026/11/16 01:00:00.000"
     assert outcome.workpiece == "W1"
     assert outcome.previous_lock_reason == "测试项 绝缘 FAIL"
     assert outcome.operator == "张工"

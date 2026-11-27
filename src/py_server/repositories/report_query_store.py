@@ -136,7 +136,7 @@ def query_reports(
     fixturecode: str | None = None,
     result: str | None = None,
     board_status: str | None = None,
-    current_step: str | None = None,
+    isfinalreport: str | None = None,
     last_report_device: str | None = None,
     limit: int = 200,
 ) -> list[dict]:
@@ -153,14 +153,14 @@ def query_reports(
             continue
         if result and str(row.get("result") or "") != result:
             continue
+        if isfinalreport and str(row.get("isfinalreport") or "false").lower() != isfinalreport.lower():
+            continue
         if last_report_device and str(row.get("station") or "") != last_report_device:
             continue
         item = dict(row)
         report_step = str(item.get("step_no") or "").strip()
         item["step_no"] = report_step or (step_no or "")
         item["source_db"] = config.details_db_path().name
-        if current_step and str(item["step_no"]) != str(current_step):
-            continue
         if step_no and report_step and report_step != str(step_no):
             continue
         if board_status:

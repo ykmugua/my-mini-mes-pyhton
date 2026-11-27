@@ -88,6 +88,7 @@ class WorkbenchInboundIn(BaseModel):
     step_no: str = Field(min_length=1)
     traycode: str = ""
     barcodes: list[str] = Field(default_factory=list)
+    tray_slots: list[str] = Field(default_factory=list)
     operator: str = Field(min_length=1)
 
 

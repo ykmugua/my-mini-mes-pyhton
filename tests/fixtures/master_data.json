@@ -29,7 +29,6 @@
     {
       "device_id": "TEST-01",
       "device_name": "上电测试机",
-      "step_no": "1",
       "enabled": true,
       "remark": "一线上电测试工位",
       "device_model": "DM-T01"
@@ -37,7 +36,6 @@
     {
       "device_id": "TEST-01B",
       "device_name": "上电测试机B",
-      "step_no": "1",
       "enabled": true,
       "remark": "一线上电备用机",
       "device_model": "DM-01B"
@@ -45,7 +43,6 @@
     {
       "device_id": "TEST-02",
       "device_name": "功能测试机",
-      "step_no": "2",
       "enabled": true,
       "remark": "一线功能测试工位",
       "device_model": "DM-T02"
@@ -53,7 +50,6 @@
     {
       "device_id": "TEST-02B",
       "device_name": "功能测试机B",
-      "step_no": "2",
       "enabled": true,
       "remark": "二线功能测试工位",
       "device_model": "DM-02B"
@@ -61,7 +57,6 @@
     {
       "device_id": "TEST-03",
       "device_name": "终检机",
-      "step_no": "3",
       "enabled": true,
       "remark": "一线终检工位",
       "device_model": "DM-T03"
@@ -69,7 +64,6 @@
     {
       "device_id": "TEST-03B",
       "device_name": "终检机B",
-      "step_no": "3",
       "enabled": true,
       "remark": "二线终检工位",
       "device_model": "DM-03B"
@@ -77,7 +71,6 @@
     {
       "device_id": "TEST-04",
       "device_name": "备用上电测试机",
-      "step_no": "1",
       "enabled": false,
       "remark": "备用设备，当前停用",
       "device_model": "DM-T04"
@@ -178,16 +171,12 @@
     {
       "product_model": "P-1001",
       "product_name": "电源模块",
-      "test_program_name": "TEST_MAIN",
-      "test_program_path": "D:/test/P-1001/main.exe",
       "remark": "",
       "enabled": true
     },
     {
       "product_model": "P-1002",
       "product_name": "控制板",
-      "test_program_name": "",
-      "test_program_path": "",
       "remark": "待配置",
       "enabled": true
     }

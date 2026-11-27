@@ -115,8 +115,8 @@ barcode + testexecutetime + station + testlongtime
 | `LowerValue`    | string | **是** | `0.90`         | 下限值（字段名即 `LowerValue`，字符串原样） |
 | `MeasureValue`  | string | **是** | `1.22`         | 实测值（字符串原样）                          |
 | `TestResult`    | string | **是** | `false`        | 单项判定，枚举 `"true"` / `"false"`       |
-| `TestBeginTime` | string | **是** | `13:55:35.123` | 步骤开始时间 `HH:mm:ss.SSS`（无日期）       |
-| `TestEndTime`   | string | **是** | `13:55:37.123` | 步骤结束时间 `HH:mm:ss.SSS`（无日期）       |
+| `TestBeginTime` | string | **是** | `13:55:35.123` | 步骤开始时间 `HH:mm:ss.SSS`（无日期） |
+| `TestEndTime`   | string | **是** | `13:55:37.123` | 步骤结束时间 `HH:mm:ss.SSS`（无日期） |
 
 ### 3.4 请求体示例
 
@@ -202,23 +202,19 @@ barcode + testexecutetime + station + testlongtime
 
 |   code   | 含义                                         | 客户端是否重试 |
 | :-------: | -------------------------------------------- | :------------: |
-|   `0`   | 成功                                         |       —       |
-| `40001` | 参数校验失败（`barcode` 为空、格式错误等） |   否，修数据   |
-| `40002` | 明细数据非法                                 |   否，修数据   |
-|  `409`  | 重复提交（业务幂等键已处理）                |  否，视为成功  |
-| `50000` | 服务端内部错误                               |  **是**  |
-| `50300` | 服务繁忙/超时                                |  **是**  |
+| `"200"` | 成功 | — |
+| `"400"` | 上传失败；参数错误、明细非法或服务端异常 | 否，修正数据后重传 |
 
-服务端已实现码表：`0` 成功 / `40001` 参数错误 / `40002` 明细非法 / `409` 重复提交（视为成功）/ `50000` 内部错误。
+服务端已实现码表：`"200"` 成功 / `"400"` 上传失败。
 
 ### 5.4 成功响应示例
 
 ```json
 {
   "success": true,
-  "message": "success",
-  "code": 0,
-  "result": null
+  "code": "200",
+  "message": "测试报告上次成功",
+  "data": null
 }
 ```
 
@@ -227,9 +223,9 @@ barcode + testexecutetime + station + testlongtime
 ```json
 {
   "success": false,
-  "message": "barcode 不能为空",
-  "code": 40001,
-  "result": null
+  "code": "400",
+  "message": "测试报告上传失败",
+  "data": null
 }
 ```
 

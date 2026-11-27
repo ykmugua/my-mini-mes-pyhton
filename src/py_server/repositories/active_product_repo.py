@@ -10,6 +10,7 @@ from typing import Any
 from sqlalchemy import delete, select
 
 from .. import db, engine as eg
+from ..constants import is_missing_traycode
 from .base import Conn, rows_to_dicts, with_conn, with_read_conn
 
 
@@ -21,11 +22,14 @@ def _active():
 def upsert(row: dict[str, Any], *, conn: Conn | None = None) -> None:
     """新增或更新一条当前在制产品记录。"""
     table = _active()
+    traycode = str(row.get("traycode") or "/")
     values = {
         "barcode": str(row.get("barcode") or ""),
         "componentcode": str(row.get("componentcode") or ""),
-        "traycode": str(row.get("traycode") or ""),
+        "traycode": "/" if is_missing_traycode(traycode) else traycode,
         "board_status": str(row.get("board_status") or "normal"),
+        "tray_slot": str(row.get("tray_slot") or "/"),
+        "process_code": str(row.get("process_code") or ""),
         "current_step": str(row.get("current_step") or ""),
         "next_step": str(row.get("next_step") or ""),
         "last_report_device": str(row.get("last_report_device") or ""),
@@ -71,6 +75,17 @@ def list_active(
         return rows_to_dicts(conn.execute(stmt).fetchall())
     with with_read_conn() as own_conn:
         return list_active(barcode=barcode, traycode=traycode, conn=own_conn)
+
+
+def get_active(barcode: str, *, conn: Conn | None = None) -> dict | None:
+    """按条码精确查询当前在制产品。"""
+    table = _active()
+    stmt = select(table).where(table.c.barcode == barcode).limit(1)
+    if conn is not None:
+        row = conn.execute(stmt).fetchone()
+        return dict(row) if row is not None else None
+    with with_read_conn() as own_conn:
+        return get_active(barcode, conn=own_conn)
 
 
 def delete_barcodes(barcodes: list[str], *, conn: Conn | None = None) -> int:

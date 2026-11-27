@@ -188,7 +188,6 @@ def seed_test_reports() -> None:
         product_flow_store.reset_all()
         conn.execute(delete(test_reports))
         for report, details in reports:
-            step_info = report_route.step_for_station(report["station"], conn)
             main_report = {k: v for k, v in report.items() if k != "traycode"}
             main_report.pop("step_no", None)
             detail_table = report_repo.insert_report(
@@ -203,18 +202,17 @@ def seed_test_reports() -> None:
                 details_table=detail_table,
             )
             # 产品流转库：每个产品三次流转
-            if step_info:
-                product_flow_store.upsert_flow(
-                    barcode=report["barcode"], componentcode=report["componentcode"],
-                    traycode=traycode,
-                    board_status=("normal" if report["result"] == "PASS" else "lock")
-                        if report["isfinalreport"] == "true" else "normal",
-                    step_no=str(step_info["step_no"]),
-                    next_step=str(step_index + 1) if step_index < len(STEP_STATIONS) else "END",
-                    device=report["station"],
-                    note=("test pass" if report["result"] == "PASS" else "test fail"),
-                    changed_at=report["created_at"],
-                )
+            product_flow_store.upsert_flow(
+                barcode=report["barcode"], componentcode=report["componentcode"],
+                traycode=traycode,
+                board_status=("normal" if report["result"] == "PASS" else "lock")
+                    if report["isfinalreport"] == "true" else "normal",
+                step_no=str(report["step_no"]),
+                next_step=str(step_index + 1) if step_index < len(STEP_STATIONS) else "END",
+                device=report["station"],
+                note=("test pass" if report["result"] == "PASS" else "test fail"),
+                changed_at=report["created_at"],
+            )
             # 同步工件主表
             workpiece_repo.insert_workpiece_ignore(
                 conn, workpiece=report["barcode"], product="P-1001", now=report["created_at"]

@@ -116,7 +116,7 @@ def interlock_check(workpiece: str, device_id: str | None, product: str | None) 
     """执行 interlock_check。"""
     return _request(
         "GET",
-        "/api/interlock",
+        "/api/ui/interlock-check",
         params={"workpiece": workpiece, "device_id": device_id, "product": product},
     )
 
@@ -313,7 +313,7 @@ def report_query(
     fixturecode: str | None = None,
     result: str | None = None,
     board_status: str | None = None,
-    current_step: str | None = None,
+    isfinalreport: str | None = None,
     last_report_device: str | None = None,
 ) -> list[dict]:
     """上报query。"""
@@ -332,8 +332,8 @@ def report_query(
         params["result"] = result
     if board_status:
         params["board_status"] = board_status
-    if current_step:
-        params["current_step"] = current_step
+    if isfinalreport:
+        params["isfinalreport"] = isfinalreport
     if last_report_device:
         params["last_report_device"] = last_report_device
     return _request("GET", "/api/ui/product/report-query", params=params or None)
@@ -357,9 +357,11 @@ def product_flow_overview(
     barcode: str | None = None,
     componentcode: str | None = None,
     traycode: str | None = None,
+    tray_slot: str | None = None,
     device: str | None = None,
     board_status: str | None = None,
     current_step: str | None = None,
+    process_code: str | None = None,
 ) -> list[dict]:
     """执行 product_flow_overview。"""
     params = {}
@@ -369,12 +371,16 @@ def product_flow_overview(
         params["componentcode"] = componentcode
     if traycode:
         params["traycode"] = traycode
+    if tray_slot:
+        params["tray_slot"] = tray_slot
     if device:
         params["device"] = device
     if board_status:
         params["board_status"] = board_status
     if current_step:
         params["current_step"] = current_step
+    if process_code:
+        params["process_code"] = process_code
     return _request("GET", "/api/ui/product/flow-overview", params=params or None)
 
 
@@ -441,6 +447,7 @@ def manual_inbound(
     traycode: str | None,
     barcodes: list[str],
     operator: str,
+    tray_slots: list[str] | None = None,
 ) -> dict:
     """执行 manual_inbound。"""
     return _request(
@@ -452,6 +459,7 @@ def manual_inbound(
             "step_no": step_no,
             "traycode": traycode,
             "barcodes": barcodes,
+            "tray_slots": tray_slots or [],
             "operator": operator,
         },
     )

@@ -84,7 +84,7 @@ def test_program_file_publish_and_download(client, bench):
 
 def test_interlock_devices_without_binding_or_bad_program(client, bench):
     unknown = client.get(
-        "/api/interlock", params={"workpiece": "W1", "device_id": "D9"}
+        "/api/ui/interlock-check", params={"workpiece": "W1", "device_id": "D9"}
     ).json()
     assert unknown["allowed"] is False
     assert "未配置程序绑定" in unknown["reason"]
@@ -99,13 +99,13 @@ def test_interlock_devices_without_binding_or_bad_program(client, bench):
             "sha256_ok": False,
         },
     )
-    bad = client.get("/api/interlock", params={"workpiece": "W1", "device_id": "D2"}).json()
+    bad = client.get("/api/ui/interlock-check", params={"workpiece": "W1", "device_id": "D2"}).json()
     assert bad["allowed"] is False
     assert "不可信" in bad["reason"]
 
 
 def test_interlock_unknown_workpiece_without_upstream_allowed(client, bench):
-    body = client.get("/api/interlock", params={"workpiece": "W-NEW", "device_id": "D1"}).json()
+    body = client.get("/api/ui/interlock-check", params={"workpiece": "W-NEW", "device_id": "D1"}).json()
     assert body["allowed"] is True
 
 
@@ -113,13 +113,13 @@ def test_interlock_without_device_uses_current_device(client, bench):
     push_result(client, "W-LOCK", "D2", test_item="绝缘", result="FAIL")
     detail = services.workpiece_detail("W-LOCK")
     assert detail["current_device"] == "D2"
-    body = client.get("/api/interlock", params={"workpiece": "W-LOCK", "device_id": "D2"}).json()
+    body = client.get("/api/ui/interlock-check", params={"workpiece": "W-LOCK", "device_id": "D2"}).json()
     assert body["allowed"] is False
     assert "FAIL" in body["reason"]
 
 
 def test_interlock_without_device_and_no_record_is_denied(client, bench):
-    body = client.get("/api/interlock", params={"workpiece": "UNKNOWN"}).json()
+    body = client.get("/api/ui/interlock-check", params={"workpiece": "UNKNOWN"}).json()
     assert body["allowed"] is False
     assert "device_id" in body["reason"]
 
@@ -158,14 +158,14 @@ def test_unlock_then_new_test_item_fail_relocks(client, bench):
     assert services.list_locked_workpieces()
     services.unlock_workpiece("W-RE", "测试员", "返修复测", True)
     allowed = client.get(
-        "/api/interlock", params={"workpiece": "W-RE", "device_id": "D2"}
+        "/api/ui/interlock-check", params={"workpiece": "W-RE", "device_id": "D2"}
     ).json()
     assert allowed["allowed"] is True
 
     # 新的测试项上报 FAIL，会重新锁定
     push_result(client, "W-RE", "D1", test_item="电压复测", result="FAIL")
     denied = client.get(
-        "/api/interlock", params={"workpiece": "W-RE", "device_id": "D2"}
+        "/api/ui/interlock-check", params={"workpiece": "W-RE", "device_id": "D2"}
     ).json()
     assert denied["allowed"] is False
 
@@ -262,7 +262,7 @@ def test_backfilled_old_result_does_not_override_newer_state(client, bench):
     assert services.list_locked_workpieces() == []
 
     allowed = client.get(
-        "/api/interlock", params={"workpiece": "W-BF", "device_id": "D2"}
+        "/api/ui/interlock-check", params={"workpiece": "W-BF", "device_id": "D2"}
     ).json()
     assert allowed["allowed"] is True
 

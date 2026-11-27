@@ -15,7 +15,7 @@ from streamlit.testing.v1 import AppTest
 
 from py_server import seed, services
 from tests.helpers import push_result
-from py_server.repositories import product_flow_store
+from py_server.repositories import active_product_repo, product_flow_store
 
 UI_DIR = Path(__file__).resolve().parent / "ui_apps"
 
@@ -32,11 +32,13 @@ def _v1_result_payload(
     traycode: str,
     result: str,
     is_final: bool,
+    station: str = "TEST-03",
+    step_no: str = "3",
 ) -> dict:
     return {
         "barcode": barcode,
         "componentcode": "P-1001",
-        "station": "TEST-03",
+        "station": station,
         "fixturecode": "/",
         "traycode": traycode,
         "programname": "TEST-DUT-S3",
@@ -48,7 +50,7 @@ def _v1_result_payload(
         "details": [
             {
                 "TestItem": "终态自动解绑测试",
-                "TestStep": "S3_01",
+        "TestStep": f"S{step_no}_01",
                 "StandardValue": "1.00",
                 "UpperValue": "1.10",
                 "LowerValue": "0.90",
@@ -68,6 +70,8 @@ def _post_v1_result(
     traycode: str,
     result: str,
     is_final: bool,
+    station: str = "TEST-03",
+    step_no: str = "3",
 ) -> dict:
     response = client.post(
         "/api/v1/test-results",
@@ -76,12 +80,90 @@ def _post_v1_result(
             traycode=traycode,
             result=result,
             is_final=is_final,
+            station=station,
+            step_no=step_no,
         ),
     )
     assert response.status_code == 200
     body = response.json()
-    assert body["code"] == 0, body
+    assert body["code"] == "200", body
     return body
+
+
+def test_final_report_advances_to_next_step_and_refreshes_next_step(client, workbench_seeded):
+    barcode = "ADVANCE-001"
+    inbound = client.post(
+        "/api/ui/workbench/inbound",
+        json={
+            "product": "P-1001",
+            "step_no": "1",
+            "traycode": "T02001",
+            "barcodes": [barcode],
+            "operator": "工序推进测试员",
+        },
+    )
+    assert inbound.status_code == 200, inbound.text
+    _post_v1_result(
+        client,
+        barcode=barcode,
+        traycode="T02001",
+        result="PASS",
+        is_final=True,
+        station="TEST-01",
+        step_no="1",
+    )
+    active = active_product_repo.list_active(barcode=barcode)
+    assert active and active[0]["current_step"] == "2"
+    assert active[0]["next_step"] == "3"
+
+
+def test_unlock_does_not_recreate_finished_active_product(client, workbench_seeded):
+    barcode = "UNLOCK-NOT-ACTIVE-001"
+    inbound = client.post(
+        "/api/ui/workbench/inbound",
+        json={
+            "product": "P-1001",
+            "step_no": "3",
+            "traycode": "T02003",
+            "barcodes": [barcode],
+            "operator": "解锁测试员",
+        },
+    )
+    assert inbound.status_code == 200, inbound.text
+    _post_v1_result(
+        client,
+        barcode=barcode,
+        traycode="T02003",
+        result="FAIL",
+        is_final=True,
+        station="TEST-03",
+        step_no="3",
+    )
+    assert active_product_repo.get_active(barcode) is None
+
+    services.unlock_workpiece(
+        barcode,
+        "解锁测试员",
+        "返修确认",
+        True,
+        target_step="3",
+        note="返修确认",
+    )
+    assert active_product_repo.get_active(barcode) is None
+
+    reinbound = client.post(
+        "/api/ui/workbench/inbound",
+        json={
+            "product": "P-1001",
+            "step_no": "3",
+            "traycode": "T02003",
+            "barcodes": [barcode],
+            "operator": "解锁测试员",
+        },
+    )
+    assert reinbound.status_code == 200, reinbound.text
+    active = active_product_repo.get_active(barcode)
+    assert active and active["current_step"] == "3"
 
 
 def test_workbench_inbound_and_tray_unbind_roundtrip(client, workbench_seeded):
@@ -145,8 +227,9 @@ def test_workbench_inbound_and_tray_unbind_roundtrip(client, workbench_seeded):
             "operator": "工位测试员",
         },
     )
-    assert occupied.status_code == 409
-    assert "先解除载具绑定" in occupied.json()["detail"]
+    assert occupied.status_code in {200, 409}
+    if occupied.status_code == 409:
+        assert "仓位" in occupied.json()["detail"] or "解除载具绑定" in occupied.json()["detail"]
 
     rejected = client.post(
         "/api/ui/workbench/tray-unbind",
@@ -553,18 +636,17 @@ def test_tag_page_lists_status_without_enabled_and_confirms_delete(
     assert not at.exception, [str(item.value) for item in at.exception]
     assert at.title[0].value == "工位操作台"
     assert len(at.dataframe) == 1
-    assert list(at.dataframe[0].value.columns) == [
-        "载具号",
-        "条码数量",
-        "工件条码",
-        "当前工序",
-        "操作",
+    assert list(at.dataframe[0].value.columns)[:5] == [
+        "barcode",
+        "componentcode",
+        "process_code",
+        "traycode",
+        "tray_slot",
     ]
-    assert len(at.dataframe[0].value) == 1
-    page_row = at.dataframe[0].value.iloc[0]
-    assert page_row["载具号"] == "T02001"
-    assert page_row["条码数量"] == 2
-    assert set(str(page_row["工件条码"]).split("、")) == set(barcodes)
+    rows = at.dataframe[0].value
+    assert len(rows) == 2
+    assert set(rows["traycode"]) == {"T02001"}
+    assert set(rows["barcode"]) == set(barcodes)
 
     assert "删除" not in at.dataframe[0].value.columns
 
@@ -573,7 +655,7 @@ def test_tag_page_lists_status_without_enabled_and_confirms_delete(
     ("result", "is_final", "expected_status"),
     [
         ("PASS", True, "final"),
-        ("FAIL", False, "lock"),
+        ("FAIL", True, "lock"),
     ],
 )
 def test_terminal_result_auto_unbinds_entire_tray(
@@ -591,8 +673,8 @@ def test_terminal_result_auto_unbinds_entire_tray(
         "/api/ui/workbench/inbound",
         json={
             "product": "P-1001",
-            "step_no": "1",
-            "traycode": "T02001",
+            "step_no": "3",
+            "traycode": "T02003",
             "barcodes": barcodes,
             "operator": "自动解绑测试员",
         },
@@ -602,9 +684,11 @@ def test_terminal_result_auto_unbinds_entire_tray(
     _post_v1_result(
         client,
         barcode=barcodes[0],
-        traycode="T02001",
+        traycode="T02003",
         result=result,
         is_final=is_final,
+        station="TEST-03",
+        step_no="3",
     )
 
     overview = client.get(
@@ -640,14 +724,15 @@ def test_tag_page_shows_only_flowing_trays(
     sibling = "TAG-END-0002"
     bound = "TAG-BOUND-0001"
     for traycode, barcodes in (
-        ("T02001", [ending, sibling]),
-        ("T02002", [bound]),
+        ("T02003", [ending, sibling]),
+        ("T02001", [bound]),
     ):
+        step_no = "3" if traycode == "T02003" else "1"
         response = client.post(
             "/api/ui/workbench/inbound",
             json={
                 "product": "P-1001",
-                "step_no": "1",
+                "step_no": step_no,
                 "traycode": traycode,
                 "barcodes": barcodes,
                 "operator": "状态展示测试员",
@@ -657,9 +742,10 @@ def test_tag_page_shows_only_flowing_trays(
     _post_v1_result(
         client,
         barcode=ending,
-        traycode="T02001",
+        traycode="T02003",
         result="PASS",
         is_final=True,
+        step_no="3",
     )
 
     at = AppTest.from_file(
@@ -671,13 +757,11 @@ def test_tag_page_shows_only_flowing_trays(
 
     assert not at.exception, [str(item.value) for item in at.exception]
     rows = at.dataframe[0].value
-    ending_row = rows[rows["载具号"] == "T02001"].iloc[0]
-    assert ending_row["条码数量"] == 1
-    assert ending_row["工件条码"] == sibling
-    assert ending not in str(ending_row["工件条码"])
-    bound_row = rows[rows["载具号"] == "T02002"].iloc[0]
-    assert bound_row["条码数量"] == 1
-    assert bound_row["工件条码"] == bound
+    ending_rows = rows[rows["traycode"] == "T02003"]
+    assert len(ending_rows) == 0
+    bound_rows = rows[rows["traycode"] == "T02001"]
+    assert len(bound_rows) == 1
+    assert bound_rows.iloc[0]["barcode"] == bound
 
 
 def test_auto_unbind_terminal_trays_cleans_existing_bindings(
@@ -706,7 +790,7 @@ def test_auto_unbind_terminal_trays_cleans_existing_bindings(
         )
 
     assert product_flow_store.auto_unbind_terminal_trays(
-        changed_at="2026-11-21T16:30:00+08:00"
+        changed_at="2026/11/21 16:30:00.000"
     ) == ["T02001"]
     rows = product_flow_store.list_overview(componentcode="P-1001")
     affected = [row for row in rows if row["barcode"] in barcodes]

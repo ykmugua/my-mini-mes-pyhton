@@ -488,8 +488,52 @@ def interlock_check(workpiece: str, device_id: str | None = None, product: str |
 
 
 def list_locked_workpieces() -> list[dict]:
-    """列出locked_workpieces。"""
-    return workpiece_repo.list_locked()
+    """列出锁定工件，并补充其在制/流转上下文。"""
+    locked = workpiece_repo.list_locked()
+    if not locked:
+        return []
+    active_by_barcode = {
+        str(row.get("barcode") or ""): row
+        for row in active_product_repo.list_active()
+    }
+    overview_by_barcode = {
+        str(row.get("barcode") or ""): row
+        for row in product_flow_store.list_overview()
+    }
+    result = []
+    for item in locked:
+        barcode = str(item.get("workpiece") or "")
+        active = active_by_barcode.get(barcode, {})
+        overview = overview_by_barcode.get(barcode, {})
+        traycode = str(active.get("traycode") or overview.get("traycode") or "/")
+        result.append({
+            **item,
+            "barcode": barcode,
+            "componentcode": str(
+                active.get("componentcode")
+                or overview.get("componentcode")
+                or item.get("product")
+                or ""
+            ),
+            "process_code": str(active.get("process_code") or overview.get("process_code") or ""),
+            "traycode": traycode or "/",
+            "tray_slot": str(active.get("tray_slot") or overview.get("tray_slot") or "/"),
+            "board_status": str(active.get("board_status") or overview.get("board_status") or "lock"),
+            "current_step": str(active.get("current_step") or overview.get("current_step") or ""),
+            "next_step": str(active.get("next_step") or ""),
+            "last_report_device": str(
+                active.get("last_report_device")
+                or overview.get("last_report_device")
+                or item.get("current_device")
+                or ""
+            ),
+            "last_report_note": str(
+                active.get("last_report_note") or overview.get("last_report_note") or ""
+            ),
+            "updated_at": str(active.get("updated_at") or overview.get("updated_at") or ""),
+            "active": bool(active),
+        })
+    return result
 
 
 def unlock_workpiece(workpiece, operator, reason, confirmed=False, target_step=None, note=None) -> dict:
@@ -631,7 +675,7 @@ def dashboard_snapshot(device_filter: str | None = None) -> dict:
     tz = config.timezone()
     now_local = db.utc_now().astimezone(tz)
     return {
-        "date": now_local.strftime("%Y-%m-%d"),
+        "date": db.format_time(now_local)[:10].replace("/", "/"),
         "window": snap["window"],
         "total": total,
         "pass": pass_count,
@@ -1072,6 +1116,7 @@ def manual_inbound(
     step_no: str,
     traycode: str | None,
     barcodes: Iterable[str],
+    tray_slots: list[str] | None = None,
     operator: str,
 ) -> dict:
     """手动入站：产品、载具与载具载荷内的一批条码同时建档。"""
@@ -1086,6 +1131,8 @@ def manual_inbound(
         _clean_text(value, f"第 {index} 个条码")
         for index, value in enumerate(barcodes, start=1)
     ]
+    raw_slots = list(tray_slots or [])
+    slots = [_clean_text(value, f"第 {index} 个仓位") for index, value in enumerate(raw_slots, start=1)]
     if not cleaned_barcodes:
         raise ValidationError("入站条码不能为空")
     folded = [code.casefold() for code in cleaned_barcodes]
@@ -1137,10 +1184,6 @@ def manual_inbound(
                 capacity = int(tray.get("capacity") or 0)
                 if capacity <= 0:
                     raise ValidationError(f"载具 {traycode} 未配置有效载荷数量")
-                if active_product_repo.list_active(traycode=traycode):
-                    raise ConflictError(
-                        f"载具 {traycode} 当前已绑定产品，请先解除载具绑定"
-                    )
                 if len(cleaned_barcodes) > capacity:
                     raise ValidationError(
                         f"载具 {traycode} 最多可填写 {capacity} 个条码"
@@ -1151,25 +1194,38 @@ def manual_inbound(
         if active_product_repo.list_active(barcode=barcode):
             raise ConflictError(f"条码 {barcode} 已存在，不能重复入站")
 
+    if not no_tray and not slots and active_product_repo.list_active(traycode=traycode):
+        raise ConflictError(f"载具 {traycode} 当前已绑定产品，请先解除载具绑定或指定仓位")
+    if not no_tray and slots:
+        occupied = {
+            str(row.get("tray_slot") or "")
+            for row in active_product_repo.list_active(traycode=traycode)
+        }
+        for slot in slots:
+            if slot in occupied:
+                raise ConflictError(f"载具 {traycode} 的仓位 {slot} 已占用")
     now = db.utc_now_iso()
+    resolved_process_code = str(recipe["process"]["process_code"])
     rows = [
         {
             "barcode": barcode,
             "componentcode": product,
             "traycode": traycode,
             "board_status": "normal",
+            "process_code": resolved_process_code,
+            "tray_slot": slots[position - 1] if position - 1 < len(slots) else str(position),
             "step_no": step_no,
             "next_step": str(route["success_next_step"]),
             "device": "手动入站",
             "note": f"手动入站（操作员：{operator}）",
         }
-        for barcode in cleaned_barcodes
+        for position, barcode in enumerate(cleaned_barcodes, start=1)
     ]
     _station_workbench_uc.manual_inbound(rows=rows, now=now)
     return {
         "product": product,
         "traycode": constants.MISSING_TRAYCODE if no_tray else traycode,
-        "process_code": str(recipe["process"]["process_code"]),
+        "process_code": resolved_process_code,
         "current_step": step_no,
         "next_step": str(route["success_next_step"]),
         "count": len(cleaned_barcodes),
@@ -1201,7 +1257,7 @@ def unbind_tray(*, traycode: str, operator: str, confirmed: bool) -> dict:
 
 
 def downline_workpiece(*, barcode: str, operator: str, confirmed: bool) -> dict:
-    """无载具工件下线：写流转历史，删除当前在制，不删除测试数据。"""
+    """工件下线：写流转历史，删除当前在制，不删除测试数据。"""
     barcode = _clean_text(barcode, "工件条码")
     operator = _clean_text(operator, "操作员", max_len=64)
     if not confirmed:
@@ -1209,8 +1265,6 @@ def downline_workpiece(*, barcode: str, operator: str, confirmed: bool) -> dict:
     rows = active_product_repo.list_active(barcode=barcode)
     if not rows:
         raise NotFoundError(f"工件 {barcode} 当前不在制")
-    if any(not constants.is_missing_traycode(row.get("traycode")) for row in rows):
-        raise ConflictError(f"工件 {barcode} 已绑定载具，请使用载具解绑")
     affected = _station_workbench_uc.downline_workpiece(
         barcode=barcode,
         operator=operator,

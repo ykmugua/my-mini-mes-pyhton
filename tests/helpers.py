@@ -75,5 +75,6 @@ def push_result(
     response = client.post("/api/v1/test-results", json=payload)
     assert response.status_code == 200, response.text
     envelope = response.json()
-    assert envelope.get("code") == 0, envelope
-    return envelope["result"]
+    assert envelope.get("success") is True, envelope
+    assert envelope.get("code") == "200", envelope
+    return envelope

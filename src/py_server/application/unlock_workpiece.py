@@ -54,28 +54,36 @@ def execute(*, wp_row, operator: str, reason: str, confirmed: bool, now: str, ta
                 now=now,
             )
 
+        active_row = active_product_repo.get_active(outcome.workpiece, conn=conn)
+        resolved_step = (
+            str(target_step)
+            if target_step
+            else str((active_row or {}).get("current_step") or "")
+        )
+
         # 写产品流转库：手动解锁
         info = report_route.step_for_station(wp.current_device or "", conn)
         product_flow_store.upsert_flow(
             barcode=outcome.workpiece,
             componentcode=wp_row.get("product") or "",
             board_status="normal",
-            step_no=str(target_step) if target_step else ((info or {}).get("step_no") or ""),
+            step_no=resolved_step or ((info or {}).get("step_no") or ""),
             next_step="",
             device="手动解锁",
             note=(note or reason or "unlock"),
             changed_at=now,
         )
-        active_product_repo.upsert({
-            "barcode": outcome.workpiece,
-            "componentcode": wp_row.get("product") or "",
-            "board_status": "normal",
-            "current_step": str(target_step) if target_step else ((info or {}).get("step_no") or ""),
-            "last_report_device": "手动解锁",
-            "last_report_note": (note or reason or "unlock"),
-            "flow_table": product_flow_store.flow_table_name(outcome.workpiece),
-            "updated_at": now,
-        }, conn=conn)
+        if active_row is not None:
+            active_product_repo.upsert({
+                **active_row,
+                "barcode": outcome.workpiece,
+                "componentcode": active_row.get("componentcode") or wp_row.get("product") or "",
+                "board_status": "normal",
+                "current_step": resolved_step,
+                "last_report_device": "手动解锁",
+                "last_report_note": (note or reason or "unlock"),
+                "updated_at": now,
+            }, conn=conn)
 
         data = workpiece_repo.public_workpiece(conn, outcome.workpiece)
         data["previous_lock_reason"] = outcome.previous_lock_reason

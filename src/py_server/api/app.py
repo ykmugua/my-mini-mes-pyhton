@@ -9,7 +9,7 @@ from fastapi.responses import JSONResponse
 
 from .. import config, db
 from .routers.common import interlock, variable
-from .routers.device import control, program, test_result
+from .routers.device import control, program, test_result, workpiece_check_in
 from .routers.ui import dashboard, master_data, product_query
 from ..services import ServiceError
 
@@ -40,6 +40,7 @@ async def service_error_handler(_: Request, exc: ServiceError) -> JSONResponse:
 app.include_router(control.router)
 app.include_router(program.router)
 app.include_router(test_result.router)
+app.include_router(workpiece_check_in.router)
 # 共同接口
 app.include_router(interlock.router)
 app.include_router(variable.router)

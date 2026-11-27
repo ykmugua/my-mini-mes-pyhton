@@ -10,6 +10,7 @@ import time
 from datetime import datetime
 
 from .. import config, db, engine as eg
+from ..constants import is_missing_traycode
 from ..constants import (
     BOARD_FINAL,
     BOARD_LOCK,
@@ -18,7 +19,6 @@ from ..constants import (
     DETAIL_RESULT_PASS,
     FINAL_REPORT_FALSE,
     FINAL_REPORT_TRUE,
-    NEXT_END,
     NEXT_LOCK,
     RESULT_FAIL,
     RESULT_PASS,
@@ -114,6 +114,22 @@ def execute(
     duration = _duration_seconds(payload["testlongtime"])
     now_ts = int(time.time())
     step_info = report_route.step_for_station(station)
+    active = None
+    from ..repositories import workpiece_checkin_repo
+
+    with with_conn() as conn:
+        active = workpiece_checkin_repo.find_active_product(conn, barcode)
+        process_code = str((active or {}).get("process_code") or "")
+        current_step = str((active or {}).get("current_step") or "")
+        if process_code and current_step:
+            route = workpiece_checkin_repo.find_process_route(conn, process_code, current_step)
+            if route is not None:
+                step_info = {
+                    "step_no": current_step,
+                    "step_name": f"{process_code}-{current_step}",
+                    "success_next_step": str(route.get("success_next_step") or ""),
+                    "fail_next_step": str(route.get("fail_next_step") or NEXT_LOCK),
+                }
     step_no = str(step_info["step_no"]) if step_info else ""
     report_engine = eg.get_details_engine()
 
@@ -192,22 +208,31 @@ def execute(
     )
 
     # 写产品流转库（当前状态 + 流转记录）
-    if step_info:
+    if step_info and is_final_report == FINAL_REPORT_TRUE:
         current_step = str(step_info["step_no"])
-        step_value = str(step_info["step_no"])
-        if result == RESULT_FAIL:
-            next_step = NEXT_LOCK
-        elif is_final_report == FINAL_REPORT_TRUE:
-            next_step = NEXT_END
-        else:
-            next_step = str(int(step_value) + 1) if step_value.isdigit() else ""
+        next_step = (
+            str(step_info.get("fail_next_step") or NEXT_LOCK)
+            if result == RESULT_FAIL
+            else str(step_info.get("success_next_step") or "")
+        )
         board_status = (
             BOARD_LOCK
             if result == RESULT_FAIL
             else BOARD_FINAL
-            if is_final_report == FINAL_REPORT_TRUE
+            if next_step == "END"
             else BOARD_NORMAL
         )
+        effective_current_step = next_step if board_status == BOARD_NORMAL and next_step else current_step
+        active_next_step = next_step
+        if board_status == BOARD_NORMAL and effective_current_step:
+            with with_conn() as conn:
+                next_route = workpiece_checkin_repo.find_process_route(
+                    conn,
+                    process_code,
+                    effective_current_step,
+                )
+                if next_route is not None:
+                    active_next_step = str(next_route.get("success_next_step") or "")
         product_flow_store.upsert_flow(
             barcode=barcode,
             componentcode=payload["componentcode"],
@@ -215,6 +240,7 @@ def execute(
             board_status=board_status,
             step_no=current_step,
             next_step=next_step,
+            overview_step_no=effective_current_step,
             device=station,
             note="test pass" if result == RESULT_PASS else "test fail",
             changed_at=db.utc_now_iso(),
@@ -223,16 +249,28 @@ def execute(
             "barcode": barcode,
             "componentcode": payload["componentcode"],
             "traycode": str(payload.get("traycode") or ""),
+            "tray_slot": str((active or {}).get("tray_slot") or "/"),
             "board_status": board_status,
-            "current_step": current_step,
-            "next_step": next_step,
+            "process_code": str((active or {}).get("process_code") or ""),
+            "current_step": effective_current_step,
+            "next_step": active_next_step,
             "last_report_device": station,
             "last_report_note": "test pass" if result == RESULT_PASS else "test fail",
             "flow_table": product_flow_store.flow_table_name(barcode),
             "updated_at": db.utc_now_iso(),
         })
         if board_status in (BOARD_LOCK, BOARD_FINAL):
-            active_product_repo.delete_barcodes([barcode])
+            traycode = str((active or {}).get("traycode") or payload.get("traycode") or "")
+            if not is_missing_traycode(traycode):
+                from . import station_workbench as _station_workbench_uc
+
+                _station_workbench_uc.unbind_tray(
+                    traycode=traycode,
+                    operator="测试终态自动解绑",
+                    now=db.utc_now_iso(),
+                )
+            else:
+                active_product_repo.delete_barcodes([barcode])
 
     # 维护看板汇总
     failed_items = [d["TestItem"] for d in details if d["TestResult"] == DETAIL_RESULT_FAIL]
